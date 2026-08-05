@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # Set up a project to use the linked-records convention with any agent tool.
 #
-# Usage: bootstrap.sh [--link] [--force] [project-dir]
+# Usage: bootstrap.sh [--link|--check] [--force] [project-dir]
 #   default : copy skills into .agents/skills/ — real files, commit them;
 #             works for collaborators and cloud sandboxes (Codex cloud etc.)
 #   --link  : symlink instead — local experiments only; don't commit links
+#   --check : read-only status — provenance, local edits, and staleness vs
+#             the published repo (git ls-remote); nonzero exit if actionable
 #   --force : overwrite vendored skills even if they were locally edited
 #
-# Re-run any time to refresh the vendored copies from this repo. A checksum
-# manifest written at vendor time distinguishes stale-but-pristine copies
-# (refreshed freely) from locally edited ones (refused without --force, so
-# edits can be merged into this repo first).
+# Copy mode vendors committed content only (it refuses on a dirty skills/
+# tree) and stamps the manifest with the source revision and remote, so
+# --check can compare against the published HEAD from any machine — no
+# local clone of the skills repo needed.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,6 +24,7 @@ FORCE=no
 while [ $# -gt 0 ]; do
   case "$1" in
   --link) MODE=link ;;
+  --check) MODE=check ;;
   --force) FORCE=yes ;;
   *) break ;;
   esac
@@ -39,6 +42,68 @@ checksum_vendored() {
   done | while IFS= read -r f; do cksum "$f"; done
 }
 
+manifest_field() {
+  sed -n "s/^# $1: //p" "$MANIFEST" 2>/dev/null | head -1
+}
+
+if [ "$MODE" = "check" ]; then
+  status=0
+  if [ -L ".agents/skills/${SKILLS[0]}" ]; then
+    echo "skills are symlinked (link mode): tracking the repo live, nothing to check"
+    exit 0
+  fi
+  current="$(checksum_vendored)"
+  if [ -z "$current" ]; then
+    echo "no vendored skills found in $(pwd)"
+    exit 0
+  fi
+  rev="$(manifest_field revision)"
+  url="$(manifest_field vendored-from)"
+  when="$(manifest_field date)"
+  echo "provenance : ${url:-unknown} @ ${rev:-unknown} (${when:-unknown})"
+  if [ ! -f "$MANIFEST" ]; then
+    echo "local edits: unknown (no manifest)"
+    status=1
+  elif [ "$current" = "$(grep -v '^#' "$MANIFEST")" ]; then
+    echo "local edits: none"
+  else
+    echo "local edits: YES — files differing from what was vendored:"
+    diff <(grep -v '^#' "$MANIFEST") <(printf '%s\n' "$current") |
+      awk '/^[<>]/ {print "  " $NF}' | sort -u
+    status=1
+  fi
+  if [ -n "$rev" ] && [ -n "$url" ]; then
+    head="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$url" HEAD 2>/dev/null | awk '{print $1}')" || head=""
+    if [ -z "$head" ]; then
+      echo "published  : unknown (remote unreachable)"
+    elif [ "$head" = "$rev" ]; then
+      echo "published  : current (matches HEAD)"
+    else
+      echo "published  : STALE — HEAD is $head; re-run bootstrap.sh to refresh"
+      status=1
+    fi
+  else
+    echo "published  : unknown (manifest has no provenance stamp; refresh to add one)"
+    status=1
+  fi
+  exit "$status"
+fi
+
+# Copy mode distributes committed content only, so the stamp is truthful.
+REV=""
+URL=""
+if [ "$MODE" = "copy" ] && git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  if [ -n "$(git -C "$REPO" status --porcelain -- skills/)" ]; then
+    echo "error: uncommitted changes in $REPO/skills/ — commit them first." >&2
+    echo "Copy mode vendors committed content only; use --link to iterate." >&2
+    exit 1
+  fi
+  REV="$(git -C "$REPO" rev-parse HEAD)"
+  URL="$(git -C "$REPO" remote get-url origin 2>/dev/null |
+    sed -E 's#^git@([^:]+):#https://\1/#; s#\.git$##')" || URL=""
+fi
+
+# Refuse to discard local edits to vendored copies (see --force).
 current="$(checksum_vendored)"
 if [ -n "$current" ] && [ "$FORCE" = "no" ]; then
   if [ ! -f "$MANIFEST" ]; then
@@ -47,9 +112,9 @@ if [ -n "$current" ] && [ "$FORCE" = "no" ]; then
     echo "overwrite, or remove .agents/skills/ manually first." >&2
     exit 1
   fi
-  if [ "$current" != "$(cat "$MANIFEST")" ]; then
+  if [ "$current" != "$(grep -v '^#' "$MANIFEST")" ]; then
     echo "error: vendored skills were edited since they were vendored:" >&2
-    diff "$MANIFEST" <(printf '%s\n' "$current") |
+    diff <(grep -v '^#' "$MANIFEST") <(printf '%s\n' "$current") |
       awk '/^[<>]/ {print "  " $NF}' | sort -u >&2
     echo "Merge those edits into the canonical repo, or re-run with --force" >&2
     echo "to discard them." >&2
@@ -69,7 +134,12 @@ for s in "${SKILLS[@]}"; do
 done
 
 if [ "$MODE" = "copy" ]; then
-  checksum_vendored >"$MANIFEST"
+  {
+    if [ -n "$URL" ]; then echo "# vendored-from: $URL"; fi
+    if [ -n "$REV" ]; then echo "# revision: $REV"; fi
+    echo "# date: $(date +%Y-%m-%d)"
+    checksum_vendored
+  } >"$MANIFEST"
 else
   rm -f "$MANIFEST"
 fi

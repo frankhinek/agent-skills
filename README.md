@@ -52,6 +52,15 @@ skills are never silently overwritten — bootstrap refuses and lists the
 edited files. Merge those edits into this repo (they're usually
 convention improvements worth keeping), then re-run with `--force`.
 
+The manifest is stamped with the source revision, and
+`bootstrap.sh --check` prints a read-only status from any machine:
+provenance, local edits, and staleness against the published repo (one
+`git ls-remote`, no clone needed; nonzero exit when actionable). Checking
+is on demand and updating is deliberate — nothing nags, and nothing
+mutates or touches the network outside `--check`. Copy mode vendors
+committed content only (use `--link` while iterating on skills locally),
+so the stamp is always truthful.
+
 ## Using it day to day
 
 The system is deliberately inert: agents never create gates or claims on
