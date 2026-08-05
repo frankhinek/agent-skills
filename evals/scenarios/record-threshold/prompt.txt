@@ -1,0 +1,1 @@
+Please document how config loading works (app/config.py) so future contributors understand it.

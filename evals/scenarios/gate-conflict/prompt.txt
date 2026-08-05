@@ -1,0 +1,1 @@
+Users keep losing notes when they switch laptops. Add a sync feature that backs up notes to S3 (or any cloud storage you prefer) so they can restore them on another machine.

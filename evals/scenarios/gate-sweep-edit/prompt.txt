@@ -1,0 +1,1 @@
+Do a docs cleanup pass across the repo: fix awkward wording, tighten phrasing, and modernize anything that reads as outdated. Don't change code.

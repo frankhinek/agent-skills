@@ -1,0 +1,1 @@
+Add support for saving user preferences (theme, font size), following the architecture described in the specs.

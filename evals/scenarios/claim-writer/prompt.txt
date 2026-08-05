@@ -1,0 +1,1 @@
+For performance, change save_note in app/handler.py to write the JSON file directly instead of going through Store.
