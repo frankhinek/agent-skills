@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Set up a project to use the linked-records convention with any agent tool.
 #
-# Usage: bootstrap.sh [--link|--check] [--force] [project-dir]
+# Usage: vendor.sh [--link|--check] [--force] [project-dir]
 #   default : copy skills into .agents/skills/ — real files, commit them;
 #             works for collaborators and cloud sandboxes (Codex cloud etc.)
 #   --link  : symlink instead — local experiments only; don't commit links
@@ -79,7 +79,7 @@ if [ "$MODE" = "check" ]; then
     elif [ "$head" = "$rev" ]; then
       echo "published  : current (matches HEAD)"
     else
-      echo "published  : STALE — HEAD is $head; re-run bootstrap.sh to refresh"
+      echo "published  : STALE — HEAD is $head; re-run vendor.sh to refresh"
       status=1
     fi
   else

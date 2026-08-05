@@ -21,7 +21,7 @@ skills/
     ├── SKILL.md
     └── lint.sh                     # executable mechanical checks (CI-ready)
 install.sh                          # symlink skills into each tool's global dir
-bootstrap.sh                        # set up a project (vendor skills + AGENTS.md pointer)
+vendor.sh                           # set up a project (vendor skills + AGENTS.md pointer)
 ```
 
 ## Install (per machine)
@@ -36,13 +36,13 @@ on the machine — the defaults (`~/.claude/skills`, `~/.codex/skills`,
 For any other Agent Skills client, pass its global skills directory as an
 argument (e.g. `./install.sh ~/.gemini/antigravity/skills`); explicit
 targets are always installed. Idempotent; edit skills here, every tool sees
-the change immediately. Project-level vendoring via `bootstrap.sh` is the
+the change immediately. Project-level vendoring via `vendor.sh` is the
 universal path and needs no installer at all.
 
 ## New project
 
 ```sh
-~/Developer/agent-skills/bootstrap.sh [project-dir]
+~/Developer/agent-skills/vendor.sh [project-dir]
 ```
 
 Copies the skills into the project's `.agents/skills/` and writes (or
@@ -54,12 +54,12 @@ repo. Use `--link` for throwaway local experiments (don't commit the links).
 
 Re-runs are guarded by a checksum manifest written at vendor time: a
 stale-but-pristine copy refreshes freely, but locally edited vendored
-skills are never silently overwritten — bootstrap refuses and lists the
+skills are never silently overwritten — vendor.sh refuses and lists the
 edited files. Merge those edits into this repo (they're usually
 convention improvements worth keeping), then re-run with `--force`.
 
 The manifest is stamped with the source revision, and
-`bootstrap.sh --check` prints a read-only status from any machine:
+`vendor.sh --check` prints a read-only status from any machine:
 provenance, local edits, and staleness against the published repo (one
 `git ls-remote`, no clone needed; nonzero exit when actionable). Checking
 is on demand and updating is deliberate — nothing nags, and nothing

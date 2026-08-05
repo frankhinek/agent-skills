@@ -7,7 +7,7 @@
 # Goose) and are skipped when a tool is absent. Any other Agent Skills
 # client: pass its global skills directory as an argument — explicit
 # targets are always installed, created if needed. Project-level vendoring
-# (bootstrap.sh) is the universal path and needs no installer.
+# (vendor.sh) is the universal path and needs no installer.
 # Idempotent: re-run after adding skills, tools, or targets.
 set -euo pipefail
 

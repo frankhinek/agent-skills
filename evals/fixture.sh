@@ -120,7 +120,7 @@ regenerated the writer enumeration, checked handler and config paths.
 Result: pass (survived checking as of this date).
 EOF
 
-"$REPO/bootstrap.sh" "$DEST" >/dev/null
+"$REPO/vendor.sh" "$DEST" >/dev/null
 
 git init -q
 git add -A
