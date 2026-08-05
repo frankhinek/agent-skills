@@ -106,6 +106,20 @@ commit, push — every tool sees the change immediately.
   first." For a tool that reads a different hints file (e.g. Goose's
   `.goosehints`), a one-line "Read AGENTS.md" suffices.
 
+## Provenance & licensing status
+
+The linked-records skills are a synthesis derived from
+[dpc](https://radicle.network/nodes/radicle.dpc.pw/rad%3Az2HR882B4c4mTdAgdt4SozpdeTuMf)'s
+Linked Specs convention (`dpc-public-skills` on his Radicle node) and
+[maan2003](https://github.com/maan2003/public-skills)'s agentic-claims
+skill, with ADR practice as the historical backdrop. The scripts, linter,
+and eval suite are original to this repo.
+
+**No license yet.** Both upstreams are unlicensed personal repos, and
+relicensing the derived material here is pending their authors'
+permission. Until that lands, no reuse rights are granted beyond viewing
+and forking under GitHub's terms.
+
 ## Conventions for skills in this repo
 
 - Frontmatter carries only the spec-required `name` and `description`.
