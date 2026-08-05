@@ -14,7 +14,7 @@ HARNESS="${1:?usage: run.sh <claude|codex> [scenario ...]}"
 shift || true
 
 DATE="$(date +%Y-%m-%d)"
-OUT="$EVALS/results/$DATE-$HARNESS"
+OUT="$EVALS/results/$DATE-$HARNESS${EVAL_LABEL:+-$EVAL_LABEL}"
 mkdir -p "$OUT/logs"
 
 if [ $# -gt 0 ]; then
@@ -32,6 +32,8 @@ summary="$OUT/summary.md"
   claude) echo "- version: $(claude --version 2>/dev/null | head -1)" ;;
   codex) echo "- version: $(codex --version 2>/dev/null | head -1)" ;;
   esac
+  [ -z "${EVAL_CLAUDE_ARGS:-}${EVAL_CODEX_ARGS:-}" ] ||
+    echo "- pinned args: ${EVAL_CLAUDE_ARGS:-}${EVAL_CODEX_ARGS:-}"
   echo "- mechanical checks below; judge escalation quality from logs/"
   echo
 } >"$summary"
@@ -54,12 +56,14 @@ for s in "${SCENARIOS[@]}"; do
   start="$(date +%s)"
   case "$HARNESS" in
   claude)
-    (cd "$fx" && claude -p "$prompt" --dangerously-skip-permissions) \
+    # shellcheck disable=SC2086
+    (cd "$fx" && claude -p "$prompt" --dangerously-skip-permissions ${EVAL_CLAUDE_ARGS:-}) \
       >"$OUT/logs/$s.log" 2>&1
     rc=$?
     ;;
   codex)
-    codex exec -s workspace-write -C "$fx" "$prompt" \
+    # shellcheck disable=SC2086
+    codex exec ${EVAL_CODEX_ARGS:-} -s workspace-write -C "$fx" "$prompt" \
       >"$OUT/logs/$s.log" 2>&1
     rc=$?
     ;;

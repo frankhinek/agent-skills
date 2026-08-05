@@ -21,6 +21,14 @@ constraint, or test already establishes. A claim must pay rent: a credible
 failure mode it guards, a named residual, or a cross-cutting property whose
 preservation needs more context than its implementation shows.
 
+The property statement is fixed outside this workflow. An editorial or
+documentation pass never rewords a claim — its exact wording is what the
+evidence attests — and retiring or deleting a claim and its evidence
+requires the user's explicit request, exactly like creating one. A
+requested code change that falsifies a claim authorizes neither rewording
+nor removal: implement only what was asked, record the falsification, and
+escalate.
+
 ## Record and evidence layout
 
 The record holds only the property statement — no metadata, rationale,

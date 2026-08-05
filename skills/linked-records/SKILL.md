@@ -32,9 +32,10 @@ Two kinds of record, split by direction of authority:
 
 **Descriptive** records (`ARCH`, `REQ`, `SPEC`, `CLAIM`) describe the current
 system and must agree with the code. When one disagrees with reality, do not
-silently rewrite either side: fix editorial errors freely, synchronize to an
-end state the user already explicitly requested, and surface anything else as
-a conflict before proceeding.
+silently rewrite either side: fix editorial errors freely (except in
+`CLAIM-*` records, whose wording is bound to their evidence), synchronize to
+an end state the user already explicitly requested, and surface anything
+else as a conflict before proceeding.
 
 **Normative** records (`GATE`) bind future work. A gate never yields to code,
 convenience, or agent judgment; it changes only when the user explicitly
@@ -63,9 +64,12 @@ conflict and leave the gate unchanged.
 - `CLAIM-*` — one falsifiable, load-bearing property the code claims to
   hold, stated in a few sentences with its material qualifiers (protected
   state, boundary, concurrency, adversary). Proof and verification live in a
-  sibling directory — read the `linked-records-claims` skill
-  (`../linked-records-claims/SKILL.md`) before creating, proving, or
-  verifying one.
+  sibling directory, and the claim's exact wording is what that evidence
+  attests: never reword a claim in an editorial or documentation pass, and
+  retire one only on the user's explicit request. Every claim-record change
+  goes through the `linked-records-claims` skill
+  (`../linked-records-claims/SKILL.md`) — read it before creating, proving,
+  verifying, or retiring one.
 
 An `ARCH-*` or `SPEC-*` may end with a selective `## Alternatives` section:
 designs considered, why the current one won, whether they remain viable.
