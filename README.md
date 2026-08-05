@@ -17,7 +17,9 @@ of ADR practice. Start with [skills/linked-records/SKILL.md](skills/linked-recor
 skills/
 ├── linked-records/SKILL.md         # core convention: record types, authority rules
 ├── linked-records-claims/SKILL.md  # claim proofs + adversarial verification
-└── linked-records-upkeep/SKILL.md  # bootstrap / lint / groom workflows
+└── linked-records-upkeep/          # bootstrap / lint / groom workflows
+    ├── SKILL.md
+    └── lint.sh                     # executable mechanical checks (CI-ready)
 install.sh                          # symlink skills into each tool's global dir
 bootstrap.sh                        # set up a project (vendor skills + AGENTS.md pointer)
 ```

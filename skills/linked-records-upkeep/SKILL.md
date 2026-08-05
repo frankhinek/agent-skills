@@ -36,20 +36,27 @@ Never copy secrets or sensitive operational detail into records.
 
 ## Lint
 
-Mechanical conformance, checkable without judgment. Report and fix:
+The mechanical checks are owned by `lint.sh`, bundled beside this skill
+file. Run it against the project root:
 
-- record IDs repository-unique, matching filename and leading
-  `# <ID>: <title>` heading
-- only defined types (`ARCH`, `REQ`, `SPEC`, `GATE`, `CLAIM`)
-- all relative links and referenced IDs resolve; no references to renamed
-  or deleted records anywhere in the repo (`rg` the old IDs)
-- every `SPEC-*` has its one-sentence `## Record justification`; no source
-  code excerpts
-- every `GATE-*` has `## Gate` then `## Justification` and no `## Status`
-- every `CLAIM-*` record contains only the property statement; any sibling
-  evidence directory contains only its claim's evidence
-- no index files, tombstones, or redirect stubs
-- records live under a `specs/` directory in the scope they govern
+    lint.sh [project-root]
+
+It prints `path: [check] message` findings and exits nonzero when any
+exist, covering: record naming and defined types; filename/heading/ID
+agreement and repository uniqueness; resolvable relative links;
+references to nonexistent records; `SPEC-*` justification sections and
+no fenced excerpts; `GATE-*` section shape; `CLAIM-*` record and
+evidence-directory shape; index-like files and stray directories in
+`specs/`. Fix what it reports — these are the convention's mechanical
+floor, not judgment calls.
+
+Then the checks that still need reading:
+
+- descriptive records agree with the code they describe
+- each record still meets its type's qualification threshold
+- `## Status` sections are current-state summaries, not progress logs
+- `## Alternatives` sections stay selective and current
+- links and code citations add rationale, not ceremony
 
 Gate defects are reported, not fixed — every gate operation needs the user's
 explicit request.
