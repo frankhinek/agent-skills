@@ -46,6 +46,34 @@ sandboxes that never see your home directory) and collaborators get the
 convention too. Re-run to refresh the vendored copies after updating this
 repo. Use `--link` for throwaway local experiments (don't commit the links).
 
+## Using it day to day
+
+The system is deliberately inert: agents never create gates or claims on
+their own, and ordinary feature work should produce **no record changes**.
+The value comes from a few explicit moves at the right moments:
+
+| Moment | Say to your agent |
+|---|---|
+| Project has real code, no records yet | "bootstrap linked-records" — surveys the code, writes the initial `ARCH-*` baseline |
+| You make a decision that must stick ("local-only, no cloud sync") | "establish a gate: \<constraint\>, because \<goal\>" — agents can no longer undo it without you |
+| A property's failure would really hurt ("payments can't double-apply") | "create a claim: \<property\>" — future changes treat it as an invariant to uphold |
+| You want actual evidence (pre-release, after a scary refactor) | "prove and verify CLAIM-x" — written proof plus an independent adversarial check |
+| Before a PR / end of session | "lint the records" — broken links, missing justifications, code/record drift |
+| Every month or so | "groom the records" — random-sample trim of stale or low-value records |
+
+When an agent stops and reports that a record conflicts with your request,
+that is the system working. Make the call — amend the record, change the
+request — rather than saying "just make it work"; overridden escalations
+teach the corpus to be ignored.
+
+Anti-goals: don't ask for broad documentation ("document this project") —
+the skill thresholds are built to refuse it. Don't establish gates during
+bootstrap — gate decisions as you actually make them, while the reason is
+fresh. A small corpus is a healthy corpus; empty categories are normal.
+
+When the convention itself gets in your way, edit the skills in this repo,
+commit, push — every tool sees the change immediately.
+
 ## How each tool picks it up
 
 - **Skill-aware tools** (Claude Code, Codex, Goose, and other Agent Skills
