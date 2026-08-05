@@ -60,11 +60,12 @@ Shrink an accumulated corpus while preserving important durable knowledge.
 Prefer removing documentation weight over polishing records that should not
 exist.
 
-1. Sample N records at random (default 10) before reading any candidates —
-   `find . -type f -path '*/specs/*.md' | shuf | head -n "$N"` — and do not
-   resample based on apparent quality. Read linked records, nearby code, and
-   tests as needed to judge the sample; supporting reads don't count
-   against it.
+1. Select a uniform random sample of N records (default 10) from
+   `find . -type f -path '*/specs/*.md'` by any available means
+   (`sort -R`, `shuf`, or equivalent), and capture the sample before
+   reading any candidate. Do not resample based on apparent quality. Read
+   linked records, nearby code, and tests as needed to judge the sample;
+   supporting reads don't count against it.
 2. For each sampled record ask: would deleting it lose durable knowledge
    that should constrain future work? Does it still meet its type's
    threshold? Does it restate what code, types, tests, or comments already
