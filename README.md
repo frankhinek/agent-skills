@@ -31,9 +31,13 @@ bootstrap.sh                        # set up a project (vendor skills + AGENTS.m
 ```
 
 Symlinks every skill into the global skills directory of each tool present
-on the machine (`~/.claude/skills`, `~/.codex/skills`,
-`~/.config/goose/skills`). Idempotent; edit skills here, every tool sees the
-change immediately.
+on the machine — the defaults (`~/.claude/skills`, `~/.codex/skills`,
+`~/.config/goose/skills`) are the tools verified here, skipped when absent.
+For any other Agent Skills client, pass its global skills directory as an
+argument (e.g. `./install.sh ~/.gemini/antigravity/skills`); explicit
+targets are always installed. Idempotent; edit skills here, every tool sees
+the change immediately. Project-level vendoring via `bootstrap.sh` is the
+universal path and needs no installer at all.
 
 ## New project
 
