@@ -20,7 +20,12 @@ for dir in "${TARGETS[@]}"; do
   for s in "${SKILLS[@]}"; do
     dst="$dir/$s"
     if [ -e "$dst" ] && [ ! -L "$dst" ]; then
-      rm -rf "$dst" # replace a stale real copy with a link to this repo
+      if diff -rq "$REPO/skills/$s" "$dst" >/dev/null 2>&1; then
+        rm -rf "$dst" # identical to the repo copy: safe to replace with a link
+      else
+        echo "skip  $dst (local copy differs from repo; reconcile manually)"
+        continue
+      fi
     fi
     ln -sfn "$REPO/skills/$s" "$dst"
   done

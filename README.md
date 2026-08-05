@@ -46,6 +46,12 @@ sandboxes that never see your home directory) and collaborators get the
 convention too. Re-run to refresh the vendored copies after updating this
 repo. Use `--link` for throwaway local experiments (don't commit the links).
 
+Re-runs are guarded by a checksum manifest written at vendor time: a
+stale-but-pristine copy refreshes freely, but locally edited vendored
+skills are never silently overwritten — bootstrap refuses and lists the
+edited files. Merge those edits into this repo (they're usually
+convention improvements worth keeping), then re-run with `--force`.
+
 ## Using it day to day
 
 The system is deliberately inert: agents never create gates or claims on
