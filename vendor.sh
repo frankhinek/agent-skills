@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Set up a project to use the linked-records convention with any agent tool.
 #
-# Usage: vendor.sh [--link|--check] [--force] [project-dir]
-#   default : copy skills into .agents/skills/ — real files, commit them;
+# Usage: vendor.sh [--copy|--link|--check] [--force] [project-dir]
+#   --copy  : copy skills into .agents/skills/ — the default; real files,
+#             commit them;
 #             works for collaborators and cloud sandboxes (Codex cloud etc.)
 #   --link  : symlink instead — local experiments only; don't commit links
 #   --check : read-only status — provenance, local edits, and staleness vs
@@ -20,17 +21,45 @@ SKILLS=(linked-records linked-records-claims linked-records-upkeep)
 MANIFEST=".agents/skills/.vendored-manifest"
 
 MODE=copy
+MODE_SET=no
 FORCE=no
+PROJECT_DIR=.
+PROJECT_SET=no
+
+usage_error() {
+  printf 'error: %s\n' "$1" >&2
+  printf 'usage: vendor.sh [--copy|--link|--check] [--force] [project-dir]\n' >&2
+  exit 2
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
-  --link) MODE=link ;;
-  --check) MODE=check ;;
+  --copy | --link | --check)
+    requested_mode="${1#--}"
+    if [ "$MODE_SET" = yes ] && [ "$MODE" != "$requested_mode" ]; then
+      usage_error "conflicting modes: --$MODE and $1"
+    fi
+    MODE="$requested_mode"
+    MODE_SET=yes
+    ;;
   --force) FORCE=yes ;;
-  *) break ;;
+  -*) usage_error "unknown option: $1" ;;
+  *)
+    if [ "$PROJECT_SET" = yes ]; then
+      usage_error "multiple project directories: $PROJECT_DIR and $1"
+    fi
+    PROJECT_DIR="$1"
+    PROJECT_SET=yes
+    ;;
   esac
   shift
 done
-cd "${1:-.}"
+
+if [ "$MODE" = check ] && [ "$FORCE" = yes ]; then
+  usage_error "--force cannot be used with --check"
+fi
+
+cd "$PROJECT_DIR"
 
 # Checksums of the currently vendored real files, deterministic order.
 # Symlinked skill dirs hold no local work and are excluded.

@@ -351,7 +351,7 @@ Add the exact required frontmatter to authored eval documents. Update the summar
 
 **Completion record:** commit ___ · validation ___ · notes ___
 
-### [ ] F08 — Argument Ordering Can Turn a Check Request into Mutation
+### [x] F08 — Argument Ordering Can Turn a Check Request into Mutation
 
 **Priority:** P2
 **Location:** `vendor.sh:24–33`
@@ -377,19 +377,19 @@ Parse the entire argument list. Permit at most one positional directory. Reject 
 
 **Implementation checklist**
 
-- [ ] Parse flags before and after the positional argument.
-- [ ] Reject unknown options and multiple project directories.
-- [ ] Reject conflicting `--copy`/default, `--link`, and `--check` modes.
-- [ ] Reject meaningless or dangerous combinations such as `--check --force`.
-- [ ] Add a no-mutation sentinel to parser tests.
+- [x] Parse flags before and after the positional argument.
+- [x] Reject unknown options and multiple project directories.
+- [x] Reject conflicting `--copy`/default, `--link`, and `--check` modes.
+- [x] Reject meaningless or dangerous combinations such as `--check --force`.
+- [x] Add a no-mutation sentinel to parser tests.
 
 **Acceptance gate**
 
-- [ ] Every permutation of a valid command behaves identically.
-- [ ] Every invalid combination exits with usage status and makes no filesystem change.
-- [ ] Any invocation containing a valid `--check` mode is provably read-only.
+- [x] Every permutation of a valid command behaves identically.
+- [x] Every invalid combination exits with usage status and makes no filesystem change.
+- [x] Any invocation containing a valid `--check` mode is provably read-only.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(vendor): make mode parsing order-independent` · validation red proof: `tests/check-vendor-arguments.sh` failed because `check-after-directory` changed a symlinked destination before the parser fix; green proof: the same isolated matrix passed under macOS system Bash/tools across both check orders, copied and linked states, every placement of valid mode/force pairs, every placement of conflicting mode and check/force pairs, unknown options, and extra directories; `evals/tests/check-fixture.sh`, `/bin/bash -n`, and `git diff --check` passed · notes the full argument list is now validated before entering the project directory; explicit `--copy` retains the default copy behavior; invalid syntax exits 2 without destination mutation; `--force` remains valid for copy/link and is rejected with check; adversarial review found one missing copied-project read-only case, which was added and independently validated; F09, F10, F14, F15, F16, and R09 remain separate
 
 ### [ ] F09 — Manifest Misses Permission and Symlink Edits
 

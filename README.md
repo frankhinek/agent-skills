@@ -42,7 +42,7 @@ universal path and needs no installer at all.
 ## New project
 
 ```sh
-~/Developer/agent-skills/vendor.sh [project-dir]
+~/Developer/agent-skills/vendor.sh [--copy|--link|--check] [--force] [project-dir]
 ```
 
 Copies the skills into the project's `.agents/skills/` and writes (or
@@ -57,6 +57,9 @@ stale-but-pristine copy refreshes freely, but locally edited vendored
 skills are never silently overwritten — vendor.sh refuses and lists the
 edited files. Merge those edits into this repo (they're usually
 convention improvements worth keeping), then re-run with `--force`.
+Options may appear before or after the project directory. Copy mode is the
+default; conflicting modes, unknown options, extra directories, and
+`--check --force` are rejected before the project is touched.
 
 The manifest is stamped with the source revision, and
 `vendor.sh --check` prints a read-only status from any machine:
