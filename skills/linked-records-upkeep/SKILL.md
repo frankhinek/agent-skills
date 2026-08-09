@@ -54,9 +54,10 @@ shape; explicit tombstone markers; index-like files and stray directories in
 `specs/`. Fix what it reports — these are the convention's mechanical floor,
 not judgment calls.
 
-The reference scan reads regular text files outside `.git/`, `.agents/`,
-`node_modules/`, `build/`, `dist/`, `.venv/`, `venv/`, and `vendor/`. Binary
-and nonregular files are outside that scan.
+The reference scan excludes `.git/`, `.agents/`, `node_modules/`, `build/`,
+`dist/`, `.venv/`, `venv/`, `vendor/`, and nested skill roots containing a
+regular `SKILL.md`. A project-root `SKILL.md` remains in scope. Binary and
+nonregular files are outside the scan.
 
 Then the checks that still need reading:
 

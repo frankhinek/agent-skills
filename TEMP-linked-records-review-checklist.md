@@ -793,7 +793,7 @@ Restrict the scan to relevant text/document/source paths or use a deterministic 
 
 **Completion record:** commit `fix(lint): bound dangling-reference scan` · validation red proof: the new boundary case reported eight findings before the linter change, including generated, virtualenv, vendor, FIFO, and malformed binary findings; green proof: all 35 linter cases passed with exact output containing only the project-authored source finding, the large-vendor case completed within its 10-second ceiling, `/bin/bash -n` on the linter and matrix passed under macOS Bash 3.2, and `git diff --check` passed · notes the scan now inventories regular files with portable `find`, prunes the documented conventional generated/dependency/environment directories, batches searches, and uses BSD/GNU `grep -I` for explicit binary suppression; nonstandard generated-directory names remain a documented residual, alternate vendored skill roots remain owned by R04, and bundled skill validation remains unavailable because its Python environment lacks PyYAML (`ModuleNotFoundError: yaml`)
 
-### [ ] R04 — Vendoring Outside `.agents/` Can Trigger a Self-Reference False Positive
+### [x] R04 — Vendoring Outside `.agents/` Can Trigger a Self-Reference False Positive
 
 **Location:** `skills/linked-records-upkeep/lint.sh` and `skills/linked-records-claims/SKILL.md`
 
@@ -805,10 +805,10 @@ If a compatible client vendors the skills into another project-local directory, 
 
 Exclude all discovered skill roots from corpus-reference linting, or scope reference checks to project-authored text. Add a fixture with skills installed outside `.agents/`.
 
-- [ ] Reproduce using an alternate project-local skills directory.
-- [ ] Prove project-authored dangling references are still detected.
+- [x] Reproduce using an alternate project-local skills directory.
+- [x] Prove project-authored dangling references are still detected.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(lint): exclude nested skill roots` · validation red proof: the alternate-root case produced four findings before the fix, including two false `CLAIM-single-writer` findings from a skill installed beneath a custom path containing spaces and pattern characters; green proof: all 36 linter cases passed with exact output containing only the project-root `SKILL.md` and `src/` positive controls, R03's binary/vendor/runtime case remained green, `/bin/bash -n` under macOS Bash 3.2 passed, and `git diff --check` passed · notes the scan now discovers nested regular `SKILL.md` markers outside existing pruned trees, escapes their paths before adding exact prune rules, and deliberately keeps a project-root `SKILL.md` in scope; the claims skill's useful example remains unchanged, any nested directory carrying a regular `SKILL.md` is treated as a skill root by convention, and bundled skill validation remains unavailable because its Python environment lacks PyYAML (`ModuleNotFoundError: yaml`)
 
 ### [ ] R05 — Relative-Link Check Misparses Titles and Absolute Targets
 

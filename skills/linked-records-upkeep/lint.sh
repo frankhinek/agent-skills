@@ -251,12 +251,27 @@ done <"$TMP/specsdirs"
 # Search regular text files while pruning conventional generated, dependency,
 # and environment trees; -I makes binary handling explicit on both BSD and
 # GNU grep.
+reference_prune=(
+  -name .git -o -name .agents -o -name node_modules -o
+  -name build -o -name dist -o -name .venv -o -name venv -o
+  -name vendor
+)
+
+# A nested SKILL.md marks agent instructions, not project source. Preserve a
+# root SKILL.md so a project that is itself a skill cannot suppress its scan.
 find . \
-  \( -type d \( \
-    -name .git -o -name .agents -o -name node_modules -o \
-    -name build -o -name dist -o -name .venv -o -name venv -o \
-    -name vendor \
-  \) -prune \) -o \
+  \( -type d \( "${reference_prune[@]}" \) -prune \) -o \
+  -type f -name SKILL.md -print \
+  2>/dev/null | sort -u >"$TMP/skillroots" || true
+while IFS= read -r skill_file; do
+  skill_dir="${skill_file%/SKILL.md}"
+  [ "$skill_dir" = . ] && continue
+  skill_pattern="$(printf '%s\n' "$skill_dir" | sed 's/[][\\*?]/\\&/g')"
+  reference_prune+=( -o -path "$skill_pattern" )
+done <"$TMP/skillroots"
+
+find . \
+  \( -type d \( "${reference_prune[@]}" \) -prune \) -o \
   -type f -exec grep -IHoEn "($TYPES)-[a-z0-9][a-z0-9-]*" -- {} + \
   2>/dev/null | sort -u >"$TMP/refs" || true
 while IFS=: read -r p ln id; do

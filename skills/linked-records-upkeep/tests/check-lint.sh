@@ -79,6 +79,14 @@ verify_case() {
     [ "$output" = "$expected" ] || return 1
     [ "$elapsed" -le 10 ] || return 1
     ;;
+  alternate-skill-root)
+    local expected
+    expected="$(printf '%s\n%s\n%s' \
+      './SKILL.md:6: [dangling-ref] references non-existent record GATE-root-skill-missing' \
+      './src/app.py:1: [dangling-ref] references non-existent record REQ-project-missing' \
+      'linked-records lint: 2 finding(s)')"
+    [ "$output" = "$expected" ] || return 1
+    ;;
   esac
 }
 
@@ -319,6 +327,28 @@ setup_reference_scan_boundary() {
   printf '\000REQ-binary-copy\n' >"$root/assets.bin"
 }
 
+setup_alternate_skill_root() {
+  local root="$1"
+  put "$root/specs/ARCH-system.md" '# ARCH-system: System map' '' 'System map.'
+  put "$root/SKILL.md" \
+    '---' \
+    'name: project-skill' \
+    'description: The project itself is a skill package.' \
+    '---' '' \
+    'Project constraint: GATE-root-skill-missing.'
+  put "$root/src/app.py" 'requirement = "REQ-project-missing"'
+  put "$root/.custom [client]/skill store/linked-records-claims/SKILL.md" \
+    '---' \
+    'name: linked-records-claims' \
+    'description: Example installed skill.' \
+    '---' '' \
+    '```text' \
+    'specs/' \
+    '├── CLAIM-single-writer.md' \
+    '└── CLAIM-single-writer/' \
+    '```'
+}
+
 CASES='no-specs|0|linked-records lint: no specs/ directories found under @ROOT@|setup_no_specs
 mktemp-failure|2|[setup] unable to create scratch directory|setup_mktemp_failure
 mktemp-unsafe-path|2|[setup] unsafe scratch directory returned by mktemp: /|setup_mktemp_unsafe_path
@@ -353,7 +383,8 @@ orphan-evidence|1|[orphan-evidence] evidence directory without a CLAIM-orphan.md
 unexpected-evidence|1|[evidence-shape] unexpected evidence file|setup_unexpected_evidence
 stray-directory|1|[stray-dir] unexpected directory in specs/|setup_stray_directory
 dangling-reference|1|[dangling-ref] references non-existent record REQ-missing|setup_dangling_reference
-reference-scan-boundary|1|[dangling-ref] references non-existent record REQ-source-missing|setup_reference_scan_boundary'
+reference-scan-boundary|1|[dangling-ref] references non-existent record REQ-source-missing|setup_reference_scan_boundary
+alternate-skill-root|1|[dangling-ref] references non-existent record REQ-project-missing|setup_alternate_skill_root'
 
 declared="$(printf '%s\n' "$CASES" | awk 'NF { count++ } END { print count + 0 }')"
 executed=0
