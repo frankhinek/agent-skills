@@ -82,13 +82,75 @@ while IFS= read -r f; do
       [ -e "$dir/$target" ] || finding "$f:$ln" link "broken relative link: $target"
     done
 
+  tombstone_ln="$(awk '
+    {
+      line = tolower($0)
+      gsub(/\*\*|__/, "", line)
+      sub(/^[[:space:]]*/, "", line)
+      sub(/[[:space:]]*$/, "", line)
+      if (line ~ /^tombstone[[:space:]]*:/ ||
+          line ~ /^status[[:space:]]*:[[:space:]]*(tombstone|retired|deprecated|superseded)([[:space:][:punct:]]|$)/ ||
+          line ~ /^##[[:space:]]+(tombstone|retired|deprecated|superseded)[[:space:]]*$/) {
+        print NR
+        exit
+      }
+    }
+  ' "$f")"
+  [ -z "$tombstone_ln" ] ||
+    finding "$f:$tombstone_ln" tombstone "explicit tombstone marker; delete superseded records instead"
+
   case "$rectype" in
   SPEC)
-    grep -q '^## Record justification' "$f" ||
+    justification_count="$(grep -Ec '^## Record justification[[:space:]]*$' "$f" || true)"
+    if [ "$justification_count" -eq 0 ]; then
       finding "$f" spec-shape "missing '## Record justification' section"
-    fence_ln="$(grep -n '^```' "$f" | head -1 | cut -d: -f1)"
-    [ -z "$fence_ln" ] ||
-      finding "$f:$fence_ln" spec-shape "fenced block in SPEC record (no source excerpts; refer to code by stable identifiers)"
+    elif [ "$justification_count" -gt 1 ]; then
+      finding "$f" spec-shape "must contain exactly one '## Record justification' section"
+    else
+      justification_nonempty="$(awk '
+        /^## Record justification[[:space:]]*$/ { in_section = 1; next }
+        /^##[[:space:]]/ { in_section = 0 }
+        in_section && /[^[:space:]]/ { found = 1 }
+        END { print found + 0 }
+      ' "$f")"
+      [ "$justification_nonempty" -eq 1 ] ||
+        finding "$f" spec-shape "'## Record justification' section must contain non-empty content"
+    fi
+
+    awk '
+      {
+        line = $0
+        sub(/^[[:space:]]*/, "", line)
+        marker = substr(line, 1, 1)
+        if (marker != "`" && marker != "~")
+          next
+
+        width = 0
+        while (substr(line, width + 1, 1) == marker)
+          width++
+        if (width < 3)
+          next
+
+        label = substr(line, width + 1)
+        sub(/^[[:space:]]*/, "", label)
+        sub(/[[:space:]]*$/, "", label)
+
+        if (in_fence) {
+          if (marker == fence_marker && width >= fence_width && label == "")
+            in_fence = 0
+          next
+        }
+
+        in_fence = 1
+        fence_marker = marker
+        fence_width = width
+        if (label != "text" && label != "mermaid" &&
+            label != "plantuml" && label != "dot")
+          print NR
+      }
+    ' "$f" | while IFS= read -r fence_ln; do
+      finding "$f:$fence_ln" spec-shape "fenced block must use an approved diagram label: text, mermaid, plantuml, or dot"
+    done
     ;;
   GATE)
     gate_ln="$(grep -En '^## Gate[[:space:]]*$' "$f" | head -1 | cut -d: -f1)"
@@ -110,6 +172,19 @@ while IFS= read -r f; do
     h2_ln="$(grep -n '^## ' "$f" | head -1 | cut -d: -f1)"
     [ -z "$h2_ln" ] ||
       finding "$f:$h2_ln" claim-shape "CLAIM records hold only the property statement; evidence belongs in $stem/"
+    claim_metadata_ln="$(awk '
+      {
+        line = tolower($0)
+        gsub(/\*\*|__/, "", line)
+        sub(/^[[:space:]]*/, "", line)
+        if (line ~ /^(proof|verdict)[[:space:]]*:/) {
+          print NR
+          exit
+        }
+      }
+    ' "$f")"
+    [ -z "$claim_metadata_ln" ] ||
+      finding "$f:$claim_metadata_ln" claim-shape "claim-level proof/verdict material belongs in $stem/ evidence"
     ;;
   esac
 done <"$TMP/records"

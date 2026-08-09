@@ -55,8 +55,9 @@ conflict and leave the gate unchanged.
   necessarily distributed, so no single code artifact can own it. Must carry
   a one-sentence `## Record justification` naming the distributed areas and
   why none is a coherent owner; if that sentence cannot be written honestly,
-  the record should not exist. No source code excerpts — refer to code by
-  stable identifiers.
+  the record should not exist. Refer to code by stable identifiers instead of
+  source excerpts. Use fenced blocks only for diagrams, with the exact
+  lowercase label `text`, `mermaid`, `plantuml`, or `dot`.
 - `GATE-*` — a deliberate constraint protected from being helpfully undone:
   `## Gate` states the constraint precisely; `## Justification` explains what
   it protects (informative context, never an additional constraint —

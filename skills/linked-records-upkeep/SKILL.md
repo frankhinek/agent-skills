@@ -44,16 +44,24 @@ file. Run it against the project root:
 It prints `path: [check] message` findings and exits nonzero when any
 exist, covering: record naming and defined types; filename/heading/ID
 agreement and repository uniqueness; resolvable relative links;
-references to nonexistent records; `SPEC-*` justification sections and
-no fenced excerpts; `GATE-*` section shape; `CLAIM-*` record and
-evidence-directory shape; index-like files and stray directories in
-`specs/`. Fix what it reports — these are the convention's mechanical
-floor, not judgment calls.
+references to nonexistent records; exactly one non-empty `SPEC-*`
+justification section and diagram fences labeled `text`, `mermaid`,
+`plantuml`, or `dot`; `GATE-*` section shape; `CLAIM-*` records without
+headings or recognizable `Proof:`/`Verdict:` labels; claim evidence-directory
+shape; explicit tombstone markers; index-like files and stray directories in
+`specs/`. Fix what it reports — these are the convention's mechanical floor,
+not judgment calls.
 
 Then the checks that still need reading:
 
 - descriptive records agree with the code they describe
 - each record still meets its type's qualification threshold
+- each `SPEC-*` justification is one honest sentence naming the distributed
+  areas and why none is a coherent owner
+- each permitted `SPEC-*` fence contains a diagram, not source code
+- each `CLAIM-*` contains only its property statement, with no disguised
+  rationale, proof, verdict, status, or other metadata
+- no record functions as an implicit or euphemistic tombstone
 - `## Status` sections are current-state summaries, not progress logs
 - `## Alternatives` sections stay selective and current
 - links and code citations add rationale, not ceremony

@@ -110,7 +110,7 @@ Fail on every change to the claim record. Allow verdicts, falsification, and pro
 
 **Completion record:** commit `fix(evals): enforce truthful postcondition checks` · validation `evals/tests/check-baseline.sh` (red before fix: `FAIL: claim-writer unexpectedly passed`; green after fix); `evals/tests/run-failure-gates.sh`; `bash -n` over runner, helper, fixture, tests, and all scenario checkers; `git diff --check` · notes claim records under any `specs/` directory are immutable across unstaged, staged, committed, added, deleted, and renamed states; sibling evidence changes remain non-failing and visible; unrelated `CLAIM-*.md` files outside `specs/` are not treated as records
 
-### [ ] F02 — Linter Silently Accepts Invalid Record Shapes
+### [x] F02 — Linter Silently Accepts Invalid Record Shapes
 
 **Priority:** P1
 **Location:** `skills/linked-records-upkeep/lint.sh:87`
@@ -139,22 +139,22 @@ Build a table-driven known-good/known-bad corpus. Enforce only content propertie
 
 **Implementation checklist**
 
-- [ ] Define the exact mechanical checks owned by `lint.sh`.
-- [ ] Require a non-empty, one-sentence SPEC justification if that remains the contract.
-- [ ] Reject claim-level proof/verdict material when mechanically identifiable.
-- [ ] Detect tombstone records when mechanically identifiable.
-- [ ] Resolve the fence contract and cover `text`/diagram versus source-code examples.
-- [ ] Add one focused good and bad fixture for every implemented rule.
-- [ ] Keep undecidable rules in the judgment checklist with no implied mechanical guarantee.
+- [x] Define the exact mechanical checks owned by `lint.sh`.
+- [x] Require a non-empty, one-sentence SPEC justification if that remains the contract.
+- [x] Reject claim-level proof/verdict material when mechanically identifiable.
+- [x] Detect tombstone records when mechanically identifiable.
+- [x] Resolve the fence contract and cover `text`/diagram versus source-code examples.
+- [x] Add one focused good and bad fixture for every implemented rule.
+- [x] Keep undecidable rules in the judgment checklist with no implied mechanical guarantee.
 
 **Acceptance gate**
 
-- [ ] Every known-bad fixture exits nonzero with the expected finding.
-- [ ] Every known-good edge fixture exits 0.
-- [ ] One rule cannot silently stop executing without a regression test failing.
-- [ ] `SKILL.md`, `lint.sh`, and test names describe the same contract.
+- [x] Every known-bad fixture exits nonzero with the expected finding.
+- [x] Every known-good edge fixture exits 0.
+- [x] One rule cannot silently stop executing without a regression test failing.
+- [x] `SKILL.md`, `lint.sh`, and test names describe the same contract.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(lint): enforce linked-record shape contract` · validation red proof: `skills/linked-records-upkeep/tests/check-lint.sh` failed 12 of 31 cases before the linter change; green proof: the same 31-case matrix, `/bin/bash -n` for linter and test, existing eval regression suites in an ephemeral committed clone, and `git diff --check` all passed · notes the linter now enforces exactly one non-empty SPEC justification section, recognizable claim-level proof/verdict labels, explicit tombstone markers, and exact diagram fence labels; sentence quality, actual diagram content, disguised claim metadata, and implicit tombstones remain judgment checks; bundled skill validation was unavailable because its Python environment lacks PyYAML (`ModuleNotFoundError: yaml`)
 
 ### [x] F03 — Failed or Missing Agent Harness Scores a Clean Eval Run
 
