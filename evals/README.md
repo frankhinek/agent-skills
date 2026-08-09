@@ -74,6 +74,12 @@ evals/run.sh codex           # all scenarios
 evals/run.sh claude gate-conflict
 ```
 
+Explicit scenario selections are validated as one complete request before the
+harness or any fixture runs. Every name must exactly match a listed scenario;
+an unknown, empty, or path-like name rejects the whole request with exit 2 and
+an `INVALID: scenario selection` summary showing that zero scenarios executed.
+Omitting scenario arguments still runs every discovered scenario.
+
 Goose and other harnesses: build a fixture with `evals/fixture.sh <dir>`, apply
 and commit any scenario overlay, and save that revision before running the
 agent. Then run `check.sh` inside the fixture with the saved revision in

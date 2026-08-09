@@ -22,18 +22,78 @@ claude|codex) ;;
   ;;
 esac
 
-DATE="$(date +%Y-%m-%d)"
-OUT="$EVALS/results/$DATE-$HARNESS${EVAL_LABEL:+-$EVAL_LABEL}"
-mkdir -p "$OUT/logs"
+AVAILABLE_SCENARIOS=()
+for d in "$EVALS/scenarios"/[!.]*/; do
+  [ -d "$d" ] || continue
+  d="${d%/}"
+  AVAILABLE_SCENARIOS+=("${d##*/}")
+done
 
+SCENARIOS=()
+UNKNOWN_SCENARIOS=()
 if [ $# -gt 0 ]; then
-  SCENARIOS=("$@")
-else
-  SCENARIOS=()
-  for d in "$EVALS/scenarios"/*/; do SCENARIOS+=("$(basename "$d")"); done
+  for requested in "$@"; do
+    known=0
+    if [ "${#AVAILABLE_SCENARIOS[@]}" -gt 0 ]; then
+      for available in "${AVAILABLE_SCENARIOS[@]}"; do
+        if [ "$requested" = "$available" ]; then
+          known=1
+          break
+        fi
+      done
+    fi
+    if [ "$known" -eq 1 ]; then
+      SCENARIOS+=("$requested")
+    else
+      UNKNOWN_SCENARIOS+=("$requested")
+    fi
+  done
+elif [ "${#AVAILABLE_SCENARIOS[@]}" -gt 0 ]; then
+  SCENARIOS=("${AVAILABLE_SCENARIOS[@]}")
 fi
 
+DATE="$(date +%Y-%m-%d)"
+OUT="$EVALS/results/$DATE-$HARNESS${EVAL_LABEL:+-$EVAL_LABEL}"
 summary="$OUT/summary.md"
+
+if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ] || [ "${#SCENARIOS[@]}" -eq 0 ]; then
+  mkdir -p "$OUT"
+  {
+    echo "# Eval run: $HARNESS, $DATE"
+    echo
+    echo "- status: INVALID: scenario selection"
+    echo "- scenarios executed: 0"
+    if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ]; then
+      echo "- detail: requested set rejected before execution; valid selections, if any, were not run"
+      echo "- unknown scenarios:"
+      for unknown in "${UNKNOWN_SCENARIOS[@]}"; do
+        if [ -n "$unknown" ]; then
+          printf '  - %q\n' "$unknown"
+        else
+          echo "  - <empty>"
+        fi
+      done
+    else
+      echo "- detail: no scenarios discovered"
+    fi
+  } >"$summary"
+
+  if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ]; then
+    for unknown in "${UNKNOWN_SCENARIOS[@]}"; do
+      if [ -n "$unknown" ]; then
+        printf 'unknown scenario: %q\n' "$unknown" >&2
+      else
+        echo "unknown scenario: <empty>" >&2
+      fi
+    done
+  fi
+  [ "${#SCENARIOS[@]}" -gt 0 ] || echo "no scenarios selected" >&2
+  echo "summary: $summary"
+  exit 2
+fi
+
+mkdir -p "$OUT/logs"
+
 {
   echo "# Eval run: $HARNESS, $DATE"
   echo
@@ -70,7 +130,6 @@ record_invalid() {
 overall=0
 for s in "${SCENARIOS[@]}"; do
   sd="$EVALS/scenarios/$s"
-  [ -d "$sd" ] || { echo "unknown scenario: $s" >&2; continue; }
 
   log="$OUT/logs/$s.log"
   response="$OUT/logs/$s.response.txt"

@@ -700,7 +700,7 @@ Classify each expected skill as linked, copied, missing, or invalid. Only an all
 
 **Completion record:** commit ___ · validation ___ · notes ___
 
-### [ ] F17 — Unknown Scenario Names Are Skipped with Exit 0
+### [x] F17 — Unknown Scenario Names Are Skipped with Exit 0
 
 **Priority:** P3
 **Location:** `evals/run.sh:44`
@@ -721,16 +721,16 @@ Treat every unknown requested scenario as a usage failure, record it in the summ
 
 **Implementation checklist**
 
-- [ ] Validate requested names before fixture creation.
-- [ ] Exit nonzero on any unknown name.
-- [ ] Exit nonzero when zero scenarios execute.
-- [ ] Record skipped/unknown names in generated output.
+- [x] Validate requested names before fixture creation.
+- [x] Exit nonzero on any unknown name.
+- [x] Exit nonzero when zero scenarios execute.
+- [x] Record skipped/unknown names in generated output.
 
 **Acceptance gate**
 
-- [ ] Typoed or empty selections cannot produce green evidence.
+- [x] Unknown requested names, explicit empty values, and zero discovered scenarios cannot produce green evidence; omitted scenario arguments still select all discovered scenarios.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(evals): reject invalid scenario selections` · validation `evals/tests/run-failure-gates.sh` (red before fix: `FAIL: unknown-only returned 0 instead of usage exit 2`; green after fix); `evals/tests/check-baseline.sh`; `evals/tests/check-semantics.sh`; `bash -n` over eval scripts; `git diff --check` · notes explicit selections now use exact membership in the canonical direct-child scenario set; any unknown, empty, or path-like name rejects the complete request with exit 2, records every rejected name and zero executions, and performs no version lookup, fixture creation, or agent invocation; empty discovery also fails, while valid named requests and omitted-argument default-all behavior remain unchanged; generated-summary frontmatter remains owned by F07, and result-directory collision handling remains separate
 
 ---
 

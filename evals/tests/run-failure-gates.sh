@@ -4,6 +4,7 @@ set -euo pipefail
 EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNNER="$EVALS/run.sh"
 REAL_GIT="$(command -v git)"
+REAL_MKTEMP="$(command -v mktemp)"
 BASE_PATH="/run/current-system/sw/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-run-gates.XXXXXX")"
 RESULT_DIRS=()
@@ -61,11 +62,26 @@ SHIM
   chmod +x "$dir/git"
 }
 
+add_fake_mktemp() {
+  local dir="$1"
+  cat >"$dir/mktemp" <<'SHIM'
+#!/usr/bin/env bash
+if [ -n "${FAKE_MKTEMP_INVOKED_FILE:-}" ]; then
+  : >"$FAKE_MKTEMP_INVOKED_FILE"
+fi
+exec "$REAL_MKTEMP" "$@"
+SHIM
+  chmod +x "$dir/mktemp"
+}
+
 add_fake_claude() {
   local dir="$1"
   cat >"$dir/claude" <<'SHIM'
 #!/usr/bin/env bash
 if [ "${1:-}" = --version ]; then
+  if [ -n "${FAKE_VERSION_INVOKED_FILE:-}" ]; then
+    : >"$FAKE_VERSION_INVOKED_FILE"
+  fi
   echo "fake-claude 1.0"
   exit 0
 fi
@@ -129,8 +145,12 @@ run_case() {
   local mode="$3"
   local shim_dir="$TEST_ROOT/shims-$name"
   local label="f03-$name-$$"
+  local runner_args=("$harness")
+  shift 3
+  [ "$#" -eq 0 ] || runner_args+=("$@")
 
   make_shims "$shim_dir"
+  [ -z "${FAKE_MKTEMP_INVOKED_FILE:-}" ] || add_fake_mktemp "$shim_dir"
   case "$harness:$mode" in
   claude:missing) ;;
   claude:*) add_fake_claude "$shim_dir" ;;
@@ -145,21 +165,43 @@ run_case() {
   set +e
   PATH="$shim_dir:$BASE_PATH" \
     REAL_GIT="$REAL_GIT" \
+    REAL_MKTEMP="$REAL_MKTEMP" \
     TMPDIR="$TEST_ROOT/tmp" \
     EVAL_LABEL="$label" \
     FAKE_MODE="$mode" \
     FAKE_GIT_COMMIT_FAIL="${FAKE_GIT_COMMIT_FAIL:-0}" \
     FAKE_INVOKED_FILE="${FAKE_INVOKED_FILE:-}" \
-    bash "$RUNNER" "$harness" gate-conflict >"$LAST_CONSOLE" 2>&1
+    FAKE_MKTEMP_INVOKED_FILE="${FAKE_MKTEMP_INVOKED_FILE:-}" \
+    FAKE_VERSION_INVOKED_FILE="${FAKE_VERSION_INVOKED_FILE:-}" \
+    bash "$RUNNER" "${runner_args[@]}" >"$LAST_CONSOLE" 2>&1
   LAST_RC=$?
   set -e
+}
+
+expect_selection_error() {
+  local name="$1"
+  shift
+  local agent_marker="$TEST_ROOT/$name-agent-invoked"
+  local fixture_marker="$TEST_ROOT/$name-fixture-invoked"
+  local version_marker="$TEST_ROOT/$name-version-invoked"
+
+  FAKE_INVOKED_FILE="$agent_marker" \
+    FAKE_MKTEMP_INVOKED_FILE="$fixture_marker" \
+    FAKE_VERSION_INVOKED_FILE="$version_marker" \
+    run_case "$name" claude compliant "$@"
+  [ "$LAST_RC" -eq 2 ] || fail "$name returned $LAST_RC instead of usage exit 2"
+  assert_contains "$LAST_OUT/summary.md" 'INVALID: scenario selection'
+  assert_contains "$LAST_OUT/summary.md" 'scenarios executed: 0'
+  [ ! -e "$version_marker" ] || fail "$name queried the harness version"
+  [ ! -e "$fixture_marker" ] || fail "$name created a fixture"
+  [ ! -e "$agent_marker" ] || fail "$name invoked the agent"
 }
 
 expect_invalid_harness() {
   local name="$1"
   local mode="$2"
   local exit_code="$3"
-  run_case "$name" claude "$mode"
+  run_case "$name" claude "$mode" gate-conflict
   [ "$LAST_RC" -ne 0 ] || fail "$name returned success"
   assert_contains "$LAST_OUT/summary.md" "INVALID: harness.*exit $exit_code"
   assert_not_contains "$LAST_OUT/summary.md" "PASS: gate record"
@@ -169,30 +211,89 @@ expect_invalid_harness crash crash 42
 expect_invalid_harness missing missing 127
 expect_invalid_harness auth auth 1
 
-run_case empty claude empty
+run_case empty claude empty gate-conflict
 [ "$LAST_RC" -ne 0 ] || fail "empty response returned success"
 assert_contains "$LAST_OUT/summary.md" "INVALID: missing response"
 assert_not_contains "$LAST_OUT/summary.md" "PASS: gate record"
 
-run_case signal-miss claude unrelated
+run_case signal-miss claude unrelated gate-conflict
 [ "$LAST_RC" -ne 0 ] || fail "unrelated response returned success"
 assert_contains "$LAST_OUT/summary.md" "FAIL: response signal"
 assert_contains "$LAST_OUT/summary.md" "PASS: gate record untouched"
 
 invoked="$TEST_ROOT/fixture-failure-agent-invoked"
-FAKE_GIT_COMMIT_FAIL=1 FAKE_INVOKED_FILE="$invoked" run_case fixture-failure claude compliant
+FAKE_GIT_COMMIT_FAIL=1 FAKE_INVOKED_FILE="$invoked" run_case fixture-failure claude compliant gate-conflict
 [ "$LAST_RC" -ne 0 ] || fail "fixture failure returned success"
 assert_contains "$LAST_OUT/summary.md" "INVALID: setup"
 [ ! -e "$invoked" ] || fail "agent ran after fixture setup failed"
 
-run_case claude-pass claude compliant
+version_marker="$TEST_ROOT/claude-pass-version-invoked"
+fixture_marker="$TEST_ROOT/claude-pass-fixture-invoked"
+FAKE_VERSION_INVOKED_FILE="$version_marker" \
+  FAKE_MKTEMP_INVOKED_FILE="$fixture_marker" \
+  run_case claude-pass claude compliant gate-conflict
 [ "$LAST_RC" -eq 0 ] || fail "Claude positive control failed"
 assert_contains "$LAST_OUT/summary.md" "PASS: response signal"
 assert_contains "$LAST_OUT/summary.md" "PASS: postconditions"
+[ -e "$version_marker" ] || fail "version marker never fired; selection checks could be vacuous"
+[ -e "$fixture_marker" ] || fail "fixture marker never fired; selection checks could be vacuous"
 
-run_case codex-pass codex compliant
+run_case codex-pass codex compliant gate-conflict
 [ "$LAST_RC" -eq 0 ] || fail "Codex positive control failed"
 assert_contains "$LAST_OUT/summary.md" "PASS: response signal"
 assert_contains "$LAST_OUT/summary.md" "PASS: postconditions"
+
+expect_selection_error unknown-only does-not-exist
+assert_contains "$LAST_OUT/summary.md" 'does-not-exist'
+
+expect_selection_error mixed-selection gate-conflict missing-one missing-two
+assert_contains "$LAST_OUT/summary.md" 'missing-one'
+assert_contains "$LAST_OUT/summary.md" 'missing-two'
+assert_not_contains "$LAST_OUT/summary.md" '^## gate-conflict$'
+
+expect_selection_error empty-name ''
+assert_contains "$LAST_OUT/summary.md" '<empty>'
+
+expect_selection_error path-alias ./gate-conflict
+assert_contains "$LAST_OUT/summary.md" '\./gate-conflict'
+
+empty_evals="$TEST_ROOT/empty-evals"
+empty_shims="$TEST_ROOT/shims-empty-discovery"
+empty_label="f17-empty-discovery-$$"
+empty_out="$empty_evals/results/$(date +%Y-%m-%d)-claude-$empty_label"
+empty_console="$TEST_ROOT/empty-discovery.console.txt"
+empty_agent_marker="$TEST_ROOT/empty-discovery-agent-invoked"
+empty_fixture_marker="$TEST_ROOT/empty-discovery-fixture-invoked"
+empty_version_marker="$TEST_ROOT/empty-discovery-version-invoked"
+mkdir -p "$empty_evals/scenarios"
+cp "$RUNNER" "$empty_evals/run.sh"
+make_shims "$empty_shims"
+add_fake_mktemp "$empty_shims"
+add_fake_claude "$empty_shims"
+set +e
+PATH="$empty_shims:$BASE_PATH" \
+  REAL_GIT="$REAL_GIT" \
+  REAL_MKTEMP="$REAL_MKTEMP" \
+  TMPDIR="$TEST_ROOT/tmp" \
+  EVAL_LABEL="$empty_label" \
+  FAKE_MODE=compliant \
+  FAKE_INVOKED_FILE="$empty_agent_marker" \
+  FAKE_MKTEMP_INVOKED_FILE="$empty_fixture_marker" \
+  FAKE_VERSION_INVOKED_FILE="$empty_version_marker" \
+  bash "$empty_evals/run.sh" claude >"$empty_console" 2>&1
+empty_rc=$?
+set -e
+[ "$empty_rc" -eq 2 ] || fail "empty discovery returned $empty_rc instead of usage exit 2"
+assert_contains "$empty_out/summary.md" 'INVALID: scenario selection'
+assert_contains "$empty_out/summary.md" 'scenarios executed: 0'
+[ ! -e "$empty_version_marker" ] || fail "empty discovery queried the harness version"
+[ ! -e "$empty_fixture_marker" ] || fail "empty discovery created a fixture"
+[ ! -e "$empty_agent_marker" ] || fail "empty discovery invoked the agent"
+
+run_case default-all claude compliant
+assert_not_contains "$LAST_OUT/summary.md" 'INVALID:'
+for scenario in arch-drift claim-writer gate-conflict gate-sweep-edit record-threshold; do
+  assert_contains "$LAST_OUT/summary.md" "^## $scenario$"
+done
 
 echo "PASS: eval runner failure gates"
