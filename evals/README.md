@@ -80,9 +80,16 @@ an unknown, empty, or path-like name rejects the whole request with exit 2 and
 an `INVALID: scenario selection` summary showing that zero scenarios executed.
 Omitting scenario arguments still runs every discovered scenario.
 
-Goose and other harnesses: build a fixture with `evals/fixture.sh <dir>`, apply
-and commit any scenario overlay, and save that revision before running the
-agent. Then run `check.sh` inside the fixture with the saved revision in
+Goose and other harnesses: the fixture destination must not already exist.
+Create a private parent, then build into a new child directory:
+
+```sh
+fixture_parent="$(mktemp -d)"
+evals/fixture.sh "$fixture_parent/fixture"
+```
+
+Apply and commit any scenario overlay, and save that revision before running
+the agent. Then run `check.sh` inside the fixture with the saved revision in
 `EVAL_BASE`, and judge the final response.
 
 Results land in `results/<date>-<harness>/`: `summary.md` is committed,
@@ -96,6 +103,7 @@ The local regression suites spend no agent tokens; the runner failure suite
 uses fake Claude and Codex adapters:
 
 ```sh
+evals/tests/check-fixture.sh
 evals/tests/run-failure-gates.sh
 evals/tests/check-baseline.sh
 evals/tests/check-semantics.sh

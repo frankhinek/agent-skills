@@ -281,7 +281,7 @@ Store a sanitized, non-secret canonical provenance identifier. Strip or refuse U
 
 **Completion record:** commit ___ · validation ___ · notes ___
 
-### [ ] F06 — Relative Fixture Destination Leaves a Half-Built Fixture
+### [x] F06 — Relative Fixture Destination Leaves a Half-Built Fixture
 
 **Priority:** P2
 **Location:** `evals/fixture.sh:123`
@@ -303,18 +303,18 @@ Resolve the destination to an absolute path once, before changing directory. Def
 
 **Implementation checklist**
 
-- [ ] Normalize the destination before the first `cd`.
-- [ ] Preserve paths containing spaces.
-- [ ] Define existing-directory behavior.
-- [ ] Add failure cleanup for directories created by this invocation.
-- [ ] Test absolute, relative, spaced, and existing destinations.
+- [x] Normalize the destination before the first `cd`.
+- [x] Preserve paths containing spaces.
+- [x] Define existing-directory behavior.
+- [x] Add failure cleanup for directories created by this invocation.
+- [x] Test absolute, relative, spaced, and existing destinations.
 
 **Acceptance gate**
 
-- [ ] Absolute and relative invocations create equivalent complete fixtures.
-- [ ] A setup failure does not leave a directory that looks usable.
+- [x] Absolute and relative invocations create equivalent complete fixtures.
+- [x] A setup failure does not leave a directory that looks usable.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(evals): make fixture setup path-safe` · validation `evals/tests/check-fixture.sh` (red before the fix: `vendor.sh: line 33: cd: relative-fixture: No such file or directory`; green after the fix); `evals/tests/run-failure-gates.sh`; `evals/tests/check-baseline.sh`; `evals/tests/check-semantics.sh`; `/bin/bash -n evals/fixture.sh evals/tests/check-fixture.sh`; `git diff --check` · notes the builder now resolves one physical absolute destination before entering it, requires a previously nonexistent leaf, and forwards the absolute path to vendoring; absolute, relative, and space-containing builds produce identical committed trees; existing directories, files, symlinks, and symlink targets remain unchanged; command and `INT`/`TERM` failures remove only the invocation-owned leaf while preserving exit status and unrelated siblings; cleanup failure preserves the original status, warns loudly, and retains partial evidence; `SIGKILL` remains inherently untrappable
 
 ### [ ] F07 — Eval Documents Violate Required Frontmatter
 

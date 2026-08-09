@@ -3,9 +3,39 @@
 # linked-records) at the given path, vendored + committed.
 set -euo pipefail
 
-DEST="${1:?usage: fixture.sh <dest-dir>}"
+DEST_INPUT="${1:?usage: fixture.sh <dest-dir>}"
 EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(dirname "$EVALS")"
+
+DEST_PARENT="$(dirname -- "$DEST_INPUT")"
+DEST_NAME="$(basename -- "$DEST_INPUT")"
+mkdir -p -- "$DEST_PARENT"
+DEST_PARENT="$(cd "$DEST_PARENT" && pwd -P)"
+DEST="$DEST_PARENT/$DEST_NAME"
+
+cleanup_fixture() {
+  local status=$?
+  trap - EXIT INT TERM
+  if ! rm -rf -- "$DEST"; then
+    echo "fixture.sh: cleanup failed; partial fixture remains at: $DEST" >&2
+  fi
+  exit "$status"
+}
+
+interrupt_fixture() {
+  local status="$1"
+  trap - INT TERM
+  exit "$status"
+}
+
+if ! mkdir -- "$DEST"; then
+  echo "fixture.sh: destination must not already exist and must be creatable: $DEST" >&2
+  exit 1
+fi
+trap cleanup_fixture EXIT
+# macOS Bash 3.2 does not run an EXIT trap for an uncaught INT or TERM.
+trap 'interrupt_fixture 130' INT
+trap 'interrupt_fixture 143' TERM
 
 mkdir -p "$DEST/app" "$DEST/specs/CLAIM-single-writer"
 cd "$DEST"
@@ -130,3 +160,5 @@ mkdir -p .git/eval-hooks
 git config core.hooksPath .git/eval-hooks
 git add -A
 git commit -qm "baseline"
+
+trap - EXIT INT TERM
