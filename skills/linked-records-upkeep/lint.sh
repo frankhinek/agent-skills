@@ -248,8 +248,16 @@ while IFS= read -r d; do
 done <"$TMP/specsdirs"
 
 # ---- references to nonexistent records ----------------------------------
-grep -rEon "($TYPES)-[a-z0-9][a-z0-9-]*" . \
-  --exclude-dir=.git --exclude-dir=.agents --exclude-dir=node_modules \
+# Search regular text files while pruning conventional generated, dependency,
+# and environment trees; -I makes binary handling explicit on both BSD and
+# GNU grep.
+find . \
+  \( -type d \( \
+    -name .git -o -name .agents -o -name node_modules -o \
+    -name build -o -name dist -o -name .venv -o -name venv -o \
+    -name vendor \
+  \) -prune \) -o \
+  -type f -exec grep -IHoEn "($TYPES)-[a-z0-9][a-z0-9-]*" -- {} + \
   2>/dev/null | sort -u >"$TMP/refs" || true
 while IFS=: read -r p ln id; do
   grep -qx "$id" "$TMP/stems.u" ||

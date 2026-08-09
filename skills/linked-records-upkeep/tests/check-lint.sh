@@ -59,6 +59,8 @@ setup_scratch_initialization_failure() {
 verify_case() {
   local name="$1"
   local root="$2"
+  local output="$3"
+  local elapsed="$4"
   case "$name" in
   mktemp-failure | mktemp-unsafe-path)
     [ ! -e "$root/rm-called" ] || return 1
@@ -68,6 +70,14 @@ verify_case() {
     canonical_root="$(CDPATH= cd -- "$root" && pwd -P)" || return 1
     [ ! -e "$root/linked-records-lint.INIT00" ] || return 1
     grep -Fqx -e "-rf -- $canonical_root/linked-records-lint.INIT00" "$root/rm-called" || return 1
+    ;;
+  reference-scan-boundary)
+    local expected
+    expected="$(printf '%s\n%s' \
+      './src/app.py:1: [dangling-ref] references non-existent record REQ-source-missing' \
+      'linked-records lint: 1 finding(s)')"
+    [ "$output" = "$expected" ] || return 1
+    [ "$elapsed" -le 10 ] || return 1
     ;;
   esac
 }
@@ -291,6 +301,24 @@ setup_dangling_reference() {
     '# ARCH-system: System map' '' 'Constrained by REQ-missing.'
 }
 
+setup_reference_scan_boundary() {
+  local root="$1"
+  put "$root/specs/ARCH-system.md" '# ARCH-system: System map' '' 'System map.'
+  put "$root/src/app.py" 'requirement = "REQ-source-missing"'
+  put "$root/build/generated.js" '// REQ-build-copy'
+  put "$root/dist/generated.js" '// SPEC-dist-copy'
+  put "$root/.venv/lib/site-packages/package.py" '# CLAIM-dot-venv-copy'
+  put "$root/venv/lib/site-packages/package.py" '# CLAIM-venv-copy'
+  mkdir -p "$root/vendor/dependency"
+  awk 'BEGIN {
+    line = "vendored dependency content that is deliberately outside the reference scan"
+    for (i = 0; i < 65536; i++) print line
+    print "GATE-vendor-copy"
+  }' >"$root/vendor/dependency/large.txt"
+  mkfifo "$root/vendor/dependency/blocked.pipe"
+  printf '\000REQ-binary-copy\n' >"$root/assets.bin"
+}
+
 CASES='no-specs|0|linked-records lint: no specs/ directories found under @ROOT@|setup_no_specs
 mktemp-failure|2|[setup] unable to create scratch directory|setup_mktemp_failure
 mktemp-unsafe-path|2|[setup] unsafe scratch directory returned by mktemp: /|setup_mktemp_unsafe_path
@@ -324,7 +352,8 @@ valid-gradual-status|0|linked-records lint: clean|setup_valid_gradual_status
 orphan-evidence|1|[orphan-evidence] evidence directory without a CLAIM-orphan.md record|setup_orphan_evidence
 unexpected-evidence|1|[evidence-shape] unexpected evidence file|setup_unexpected_evidence
 stray-directory|1|[stray-dir] unexpected directory in specs/|setup_stray_directory
-dangling-reference|1|[dangling-ref] references non-existent record REQ-missing|setup_dangling_reference'
+dangling-reference|1|[dangling-ref] references non-existent record REQ-missing|setup_dangling_reference
+reference-scan-boundary|1|[dangling-ref] references non-existent record REQ-source-missing|setup_reference_scan_boundary'
 
 declared="$(printf '%s\n' "$CASES" | awk 'NF { count++ } END { print count + 0 }')"
 executed=0
@@ -340,12 +369,24 @@ while IFS='|' read -r name expected_rc expected_text setup; do
   root="$TMP_ROOT/$name"
   "$setup" "$root"
 
+  fifo_writer=""
+  if [ "$name" = reference-scan-boundary ]; then
+    (printf '%s\n' 'REQ-fifo-copy' >"$root/vendor/dependency/blocked.pipe") &
+    fifo_writer=$!
+  fi
+
+  started="$(date +%s)"
   if [ -d "$root/.test-bin" ]; then
     output="$(TMPDIR="$root" PATH="$root/.test-bin:$PATH" "$LINTER" "$root" 2>&1)"
   else
     output="$("$LINTER" "$root" 2>&1)"
   fi
   rc=$?
+  elapsed=$(( $(date +%s) - started ))
+  if [ -n "$fifo_writer" ]; then
+    kill "$fifo_writer" 2>/dev/null || true
+    wait "$fifo_writer" 2>/dev/null || true
+  fi
   executed=$((executed + 1))
   canonical_root="$(CDPATH= cd -- "$root" && pwd -P)"
   expected_text="${expected_text//@ROOT@/$canonical_root}"
@@ -360,8 +401,8 @@ while IFS='|' read -r name expected_rc expected_text setup; do
     failed=$((failed + 1))
     continue
   fi
-  if ! verify_case "$name" "$root"; then
-    printf 'FAIL %s: cleanup targeted an unsafe path or left validated scratch state\n' "$name"
+  if ! verify_case "$name" "$root" "$output" "$elapsed"; then
+    printf 'FAIL %s: case-specific verification failed (%ss)\n%s\n' "$name" "$elapsed" "$output"
     failed=$((failed + 1))
     continue
   fi

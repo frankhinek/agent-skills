@@ -776,7 +776,7 @@ Fail explicitly when the scratch directory cannot be created. Make the no-corpus
 
 **Completion record:** commit `fix(lint): fail closed on scratch setup` · validation red proof: the 34-case linter matrix failed the no-corpus, `mktemp` failure, unsafe-path, and scratch-initialization cases before the linter change; green proof: all 34 cases, `/bin/bash -n` for the linter and matrix, and `git diff --check` passed; an independent Claude adversarial review found one cleanup-probe false-confidence gap, which was fixed with a live positive control and revalidated · notes scratch creation now uses a named template under a canonical temporary parent, rejects empty or out-of-prefix results before installing cleanup, exits 2 with a `[setup]` diagnostic on setup failure, and names the canonical searched root when no corpus exists; post-initialization scratch-write failures and traversal interaction with a project-local `TMPDIR` remain separate linter-hardening concerns; bundled skill validation remains unavailable because its Python environment lacks PyYAML (`ModuleNotFoundError: yaml`)
 
-### [ ] R03 — Dangling-Reference Scan Traverses Binary and Generated Trees
+### [x] R03 — Dangling-Reference Scan Traverses Binary and Generated Trees
 
 **Location:** `skills/linked-records-upkeep/lint.sh`
 
@@ -788,10 +788,10 @@ The recursive grep excludes only a few directories. Build outputs, virtual envir
 
 Restrict the scan to relevant text/document/source paths or use a deterministic tracked-file inventory. Handle binary files explicitly. Make pruning configurable only if the repository contract requires it.
 
-- [ ] Add binary, build-output, virtualenv, and large-vendor fixtures.
-- [ ] Assert stable output and acceptable runtime.
+- [x] Add binary, build-output, virtualenv, and large-vendor fixtures.
+- [x] Assert stable output and acceptable runtime.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(lint): bound dangling-reference scan` · validation red proof: the new boundary case reported eight findings before the linter change, including generated, virtualenv, vendor, FIFO, and malformed binary findings; green proof: all 35 linter cases passed with exact output containing only the project-authored source finding, the large-vendor case completed within its 10-second ceiling, `/bin/bash -n` on the linter and matrix passed under macOS Bash 3.2, and `git diff --check` passed · notes the scan now inventories regular files with portable `find`, prunes the documented conventional generated/dependency/environment directories, batches searches, and uses BSD/GNU `grep -I` for explicit binary suppression; nonstandard generated-directory names remain a documented residual, alternate vendored skill roots remain owned by R04, and bundled skill validation remains unavailable because its Python environment lacks PyYAML (`ModuleNotFoundError: yaml`)
 
 ### [ ] R04 — Vendoring Outside `.agents/` Can Trigger a Self-Reference False Positive
 
