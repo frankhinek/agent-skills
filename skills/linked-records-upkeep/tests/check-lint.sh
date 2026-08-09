@@ -87,6 +87,13 @@ verify_case() {
       'linked-records lint: 2 finding(s)')"
     [ "$output" = "$expected" ] || return 1
     ;;
+  link-grammar)
+    local expected
+    expected="$(printf '%s\n%s' \
+      './specs/ARCH-links.md:17: [link] broken relative link: ../docs/missing.md' \
+      'linked-records lint: 1 finding(s)')"
+    [ "$output" = "$expected" ] || return 1
+    ;;
   esac
 }
 
@@ -153,6 +160,30 @@ setup_bad_heading() {
 setup_broken_link() {
   put "$1/specs/ARCH-system.md" \
     '# ARCH-system: System map' '' 'See [missing detail](missing.md).'
+}
+
+setup_link_grammar() {
+  local root="$1"
+  put "$root/specs/ARCH-links.md" \
+    '# ARCH-links: Link grammar' '' \
+    '[plain](../docs/target.md) and [titled](../docs/target.md "Title").' \
+    '[single title](../docs/target.md '\''Title'\'').' \
+    '[parenthesized title](../docs/target.md (Title)).' \
+    '[local fragment](../docs/target.md#section) and [fragment only](#section).' \
+    '[https](https://example.com/a) and [ftp](ftp://example.com/a).' \
+    '[absolute](/missing.md) and [network](//example.com/missing.md).' \
+    '[space](<../docs/file with spaces.md>).' \
+    '[space titled](<../docs/file with spaces.md> "Title").' \
+    '[escaped](../docs/file\(draft\).md).' \
+    '[balanced](../docs/file(draft).md).' \
+    '[local query](../docs/target.md?view=1#section).' \
+    '[query only](?view=1).' \
+    '[mailto](mailto:test@example.com).' \
+    '[empty]().' \
+    '[broken](../docs/missing.md).'
+  put "$root/docs/target.md" '# Target'
+  put "$root/docs/file with spaces.md" '# Space target'
+  put "$root/docs/file(draft).md" '# Parenthesis target'
 }
 
 setup_spec_missing_justification() {
@@ -359,6 +390,7 @@ index-file|1|[no-index] index-like file in specs/|setup_index_file
 bad-name|1|[type] not a recognized record name|setup_bad_name
 bad-heading|1|[heading] first line must be|setup_bad_heading
 broken-link|1|[link] broken relative link: missing.md|setup_broken_link
+link-grammar|1|[link] broken relative link: ../docs/missing.md|setup_link_grammar
 spec-missing-justification|1|missing '\''## Record justification'\'' section|setup_spec_missing_justification
 spec-empty-justification|1|Record justification'\'' section must contain non-empty content|setup_spec_empty_justification
 spec-duplicate-justification|1|exactly one '\''## Record justification'\'' section|setup_spec_duplicate_justification

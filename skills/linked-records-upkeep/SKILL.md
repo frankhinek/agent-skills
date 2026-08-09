@@ -54,6 +54,13 @@ shape; explicit tombstone markers; index-like files and stray directories in
 `specs/`. Fix what it reports — these are the convention's mechanical floor,
 not judgment calls.
 
+The link check supports single-line inline Markdown links, angle-bracket
+destinations, balanced or escaped parentheses, and optional quoted or
+parenthesized titles. It resolves only local relative targets; URI schemes,
+absolute and network paths, and fragment- or query-only targets are skipped.
+Reference-style and multiline links, autolinks, HTML, and URL/entity decoding
+are intentionally outside the mechanical check.
+
 The reference scan excludes `.git/`, `.agents/`, `node_modules/`, `build/`,
 `dist/`, `.venv/`, `venv/`, `vendor/`, and nested skill roots containing a
 regular `SKILL.md`. A project-root `SKILL.md` remains in scope. Binary and

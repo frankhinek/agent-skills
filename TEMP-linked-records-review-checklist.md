@@ -810,7 +810,7 @@ Exclude all discovered skill roots from corpus-reference linting, or scope refer
 
 **Completion record:** commit `fix(lint): exclude nested skill roots` · validation red proof: the alternate-root case produced four findings before the fix, including two false `CLAIM-single-writer` findings from a skill installed beneath a custom path containing spaces and pattern characters; green proof: all 36 linter cases passed with exact output containing only the project-root `SKILL.md` and `src/` positive controls, R03's binary/vendor/runtime case remained green, `/bin/bash -n` under macOS Bash 3.2 passed, and `git diff --check` passed · notes the scan now discovers nested regular `SKILL.md` markers outside existing pruned trees, escapes their paths before adding exact prune rules, and deliberately keeps a project-root `SKILL.md` in scope; the claims skill's useful example remains unchanged, any nested directory carrying a regular `SKILL.md` is treated as a skill root by convention, and bundled skill validation remains unavailable because its Python environment lacks PyYAML (`ModuleNotFoundError: yaml`)
 
-### [ ] R05 — Relative-Link Check Misparses Titles and Absolute Targets
+### [x] R05 — Relative-Link Check Misparses Titles and Absolute Targets
 
 **Location:** `skills/linked-records-upkeep/lint.sh`
 
@@ -822,10 +822,10 @@ Markdown links with titles, such as `](path "title")`, and absolute targets are 
 
 Define the supported Markdown link grammar and test it. Parse optional titles correctly, skip schemes/fragments according to policy, and handle absolute paths deliberately rather than concatenating them with the current directory.
 
-- [ ] Add fixtures for titles, fragments, URL schemes, absolute paths, spaces, and escaped parentheses.
-- [ ] Document any intentionally unsupported Markdown syntax.
+- [x] Add fixtures for titles, fragments, URL schemes, absolute paths, spaces, and escaped parentheses.
+- [x] Document any intentionally unsupported Markdown syntax.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(lint): parse supported relative links` · validation red proof: a fixture containing eleven valid or deliberately non-relative forms plus one missing local target produced twelve link findings before the fix; green proof: the 37-case linter matrix passed with exact output containing only the missing-target positive control under macOS system Bash/AWK tools, `/bin/bash -n` passed for the linter and test, and `git diff --check` passed · notes the portable AWK scanner now handles single-line inline destinations with supported titles, angle-bracket spaces, and balanced or escaped parentheses; relative query/fragment suffixes are removed before resolution; URI schemes, absolute/network paths, and fragment/query-only targets are deliberately skipped; reference-style and multiline links, autolinks, HTML, and URL/entity decoding remain explicitly unsupported; repository-wide lint still reports pre-existing out-of-scope dangling-reference fixtures, and bundled skill validation remains unavailable because its Python environment lacks PyYAML (`ModuleNotFoundError: yaml`)
 
 ### [ ] R06 — Claude and Codex Evals Run Under Unequal Safety Constraints
 

@@ -108,14 +108,101 @@ while IFS= read -r f; do
   *) finding "$f" heading "first line must be '# $stem: <title>' (found: ${first:-empty file})" ;;
   esac
 
-  # relative markdown links resolve
+  # Supported subset: single-line inline links with optional CommonMark titles.
+  # Absolute paths, URI schemes, and fragment/query-only targets are non-relative.
   dir="${f%/*}"
-  grep -n -o '\]([^)]*)' "$f" 2>/dev/null | sed 's/](\(.*\))/\1/' |
-    while IFS=: read -r ln target; do
+  awk '
+    function escaped(s, pos,    i, n) {
+      n = 0
+      for (i = pos - 1; i > 0 && substr(s, i, 1) == "\\"; i--) n++
+      return n % 2
+    }
+    function whitespace(ch) { return ch == " " || ch == "\t" }
+    function emit(target) { print NR "\t" target }
+    {
+      line = $0
+      line_length = length(line)
+      for (i = 1; i < line_length; i++) {
+        if (substr(line, i, 2) != "](" || escaped(line, i)) continue
+
+        pos = i + 2
+        while (pos <= line_length && whitespace(substr(line, pos, 1))) pos++
+        angle = substr(line, pos, 1) == "<"
+        direct_close = 0
+
+        if (angle) {
+          start = ++pos
+          while (pos <= line_length &&
+                 (substr(line, pos, 1) != ">" || escaped(line, pos))) pos++
+          if (pos > line_length) continue
+          target = substr(line, start, pos - start)
+          after = pos + 1
+        } else {
+          start = pos
+          depth = 0
+          while (pos <= line_length) {
+            ch = substr(line, pos, 1)
+            if (ch == "\\" && pos < line_length) {
+              pos += 2
+              continue
+            }
+            if (ch == "(") depth++
+            else if (ch == ")") {
+              if (depth == 0) {
+                direct_close = 1
+                break
+              }
+              depth--
+            } else if (whitespace(ch) && depth == 0) break
+            pos++
+          }
+          if (pos > line_length || depth != 0) continue
+          target = substr(line, start, pos - start)
+          after = pos
+        }
+
+        if (direct_close) {
+          emit(target)
+          i = after
+          continue
+        }
+
+        separated = 0
+        while (after <= line_length && whitespace(substr(line, after, 1))) {
+          after++
+          separated = 1
+        }
+        ch = substr(line, after, 1)
+        if (ch == ")") {
+          emit(target)
+          i = after
+          continue
+        }
+        if (!separated || (ch != "\"" && ch != "\047" && ch != "(")) continue
+
+        closer = ch == "(" ? ")" : ch
+        after++
+        while (after <= line_length &&
+               (substr(line, after, 1) != closer || escaped(line, after))) after++
+        if (after > line_length) continue
+        after++
+        while (after <= line_length && whitespace(substr(line, after, 1))) after++
+        if (substr(line, after, 1) != ")") continue
+        emit(target)
+        i = after
+      }
+    }
+  ' "$f" |
+    while IFS="$(printf '\t')" read -r ln target; do
       case "$target" in
-      http://* | https://* | mailto:* | "#"* | "") continue ;;
+      "" | "#"* | "?"* | /*) continue ;;
       esac
-      target="${target%%#*}"
+      if printf '%s\n' "$target" | grep -Eq '^[[:alpha:]][[:alnum:]+.-]*:'; then
+        continue
+      fi
+      target="${target%%[?#]*}"
+      target="${target//\\(/(}"
+      target="${target//\\)/)}"
       [ -n "$target" ] || continue
       [ -e "$dir/$target" ] || finding "$f:$ln" link "broken relative link: $target"
     done
