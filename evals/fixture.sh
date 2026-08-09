@@ -123,5 +123,10 @@ EOF
 "$REPO/vendor.sh" "$DEST" >/dev/null
 
 git init -q
+git config user.name "linked-records eval"
+git config user.email "linked-records-eval@localhost"
+git config commit.gpgsign false
+mkdir -p .git/eval-hooks
+git config core.hooksPath .git/eval-hooks
 git add -A
 git commit -qm "baseline"
