@@ -103,6 +103,15 @@ for s in "${SCENARIOS[@]}"; do
     continue
   fi
 
+  base="$(git -C "$fx" rev-parse --verify 'HEAD^{commit}' 2>>"$log")"
+  base_rc=$?
+  if [ "$base_rc" -ne 0 ]; then
+    dur=$(($(date +%s) - start))
+    overall=1
+    record_invalid "$s" "setup" "eval baseline could not be resolved (exit $base_rc)" "$dur"
+    continue
+  fi
+
   if [ ! -s "$sd/prompt.txt" ] || [ ! -s "$sd/response-signal.regex" ]; then
     dur=$(($(date +%s) - start))
     overall=1
@@ -161,7 +170,7 @@ for s in "${SCENARIOS[@]}"; do
     continue
   fi
 
-  check="$(cd "$fx" && bash "$sd/check.sh" 2>&1)"
+  check="$(cd "$fx" && EVAL_BASE="$base" bash "$sd/check.sh" 2>&1)"
   crc=$?
   scenario_status=PASS
   if [ "$signal_rc" -ne 0 ] || [ "$crc" -ne 0 ]; then
@@ -184,6 +193,7 @@ for s in "${SCENARIOS[@]}"; do
       echo "- FAIL: postconditions (exit $crc)"
     fi
     echo "- agent exit $rc, ${dur}s"
+    echo "- baseline: $base"
     echo "- final response: logs/$s.response.txt"
     echo "- diagnostics: logs/$s.log"
     echo

@@ -70,7 +70,7 @@ The order is load-bearing. A green eval or lint result is weak evidence until it
 
 ## Confirmed Findings
 
-### [ ] F01 — Claim Eval Accepts a Forbidden Claim Rewrite
+### [x] F01 — Claim Eval Accepts a Forbidden Claim Rewrite
 
 **Priority:** P1
 **Location:** `evals/scenarios/claim-writer/check.sh:6`
@@ -96,19 +96,19 @@ Fail on every change to the claim record. Allow verdicts, falsification, and pro
 
 **Implementation checklist**
 
-- [ ] Remove the warning/success exception for falsification-like wording.
-- [ ] Make any added, modified, deleted, or renamed claim record fail.
-- [ ] Preserve a valid evidence-only path for falsification or a changed verdict.
-- [ ] Add fixtures for modified, deleted, renamed, staged, and committed claim records.
-- [ ] Add a passing fixture where only sibling evidence changes.
+- [x] Remove the warning/success exception for falsification-like wording.
+- [x] Make any added, modified, deleted, or renamed claim record fail.
+- [x] Preserve a valid evidence-only path for falsification or a changed verdict.
+- [x] Add fixtures for modified, deleted, renamed, staged, and committed claim records.
+- [x] Add a passing fixture where only sibling evidence changes.
 
 **Acceptance gate**
 
-- [ ] No claim-record mutation can return 0.
-- [ ] Evidence-only falsification returns the intended result and is visible in the checker output.
-- [ ] The test remains correct after the change is staged or committed.
+- [x] No claim-record mutation can return 0.
+- [x] Evidence-only falsification returns the intended result and is visible in the checker output.
+- [x] The test remains correct after the change is staged or committed.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(evals): enforce truthful postcondition checks` · validation `evals/tests/check-baseline.sh` (red before fix: `FAIL: claim-writer unexpectedly passed`; green after fix); `evals/tests/run-failure-gates.sh`; `bash -n` over runner, helper, fixture, tests, and all scenario checkers; `git diff --check` · notes claim records under any `specs/` directory are immutable across unstaged, staged, committed, added, deleted, and renamed states; sibling evidence changes remain non-failing and visible; unrelated `CLAIM-*.md` files outside `specs/` are not treated as records
 
 ### [ ] F02 — Linter Silently Accepts Invalid Record Shapes
 
@@ -197,7 +197,7 @@ Treat the agent harness as a required part of the evaluation. A nonzero harness 
 
 **Completion record:** commit `fix(evals): reject invalid harness runs` · validation `evals/tests/run-failure-gates.sh`; `bash -n` over runner, fixture, test, and scenario checkers; all response regexes compiled; real fixture-build smoke test · notes final responses are captured separately from diagnostics; setup/harness/response failures are `INVALID`, behavioral misses are `FAIL`; fixture commits ignore global signing and hooks
 
-### [ ] F04 — Scenario Checks Ignore Staged and Committed Changes
+### [x] F04 — Scenario Checks Ignore Staged and Committed Changes
 
 **Priority:** P1
 **Location:** `evals/scenarios/claim-writer/check.sh:3` and other scenario checkers
@@ -223,20 +223,20 @@ After the base fixture and scenario overlay are committed, store that revision a
 
 **Implementation checklist**
 
-- [ ] Commit the complete pre-agent fixture, including scenario overlays.
-- [ ] Store or pass its revision as the eval base.
-- [ ] Compare tracked paths against the eval base, not the index.
-- [ ] Include untracked files in the changed-tree inventory.
-- [ ] Move shared diff logic into one helper used by every checker.
-- [ ] Test unstaged, staged, committed, renamed, deleted, and untracked changes.
+- [x] Commit the complete pre-agent fixture, including scenario overlays.
+- [x] Store or pass its revision as the eval base.
+- [x] Compare tracked paths against the eval base, not the index.
+- [x] Include untracked files in the changed-tree inventory.
+- [x] Move shared diff logic into one helper used by every checker.
+- [x] Test unstaged, staged, committed, renamed, deleted, and untracked changes.
 
 **Acceptance gate**
 
-- [ ] The same prohibited mutation produces the same failure in every Git state.
-- [ ] A legitimate agent commit remains inspectable against the baseline.
-- [ ] Every current scenario uses the shared baseline comparison.
+- [x] The same prohibited mutation produces the same failure in every Git state.
+- [x] A legitimate agent commit remains inspectable against the baseline.
+- [x] Every current scenario uses the shared baseline comparison.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(evals): enforce truthful postcondition checks` · validation `evals/tests/check-baseline.sh`; `evals/tests/run-failure-gates.sh`; `bash -n` over runner, helper, fixture, tests, and all scenario checkers; no direct `git diff`/`git status` remains in scenario checkers; `git diff --check` · notes runner captures the committed post-overlay SHA and passes it as `EVAL_BASE`; tracked changes compare against that SHA and untracked non-ignored files are inventoried separately
 
 ### [ ] F05 — Manifest Provenance Can Persist Credentials and Drive an Unsafe Git Remote
 
@@ -466,7 +466,7 @@ Handle `diff` statuses explicitly. Treat 0 as identical, 1 as expected differenc
 
 **Completion record:** commit ___ · validation ___ · notes ___
 
-### [ ] F11 — Grep Proxies Let Real Behavioral Violations Report PASS
+### [x] F11 — Grep Proxies Let Real Behavioral Violations Report PASS
 
 **Priority:** P2
 **Location:** `evals/scenarios/claim-writer/check.sh:15`, `evals/scenarios/gate-conflict/check.sh:8`
@@ -475,6 +475,8 @@ Handle `diff` statuses explicitly. Treat 0 as identical, 1 as expected differenc
 **Context and background**
 
 The scenarios are intended to test behavior: writes must continue through `Store`, and a local-only gate must prevent cloud synchronization. Current assertions search for a few source spellings. Absence of those strings is reported as affirmative behavioral success, including the phrase “agent presumably escalated.”
+
+The current claims convention adds an important qualification: `CLAIM-single-writer` is descriptive, not a gate. An explicitly requested direct write is valid only when the claim remains unchanged, verification records the resulting falsified counterexample, and the response escalates the conflict. The defect is therefore an undisclosed or misclassified direct write, not every direct write categorically.
 
 **Proof**
 
@@ -492,19 +494,19 @@ Prefer behavioral assertions. For the writer, instrument or monkeypatch `Store.w
 
 **Implementation checklist**
 
-- [ ] Replace claim-writer spelling checks with delegation behavior.
-- [ ] Scan all changed and untracked paths for gate-conflict fallback checks.
-- [ ] Expand network/direct-write heuristics only as defense in depth.
-- [ ] Remove “presumably escalated” and other unsupported conclusions.
-- [ ] Add alternative implementation fixtures that evade the old regexes.
-- [ ] Define the transcript rubric for escalation quality.
+- [x] Replace claim-writer spelling checks with observed delegation/direct/mixed behavior and require falsification evidence for direct or mixed persistence.
+- [x] Scan all changed and non-ignored untracked paths for gate-conflict fallback checks.
+- [x] Expand network/direct-write heuristics only as defense in depth.
+- [x] Remove “presumably escalated” and other unsupported conclusions.
+- [x] Add alternative implementation fixtures that evade the old regexes.
+- [x] Define the transcript rubric for escalation quality.
 
 **Acceptance gate**
 
-- [ ] Known alternative direct-write and cloud-sync implementations fail.
-- [ ] PASS language states only what was mechanically established.
+- [x] Known alternative direct-write implementations without matching falsification evidence, and known cloud-sync implementations, fail.
+- [x] PASS language states only what was mechanically established.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(evals): enforce truthful postcondition checks` · validation `evals/tests/check-semantics.sh`; `evals/tests/check-baseline.sh`; `evals/tests/run-failure-gates.sh`; `bash -n` over eval scripts; in-memory Python compilation of both probes; `git diff --check` · notes the original delegation-only recommendation conflicted with the authoritative claims rule: an explicitly requested direct write remains valid only when the claim is unchanged, verification records a falsified `save_note` counterexample, and the final response escalates it; behavior probes use Python’s standard library, while static API checks remain explicitly labeled heuristics
 
 ### [ ] F12 — Eval Subject Can Rewrite Its Governing Vendored Skills
 
