@@ -3,7 +3,7 @@
 #
 # Usage: lint.sh [project-root]     (default: current directory)
 # Output: <path>[:line]: [check] <message>, one finding per line.
-# Exit: 0 clean, 1 findings, 2 usage error.
+# Exit: 0 clean, 1 findings, 2 invocation/setup error.
 #
 # Owns only the mechanical checks; judgment checks (code/record drift,
 # thresholds, placement) stay with the reviewing agent — see SKILL.md.
@@ -11,9 +11,47 @@ set -uo pipefail
 
 cd "${1:-.}" || exit 2
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-: >"$TMP/findings"
+setup_error() {
+  printf 'linked-records lint: [setup] %s\n' "$1" >&2
+  exit 2
+}
+
+ROOT="$(pwd -P)" || setup_error "unable to resolve project root"
+TMP_PARENT="${TMPDIR:-/tmp}"
+TMP_PARENT="$(CDPATH= cd -- "$TMP_PARENT" 2>/dev/null && pwd -P)" ||
+  setup_error "unable to resolve temporary directory: ${TMPDIR:-/tmp}"
+TMP_PREFIX="${TMP_PARENT%/}/linked-records-lint."
+
+if ! TMP_RAW="$(mktemp -d "${TMP_PREFIX}XXXXXX")" || [ -z "$TMP_RAW" ]; then
+  setup_error "unable to create scratch directory"
+fi
+if ! TMP="$(CDPATH= cd -- "$TMP_RAW" 2>/dev/null && pwd -P)"; then
+  setup_error "unsafe scratch directory returned by mktemp: $TMP_RAW"
+fi
+
+scratch_path_is_safe() {
+  local path="${1:-}"
+  local suffix
+  case "$path" in
+  "$TMP_PREFIX"?*)
+    suffix="${path#"$TMP_PREFIX"}"
+    case "$suffix" in
+    */*) return 1 ;;
+    *) return 0 ;;
+    esac
+    ;;
+  *) return 1 ;;
+  esac
+}
+
+scratch_path_is_safe "$TMP" ||
+  setup_error "unsafe scratch directory returned by mktemp: $TMP_RAW"
+
+trap 'rm -rf -- "$TMP"' EXIT
+
+if ! : >"$TMP/findings"; then
+  setup_error "unable to initialize scratch directory"
+fi
 
 finding() { # finding <location> <check> <message>
   printf '%s: [%s] %s\n' "$1" "$2" "$3" >>"$TMP/findings"
@@ -27,7 +65,7 @@ find . -type d -name specs \
   >"$TMP/specsdirs"
 
 if [ ! -s "$TMP/specsdirs" ]; then
-  echo "linked-records lint: no specs/ directories found"
+  printf 'linked-records lint: no specs/ directories found under %s\n' "$ROOT"
   exit 0
 fi
 

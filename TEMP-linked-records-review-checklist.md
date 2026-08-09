@@ -757,9 +757,9 @@ Track per-skill installed, already-correct, and skipped states. Print an accurat
 
 **Completion record:** commit ___ · validation ___ · notes ___
 
-### [ ] R02 — Linter Can Report Clean When Scratch Setup Fails
+### [x] R02 — Linter Can Report Clean When Scratch Setup Fails
 
-**Confidence:** 50; suppressed from the promoted list pending reproduction
+**Confidence:** Confirmed by deterministic reproduction
 **Location:** `skills/linked-records-upkeep/lint.sh:10–16`
 
 **Context and proof basis**
@@ -770,11 +770,11 @@ The script intentionally omits `-e`. `TMP="$(mktemp -d)"` is not checked before 
 
 Fail explicitly when the scratch directory cannot be created. Make the no-corpus message include the searched directory so a wrong-directory CI invocation is visible.
 
-- [ ] Reproduce with a controlled `mktemp` failure shim.
-- [ ] Add explicit setup failure handling and a test.
-- [ ] Confirm no cleanup command can target an empty or unsafe path.
+- [x] Reproduce with a controlled `mktemp` failure shim.
+- [x] Add explicit setup failure handling and a test.
+- [x] Confirm no cleanup command can target an empty or unsafe path.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(lint): fail closed on scratch setup` · validation red proof: the 34-case linter matrix failed the no-corpus, `mktemp` failure, unsafe-path, and scratch-initialization cases before the linter change; green proof: all 34 cases, `/bin/bash -n` for the linter and matrix, and `git diff --check` passed; an independent Claude adversarial review found one cleanup-probe false-confidence gap, which was fixed with a live positive control and revalidated · notes scratch creation now uses a named template under a canonical temporary parent, rejects empty or out-of-prefix results before installing cleanup, exits 2 with a `[setup]` diagnostic on setup failure, and names the canonical searched root when no corpus exists; post-initialization scratch-write failures and traversal interaction with a project-local `TMPDIR` remain separate linter-hardening concerns; bundled skill validation remains unavailable because its Python environment lacks PyYAML (`ModuleNotFoundError: yaml`)
 
 ### [ ] R03 — Dangling-Reference Scan Traverses Binary and Generated Trees
 

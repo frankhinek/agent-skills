@@ -18,6 +18,60 @@ setup_no_specs() {
   mkdir -p "$1"
 }
 
+install_rm_probe() {
+  local root="$1"
+  put "$root/.test-bin/rm" \
+    '#!/bin/sh' \
+    'printf '\''%s\n'\'' "$*" >"${TMPDIR%/}/rm-called"' \
+    'tmp_parent="$(CDPATH= cd -- "${TMPDIR%/}" && pwd -P)" || exit 98' \
+    'case "$*" in' \
+    '"-rf -- $tmp_parent/linked-records-lint.INIT00") command -p rm "$@" ;;' \
+    '*) exit 99 ;;' \
+    'esac'
+  chmod +x "$root/.test-bin/rm"
+}
+
+setup_mktemp_failure() {
+  local root="$1"
+  put "$root/.test-bin/mktemp" '#!/bin/sh' 'exit 73'
+  chmod +x "$root/.test-bin/mktemp"
+  install_rm_probe "$root"
+}
+
+setup_mktemp_unsafe_path() {
+  local root="$1"
+  put "$root/.test-bin/mktemp" '#!/bin/sh' 'printf '\''/\n'\''' 'exit 0'
+  chmod +x "$root/.test-bin/mktemp"
+  install_rm_probe "$root"
+}
+
+setup_scratch_initialization_failure() {
+  local root="$1"
+  put "$root/.test-bin/mktemp" \
+    '#!/bin/sh' \
+    'scratch="${TMPDIR%/}/linked-records-lint.INIT00"' \
+    'mkdir -p "$scratch/findings"' \
+    'printf '\''%s\n'\'' "$scratch"'
+  chmod +x "$root/.test-bin/mktemp"
+  install_rm_probe "$root"
+}
+
+verify_case() {
+  local name="$1"
+  local root="$2"
+  case "$name" in
+  mktemp-failure | mktemp-unsafe-path)
+    [ ! -e "$root/rm-called" ] || return 1
+    ;;
+  scratch-initialization-failure)
+    local canonical_root
+    canonical_root="$(CDPATH= cd -- "$root" && pwd -P)" || return 1
+    [ ! -e "$root/linked-records-lint.INIT00" ] || return 1
+    grep -Fqx -e "-rf -- $canonical_root/linked-records-lint.INIT00" "$root/rm-called" || return 1
+    ;;
+  esac
+}
+
 setup_valid_corpus() {
   local root="$1"
   put "$root/specs/ARCH-system.md" \
@@ -237,7 +291,10 @@ setup_dangling_reference() {
     '# ARCH-system: System map' '' 'Constrained by REQ-missing.'
 }
 
-CASES='no-specs|0|linked-records lint: no specs/ directories found|setup_no_specs
+CASES='no-specs|0|linked-records lint: no specs/ directories found under @ROOT@|setup_no_specs
+mktemp-failure|2|[setup] unable to create scratch directory|setup_mktemp_failure
+mktemp-unsafe-path|2|[setup] unsafe scratch directory returned by mktemp: /|setup_mktemp_unsafe_path
+scratch-initialization-failure|2|[setup] unable to initialize scratch directory|setup_scratch_initialization_failure
 valid-corpus|0|linked-records lint: clean|setup_valid_corpus
 duplicate-id|1|[unique-id] record ID in multiple specs dirs|setup_duplicate_id
 index-file|1|[no-index] index-like file in specs/|setup_index_file
@@ -283,9 +340,15 @@ while IFS='|' read -r name expected_rc expected_text setup; do
   root="$TMP_ROOT/$name"
   "$setup" "$root"
 
-  output="$("$LINTER" "$root" 2>&1)"
+  if [ -d "$root/.test-bin" ]; then
+    output="$(TMPDIR="$root" PATH="$root/.test-bin:$PATH" "$LINTER" "$root" 2>&1)"
+  else
+    output="$("$LINTER" "$root" 2>&1)"
+  fi
   rc=$?
   executed=$((executed + 1))
+  canonical_root="$(CDPATH= cd -- "$root" && pwd -P)"
+  expected_text="${expected_text//@ROOT@/$canonical_root}"
 
   if [ "$rc" -ne "$expected_rc" ]; then
     printf 'FAIL %s: expected exit %s, got %s\n%s\n' "$name" "$expected_rc" "$rc" "$output"
@@ -294,6 +357,11 @@ while IFS='|' read -r name expected_rc expected_text setup; do
   fi
   if ! printf '%s\n' "$output" | grep -Fq "$expected_text"; then
     printf 'FAIL %s: missing expected output: %s\n%s\n' "$name" "$expected_text" "$output"
+    failed=$((failed + 1))
+    continue
+  fi
+  if ! verify_case "$name" "$root"; then
+    printf 'FAIL %s: cleanup targeted an unsafe path or left validated scratch state\n' "$name"
     failed=$((failed + 1))
     continue
   fi

@@ -41,8 +41,10 @@ file. Run it against the project root:
 
     lint.sh [project-root]
 
-It prints `path: [check] message` findings and exits nonzero when any
-exist, covering: record naming and defined types; filename/heading/ID
+It prints `path: [check] message` findings. A completed scan exits 0 when
+clean or 1 when findings exist; invocation or scratch-setup failures exit
+2. The mechanical scan covers: record naming and defined types;
+filename/heading/ID
 agreement and repository uniqueness; resolvable relative links;
 references to nonexistent records; exactly one non-empty `SPEC-*`
 justification section and diagram fences labeled `text`, `mermaid`,
