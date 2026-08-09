@@ -3,6 +3,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/check-lib.sh"
 eval_require_base || exit $?
 
 fail=0
+eval_check_governing_skills || fail=1
 if eval_tracked_unchanged specs/ARCH-app.md; then
   echo "PASS: ARCH record not silently rewritten"
 else

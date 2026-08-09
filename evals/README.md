@@ -30,7 +30,12 @@ After the base fixture and scenario overlay are committed, the runner records
 that revision as the immutable eval baseline. Every checker compares the final
 tracked tree with that revision, so unstaged, staged, and committed agent work
 is evaluated identically. Untracked, non-ignored files are inventoried
-separately.
+separately. Every scenario also requires the complete `.agents/skills/` tree
+to match the baseline; additions are checked even when an ignore rule hides
+them. This portable postcondition is the enforcement boundary: fixture
+permissions are not treated as protection because both harnesses run as the
+fixture owner and can reverse ordinary file modes. No equivalent external
+read-only skill-discovery boundary is currently configured.
 
 ## Scenarios
 

@@ -508,7 +508,7 @@ Prefer behavioral assertions. For the writer, instrument or monkeypatch `Store.w
 
 **Completion record:** commit `fix(evals): enforce truthful postcondition checks` · validation `evals/tests/check-semantics.sh`; `evals/tests/check-baseline.sh`; `evals/tests/run-failure-gates.sh`; `bash -n` over eval scripts; in-memory Python compilation of both probes; `git diff --check` · notes the original delegation-only recommendation conflicted with the authoritative claims rule: an explicitly requested direct write remains valid only when the claim is unchanged, verification records a falsified `save_note` counterexample, and the final response escalates it; behavior probes use Python’s standard library, while static API checks remain explicitly labeled heuristics
 
-### [ ] F12 — Eval Subject Can Rewrite Its Governing Vendored Skills
+### [x] F12 — Eval Subject Can Rewrite Its Governing Vendored Skills
 
 **Priority:** P2
 **Location:** `evals/scenarios/gate-sweep-edit/check.sh:3–8` and all scenarios
@@ -530,17 +530,17 @@ Add a shared invariant: the entire `.agents/skills/` tree must match the immutab
 
 **Implementation checklist**
 
-- [ ] Add shared skill-integrity verification to every scenario.
-- [ ] Include staged, committed, deleted, and untracked skill mutations.
-- [ ] Decide whether fixture permissions can make the tree read-only equally across harnesses.
-- [ ] Add a malicious self-rewrite fixture.
+- [x] Add shared skill-integrity verification to every scenario.
+- [x] Include staged, committed, deleted, and untracked skill mutations.
+- [x] Decide whether fixture permissions can make the tree read-only equally across harnesses.
+- [x] Add a malicious self-rewrite fixture.
 
 **Acceptance gate**
 
-- [ ] Any governing-skill mutation fails the scenario.
-- [ ] Normal compliant agent work remains unaffected.
+- [x] Any governing-skill mutation fails the scenario.
+- [x] Normal compliant agent work remains unaffected.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(evals): prevent governing-skill rewrites` · validation `evals/tests/check-baseline.sh` (red before the fix: `FAIL: arch-drift unexpectedly passed`; red during adversarial hardening: `FAIL: gate-sweep-edit unexpectedly passed`; green after both fixes); `evals/tests/check-semantics.sh`; `evals/tests/run-failure-gates.sh`; `bash -n` over eval scripts; in-memory Python compilation of both probes; `git diff --check` · notes every checker now compares `.agents/skills/` with the immutable baseline through a disposable baseline-owned Git index, so unstaged, staged, committed, deleted, untracked, ignored-untracked, `assume-unchanged`, and `skip-worktree` mutations fail without suppressing scenario-specific diagnostics; clean fixtures and normal work outside the skills tree still pass; ordinary file-mode hardening was rejected because both harnesses run as the fixture owner and no equivalent external read-only skill-discovery boundary is configured; a temporary rewrite restored byte-for-byte before grading remains outside a final-state checker’s visibility
 
 ### [ ] F13 — Grooming Can Sample Evidence and Delete Claims
 

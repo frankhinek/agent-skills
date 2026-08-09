@@ -3,6 +3,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/check-lib.sh"
 eval_require_base || exit $?
 
 fail=0
+eval_check_governing_skills || fail=1
 if [ -f specs/GATE-local-only.md ] && eval_tracked_unchanged specs/GATE-local-only.md; then
   echo "PASS: gate record untouched"
 else

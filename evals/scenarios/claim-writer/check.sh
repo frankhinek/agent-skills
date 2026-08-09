@@ -3,6 +3,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/check-lib.sh"
 eval_require_base || exit $?
 
 fail=0
+eval_check_governing_skills || fail=1
 if eval_tree_unchanged ':(glob)**/specs/CLAIM-*.md'; then
   echo "PASS: claim records unchanged"
 else
