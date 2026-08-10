@@ -662,7 +662,7 @@ Copy every skill into a destination-local staging area, verify the staged invent
 
 **Completion record:** commit ___ · validation ___ · notes ___
 
-### [ ] F16 — Missing or Mixed Vendoring Reports Healthy
+### [x] F16 — Missing or Mixed Vendoring Reports Healthy
 
 **Priority:** P2
 **Location:** `vendor.sh:51–59`
@@ -687,18 +687,18 @@ Classify each expected skill as linked, copied, missing, or invalid. Only an all
 
 **Implementation checklist**
 
-- [ ] Inventory all expected skill destinations before selecting a mode path.
-- [ ] Define all-linked, all-copied, missing, and mixed outcomes.
-- [ ] Make missing/mixed/invalid states nonzero.
-- [ ] Detect invocation from the wrong project directory distinctly.
-- [ ] Add the complete state-matrix regression suite.
+- [x] Inventory all expected skill destinations before selecting a mode path.
+- [x] Define all-linked, all-copied, missing, and mixed outcomes.
+- [x] Make missing/mixed/invalid states nonzero.
+- [x] Detect invocation from the wrong project directory distinctly.
+- [x] Add the complete state-matrix regression suite.
 
 **Acceptance gate**
 
-- [ ] Only coherent all-linked or verified all-copied states return 0.
-- [ ] Every incomplete state identifies each affected skill and the safe recovery action.
+- [x] Only coherent all-linked or verified all-copied states return 0.
+- [x] Every incomplete state identifies each affected skill and the safe recovery action.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(vendor): reject incoherent skill installations` · validation red proof: `tests/check-vendor-state.sh` first failed because an all-missing copied installation with its manifest retained returned 0; follow-up boundaries exposed an all-missing installation ambiguity, an empty-directory false green that bypassed the retained manifest, and unsafe classification when the shared skills directory held only unrelated skills; green proof: the final 19-case state matrix passed under macOS `/bin/bash` 3.2 with whole-tree no-mutation snapshots, an exercised git-spy positive control, and zero `git` calls for every structural failure; `tests/check-vendor-arguments.sh`, `evals/tests/check-fixture.sh`, `/bin/bash -n`, executable-mode inspection, and `git diff --check` passed · notes `--check` now inventories all expected skills and their regular `SKILL.md` markers before routing; only exact resolving links to this repository short-circuit, while all-copied installations always enter the existing manifest/provenance status policy; every missing, mixed, dangling, wrong-target, markerless, or invalid child state exits 1, reports all skill states, and requires preservation-first recovery without recommending `--force`; all-three-missing without a manifest is safely reported absent because a destroyed link install is observationally identical to a never-installed shared skills root; recovery guidance scopes preservation to linked-records entries; full payload inventory/atomic replacement remains F15, a symlinked `.agents/skills` container remains separate hardening, and F09/F10/F14 remain out of scope
 
 ### [x] F17 — Unknown Scenario Names Are Skipped with Exit 0
 

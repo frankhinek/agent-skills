@@ -70,6 +70,19 @@ mutates or touches the network outside `--check`. Copy mode vendors
 committed content only (use `--link` while iterating on skills locally),
 so the stamp is always truthful.
 
+Before checking provenance, `--check` inventories all three expected skill
+destinations and their regular `SKILL.md` markers. A coherent install whose
+three symlinks point exactly to their matching skills in this repository
+succeeds immediately; a coherent all-copy install continues through the
+manifest, local-edit, and published revision checks. Missing, mixed, dangling,
+wrong-target, markerless, and otherwise invalid installations fail before
+provenance or network work and print every skill's state. When all three skills
+and the manifest are absent, the install is called out separately as not
+installed or the wrong project directory, even if the shared `.agents/skills`
+directory contains unrelated skills. Preserve or move only affected
+linked-records entries, inspect and merge local work, then reinstall with an
+explicit `--copy` or `--link` mode.
+
 ## Using it day to day
 
 The system is deliberately inert: agents never create gates or claims on

@@ -76,16 +76,51 @@ manifest_field() {
 }
 
 if [ "$MODE" = "check" ]; then
-  status=0
-  if [ -L ".agents/skills/${SKILLS[0]}" ]; then
+  SKILL_STATES=()
+  linked_count=0
+  copied_count=0
+  missing_count=0
+  for s in "${SKILLS[@]}"; do
+    d=".agents/skills/$s"
+    state=invalid
+    if [ -L "$d" ]; then
+      link_target="$(readlink "$d" 2>/dev/null || true)"
+      if [ "$link_target" = "$REPO/skills/$s" ] && [ -d "$d" ] && [ -f "$d/SKILL.md" ]; then
+        state=linked
+        linked_count=$((linked_count + 1))
+      fi
+    elif [ -d "$d" ] && [ -f "$d/SKILL.md" ]; then
+      state=copied
+      copied_count=$((copied_count + 1))
+    elif [ ! -e "$d" ]; then
+      state=missing
+      missing_count=$((missing_count + 1))
+    fi
+    SKILL_STATES+=("$state")
+  done
+
+  if [ "$linked_count" -eq "${#SKILLS[@]}" ]; then
     echo "skills are symlinked (link mode): tracking the repo live, nothing to check"
     exit 0
   fi
-  current="$(checksum_vendored)"
-  if [ -z "$current" ]; then
-    echo "no vendored skills found in $(pwd)"
-    exit 0
+  if [ "$copied_count" -ne "${#SKILLS[@]}" ]; then
+    if [ "$missing_count" -eq "${#SKILLS[@]}" ] && [ ! -f "$MANIFEST" ]; then
+      echo "error: linked-records skills are not installed here; this may be the wrong project directory." >&2
+    else
+      echo "error: incoherent linked-records vendoring state." >&2
+    fi
+    echo "skill states:" >&2
+    for i in "${!SKILLS[@]}"; do
+      printf '  %s: %s\n' "${SKILLS[$i]}" "${SKILL_STATES[$i]}" >&2
+    done
+    echo "Preserve or move only affected linked-records entries under .agents/skills before recovery." >&2
+    echo "Inspect and merge any local work into the canonical skills repository." >&2
+    echo "Then reinstall with an explicit mode: vendor.sh --copy PROJECT_DIR or vendor.sh --link PROJECT_DIR." >&2
+    exit 1
   fi
+
+  status=0
+  current="$(checksum_vendored)"
   rev="$(manifest_field revision)"
   url="$(manifest_field vendored-from)"
   when="$(manifest_field date)"
