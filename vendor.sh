@@ -75,6 +75,31 @@ manifest_field() {
   sed -n "s/^# $1: //p" "$MANIFEST" 2>/dev/null | head -1
 }
 
+report_checksum_changes() {
+  local expected="$1"
+  local actual="$2"
+  local diff_output
+  local diff_status
+
+  if diff_output="$(diff <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") 2>&1)"; then
+    diff_status=0
+  else
+    diff_status=$?
+  fi
+
+  case "$diff_status" in
+  0) return 0 ;;
+  1)
+    printf '%s\n' "$diff_output" |
+      awk '/^[<>]/ {print "  " $NF}' | LC_ALL=C sort -u
+    ;;
+  *)
+    printf 'error: diff failed while comparing vendored skills (status %s)\n' "$diff_status" >&2
+    return "$diff_status"
+    ;;
+  esac
+}
+
 if [ "$MODE" = "check" ]; then
   SKILL_STATES=()
   linked_count=0
@@ -121,6 +146,7 @@ if [ "$MODE" = "check" ]; then
 
   status=0
   current="$(checksum_vendored)"
+  expected="$(grep -v '^#' "$MANIFEST" 2>/dev/null || true)"
   rev="$(manifest_field revision)"
   url="$(manifest_field vendored-from)"
   when="$(manifest_field date)"
@@ -128,12 +154,11 @@ if [ "$MODE" = "check" ]; then
   if [ ! -f "$MANIFEST" ]; then
     echo "local edits: unknown (no manifest)"
     status=1
-  elif [ "$current" = "$(grep -v '^#' "$MANIFEST")" ]; then
+  elif [ "$current" = "$expected" ]; then
     echo "local edits: none"
   else
     echo "local edits: YES — files differing from what was vendored:"
-    diff <(grep -v '^#' "$MANIFEST") <(printf '%s\n' "$current") |
-      awk '/^[<>]/ {print "  " $NF}' | sort -u
+    report_checksum_changes "$expected" "$current"
     status=1
   fi
   if [ -n "$rev" ] && [ -n "$url" ]; then
@@ -176,10 +201,10 @@ if [ -n "$current" ] && [ "$FORCE" = "no" ]; then
     echo "overwrite, or remove .agents/skills/ manually first." >&2
     exit 1
   fi
-  if [ "$current" != "$(grep -v '^#' "$MANIFEST")" ]; then
+  expected="$(grep -v '^#' "$MANIFEST" 2>/dev/null || true)"
+  if [ "$current" != "$expected" ]; then
     echo "error: vendored skills were edited since they were vendored:" >&2
-    diff <(grep -v '^#' "$MANIFEST") <(printf '%s\n' "$current") |
-      awk '/^[<>]/ {print "  " $NF}' | sort -u >&2
+    report_checksum_changes "$expected" "$current" >&2
     echo "Merge those edits into the canonical repo, or re-run with --force" >&2
     echo "to discard them." >&2
     exit 1

@@ -431,7 +431,7 @@ Define a deterministic manifest record for each supported entry type. Include re
 
 **Completion record:** commit ___ · validation ___ · notes ___
 
-### [ ] F10 — `pipefail` Truncates Local-Edit Diagnostics
+### [x] F10 — `pipefail` Truncates Local-Edit Diagnostics
 
 **Priority:** P2
 **Location:** `vendor.sh:71–72`, `vendor.sh:117–120`
@@ -453,18 +453,18 @@ Handle `diff` statuses explicitly. Treat 0 as identical, 1 as expected differenc
 
 **Implementation checklist**
 
-- [ ] Wrap expected `diff` calls in explicit condition/status handling.
-- [ ] Preserve nonzero failure for real `diff` errors.
-- [ ] Print all promised check facts even when edits exist.
-- [ ] Print complete merge/force recovery guidance on refresh refusal.
-- [ ] Add output assertions, not only exit-code assertions.
+- [x] Wrap expected `diff` calls in explicit condition/status handling.
+- [x] Preserve nonzero failure for real `diff` errors.
+- [x] Print all promised check facts even when edits exist.
+- [x] Print complete merge/force recovery guidance on refresh refusal.
+- [x] Add output assertions, not only exit-code assertions.
 
 **Acceptance gate**
 
-- [ ] Local edits produce a complete deterministic report and actionable exit status.
-- [ ] Unexpected comparison failures remain distinguishable and fail closed.
+- [x] Local edits produce a complete deterministic report and actionable exit status.
+- [x] Unexpected comparison failures remain distinguishable and fail closed.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(vendor): complete local-edit diagnostics` · validation red proof: the strengthened vendor-state matrix first failed because an edited `--check` stopped before the published-status line; adversarial hardening then failed because raw `diff` stderr leaked through the comparison-error path; green proof: `tests/check-vendor-state.sh`, `tests/check-vendor-arguments.sh`, all four eval regression suites, the 37-case linter matrix, `/bin/bash -n` over every tracked shell script, and `git diff --check` passed under macOS system Bash/tools · notes expected `diff` status 1 is now normalized inside one shared reporter so edited checks finish all three facts and refresh refusals finish merge/`--force` guidance; status greater than 1 is preserved exactly, raw comparison output from both streams is suppressed, and the project tree stays unchanged; deterministic path output uses C collation; whitespace-containing path formatting and non-`diff` formatter diagnostics remain separate findings/residuals
 
 ### [x] F11 — Grep Proxies Let Real Behavioral Violations Report PASS
 

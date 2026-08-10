@@ -10,12 +10,14 @@ TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-state.XXXXXX")"
 PROJECTS="$TEST_ROOT/projects"
 SNAPSHOTS="$TEST_ROOT/snapshots"
 SPY_BIN="$TEST_ROOT/git-spy-bin"
+DIFF_SPY_BIN="$TEST_ROOT/diff-spy-bin"
 GIT_SPY_LOG="$TEST_ROOT/git-calls"
 SKILLS=(linked-records linked-records-claims linked-records-upkeep)
 
 unset BASH_ENV ENV
 unset -f rm 2>/dev/null || true
 unset -f git 2>/dev/null || true
+unset -f diff 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
@@ -63,11 +65,34 @@ assert_omits() {
   fi
 }
 
+assert_equals() {
+  local name="$1"
+  local actual="$2"
+  local expected="$3"
+  [ "$actual" = "$expected" ] ||
+    fail "$name differed; expected '$expected', got '$actual'"
+}
+
 run_vendor() {
   set +e
   RUN_OUTPUT="$("$VENDOR" "$@" 2>&1)"
   RUN_STATUS=$?
   set -e
+}
+
+run_vendor_split() {
+  local name="$1"
+  local command_path="$2"
+  shift 2
+  local stdout_file="$TEST_ROOT/$name.stdout"
+  local stderr_file="$TEST_ROOT/$name.stderr"
+
+  set +e
+  PATH="$command_path" "$VENDOR" "$@" >"$stdout_file" 2>"$stderr_file"
+  RUN_STATUS=$?
+  set -e
+  RUN_STDOUT="$(<"$stdout_file")"
+  RUN_STDERR="$(<"$stderr_file")"
 }
 
 run_structural_check() {
@@ -154,7 +179,7 @@ assert_structural_failure() {
     fail "$name called git before rejecting structural state: $(sed -n '1,20p' "$GIT_SPY_LOG")"
 }
 
-mkdir -p "$PROJECTS" "$SNAPSHOTS" "$SPY_BIN"
+mkdir -p "$PROJECTS" "$SNAPSHOTS" "$SPY_BIN" "$DIFF_SPY_BIN"
 
 linked_project="$(make_link_project all-linked)"
 
@@ -165,6 +190,16 @@ copied_manifest="$copied_project/.agents/skills/.vendored-manifest"
   grep -v '^# vendored-from:' "$copied_manifest"
 } >"$copied_manifest.tmp"
 mv "$copied_manifest.tmp" "$copied_manifest"
+
+edited_project="$(make_copy_project edited-diagnostics)"
+edited_manifest="$edited_project/.agents/skills/.vendored-manifest"
+{
+  printf '# vendored-from: %s\n' "$TEST_ROOT/unreachable-remote"
+  grep -v '^# vendored-from:' "$edited_manifest"
+} >"$edited_manifest.tmp"
+mv "$edited_manifest.tmp" "$edited_manifest"
+printf '\nlocal claims edit\n' >>"$edited_project/.agents/skills/linked-records-claims/SKILL.md"
+printf '\nlocal core edit\n' >>"$edited_project/.agents/skills/linked-records/SKILL.md"
 
 missing_manifest_project="$(make_copy_project copied-no-manifest)"
 "$REAL_RM" -f -- "$missing_manifest_project/.agents/skills/.vendored-manifest"
@@ -228,6 +263,14 @@ ln -s "$wrong_target_project/wrong-target" "$wrong_target_project/.agents/skills
 } >"$SPY_BIN/git"
 chmod +x "$SPY_BIN/git"
 
+{
+  printf '%s\n' '#!/usr/bin/env bash'
+  printf '%s\n' "printf '%s\\n' '< 1 2 .agents/skills/fake-partial-path'"
+  printf '%s\n' "printf '%s\\n' '< 1 2 .agents/skills/fake-partial-path' >&2"
+  printf '%s\n' 'exit 2'
+} >"$DIFF_SPY_BIN/diff"
+chmod +x "$DIFF_SPY_BIN/diff"
+
 # Prove the PATH spy observes vendor.sh's only network-capable command before
 # empty logs are accepted as evidence in structural-failure cases.
 run_structural_check "$copied_project" no
@@ -244,6 +287,63 @@ assert_read_only_result all-copied "$copied_project" 0 --check "$copied_project"
 assert_contains all-copied "$RUN_OUTPUT" "provenance :"
 assert_contains all-copied "$RUN_OUTPUT" "local edits: none"
 assert_contains all-copied "$RUN_OUTPUT" "published  : unknown (remote unreachable)"
+
+expected_edit_paths="$(printf '  %s\n' \
+  '.agents/skills/linked-records-claims/SKILL.md' \
+  '.agents/skills/linked-records/SKILL.md')"
+
+snapshot_tree "$edited_project" "$SNAPSHOTS/edited-check.before"
+run_vendor_split edited-check "$ORIGINAL_PATH" --check "$edited_project"
+[ "$RUN_STATUS" -eq 1 ] ||
+  fail "edited check returned $RUN_STATUS instead of 1: $RUN_STDOUT $RUN_STDERR"
+assert_contains edited-check "$RUN_STDOUT" "provenance :"
+assert_contains edited-check "$RUN_STDOUT" "local edits: YES"
+assert_contains edited-check "$RUN_STDOUT" "published  : unknown (remote unreachable)"
+assert_equals edited-check-stderr "$RUN_STDERR" ""
+check_edit_paths="$(printf '%s\n' "$RUN_STDOUT" | awk '
+  /^local edits: YES/ { capture = 1; next }
+  /^published  :/ { capture = 0 }
+  capture
+')"
+assert_equals edited-check-paths "$check_edit_paths" "$expected_edit_paths"
+snapshot_tree "$edited_project" "$SNAPSHOTS/edited-check.after"
+cmp -s "$SNAPSHOTS/edited-check.before" "$SNAPSHOTS/edited-check.after" ||
+  fail "edited check changed the project tree"
+
+snapshot_tree "$edited_project" "$SNAPSHOTS/edited-refresh.before"
+run_vendor_split edited-refresh "$ORIGINAL_PATH" --copy "$edited_project"
+[ "$RUN_STATUS" -eq 1 ] ||
+  fail "edited refresh returned $RUN_STATUS instead of 1: $RUN_STDOUT $RUN_STDERR"
+assert_equals edited-refresh-stdout "$RUN_STDOUT" ""
+assert_contains edited-refresh "$RUN_STDERR" "error: vendored skills were edited since they were vendored:"
+assert_contains edited-refresh "$RUN_STDERR" "Merge those edits into the canonical repo, or re-run with --force"
+assert_contains edited-refresh "$RUN_STDERR" "to discard them."
+refresh_edit_paths="$(printf '%s\n' "$RUN_STDERR" | awk '
+  /^error: vendored skills were edited/ { capture = 1; next }
+  /^Merge those edits/ { capture = 0 }
+  capture
+')"
+assert_equals edited-refresh-paths "$refresh_edit_paths" "$expected_edit_paths"
+snapshot_tree "$edited_project" "$SNAPSHOTS/edited-refresh.after"
+cmp -s "$SNAPSHOTS/edited-refresh.before" "$SNAPSHOTS/edited-refresh.after" ||
+  fail "edited refresh changed the project tree"
+
+for mode in check refresh; do
+  snapshot_tree "$edited_project" "$SNAPSHOTS/diff-error-$mode.before"
+  if [ "$mode" = check ]; then
+    run_vendor_split diff-error-check "$DIFF_SPY_BIN:$ORIGINAL_PATH" --check "$edited_project"
+  else
+    run_vendor_split diff-error-refresh "$DIFF_SPY_BIN:$ORIGINAL_PATH" --copy "$edited_project"
+  fi
+  [ "$RUN_STATUS" -eq 2 ] ||
+    fail "diff-error $mode returned $RUN_STATUS instead of 2: $RUN_STDOUT $RUN_STDERR"
+  assert_contains "diff-error $mode" "$RUN_STDERR" "error: diff failed while comparing vendored skills (status 2)"
+  assert_omits "diff-error $mode stdout" "$RUN_STDOUT" ".agents/skills/fake-partial-path"
+  assert_omits "diff-error $mode stderr" "$RUN_STDERR" ".agents/skills/fake-partial-path"
+  snapshot_tree "$edited_project" "$SNAPSHOTS/diff-error-$mode.after"
+  cmp -s "$SNAPSHOTS/diff-error-$mode.before" "$SNAPSHOTS/diff-error-$mode.after" ||
+    fail "diff-error $mode changed the project tree"
+done
 
 # A coherent copied tree stays in the legacy manifest pipeline, including its
 # existing missing-manifest status and output semantics.
