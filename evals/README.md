@@ -41,10 +41,16 @@ tracked tree with that revision, so unstaged, staged, and committed agent work
 is evaluated identically. Untracked, non-ignored files are inventoried
 separately. Every scenario also requires the complete `.agents/skills/` tree
 to match the baseline; additions are checked even when an ignore rule hides
-them. This portable postcondition is the enforcement boundary: fixture
-permissions are not treated as protection because both harnesses run as the
-fixture owner and can reverse ordinary file modes. No equivalent external
-read-only skill-discovery boundary is currently configured.
+them.
+
+Every supported harness runs inside the same `eval-local-write-v1` outer
+boundary. The fixture is the only writable project tree; `.git/` remains
+read-only, while `.agents/` is explicitly writable so attempted governing-skill
+changes remain behavior the postconditions can observe. System temporary
+directories are excluded, child processes inherit the boundary, and a
+model-free escape probe must prove fixture writes succeed and sibling writes
+fail before the agent starts. A failed or ineffective boundary makes the
+scenario `INVALID`, not `PASS` or `FAIL`.
 
 ## Scenarios
 
@@ -96,6 +102,21 @@ evals/run.sh codex           # all scenarios
 evals/run.sh claude gate-conflict
 ```
 
+Both routes require a local Codex CLI with the `codex sandbox` command; it is
+the pinned outer boundary even when Claude is the subject. The runner records
+the boundary profile, backend version, writable scope, network posture, inner
+permission mode, and escape-probe requirement in every summary. Backend
+injection requires the explicit test-only environment contract and reports a
+distinct test profile, so it cannot masquerade as a production eval result.
+
+Before invoking a subject, the runner proves that `.agents/` is writable while
+`.git/` and a sibling path outside the fixture are not. It checks the sibling
+path again after the subject exits. Mechanical postconditions run inside the
+same boundary because their probes may import agent-modified project code.
+The checker machinery can inspect unstaged, staged, and committed fixture
+states, but the live boundary makes `.git/` read-only, so a contained subject's
+own changes remain unstaged.
+
 Explicit scenario selections are validated as one complete request before the
 harness or any fixture runs. Every name must exactly match a listed scenario;
 an unknown, empty, or path-like name rejects the whole request with exit 2 and
@@ -127,6 +148,7 @@ uses fake Claude and Codex adapters:
 ```sh
 evals/tests/check-fixture.sh
 evals/tests/run-failure-gates.sh
+evals/tests/check-safety-boundary.sh
 evals/tests/check-baseline.sh
 evals/tests/check-semantics.sh
 ```
@@ -134,4 +156,7 @@ evals/tests/check-semantics.sh
 Caveats: prompts are single-shot and fixtures are small — a pass here is
 necessary, not sufficient. Add a scenario whenever real use exposes a
 compliance failure these don't cover (same repair rule as the skills
-themselves).
+themselves). The common boundary contains local writes, not reads or remote
+side effects: network access remains enabled for the harness and its child
+processes so the agent CLIs can run, and host files outside the fixture may
+remain readable.

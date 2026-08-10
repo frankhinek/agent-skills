@@ -827,7 +827,7 @@ Define the supported Markdown link grammar and test it. Parse optional titles co
 
 **Completion record:** commit `fix(lint): parse supported relative links` · validation red proof: a fixture containing eleven valid or deliberately non-relative forms plus one missing local target produced twelve link findings before the fix; green proof: the 37-case linter matrix passed with exact output containing only the missing-target positive control under macOS system Bash/AWK tools, `/bin/bash -n` passed for the linter and test, and `git diff --check` passed · notes the portable AWK scanner now handles single-line inline destinations with supported titles, angle-bracket spaces, and balanced or escaped parentheses; relative query/fragment suffixes are removed before resolution; URI schemes, absolute/network paths, and fragment/query-only targets are deliberately skipped; reference-style and multiline links, autolinks, HTML, and URL/entity decoding remain explicitly unsupported; repository-wide lint still reports pre-existing out-of-scope dangling-reference fixtures, and bundled skill validation remains unavailable because its Python environment lacks PyYAML (`ModuleNotFoundError: yaml`)
 
-### [ ] R06 — Claude and Codex Evals Run Under Unequal Safety Constraints
+### [x] R06 — Claude and Codex Evals Run Under Unequal Safety Constraints
 
 **Location:** `evals/run.sh`
 
@@ -839,11 +839,11 @@ The Claude route uses `--dangerously-skip-permissions`; the Codex route uses a w
 
 Run every supported harness inside the same outer filesystem/process boundary, with the fixture as the only writable project tree. Record the effective safety profile in the summary. Remove dangerous permission bypass unless an equivalent external sandbox makes it safe.
 
-- [ ] Define the common harness security contract.
-- [ ] Add an escape probe that tries to write outside the fixture and must fail.
-- [ ] Make parity reports disclose any unavoidable constraint difference.
+- [x] Define the common harness security contract.
+- [x] Add an escape probe that tries to write outside the fixture and must fail.
+- [x] Make parity reports disclose any unavoidable constraint difference.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(evals): equalize harness safety boundaries` · validation red proof: the initial boundary regression returned `FAIL: contained Claude run returned 1` before a common outer sandbox existed; green proof: `evals/tests/check-safety-boundary.sh`, `evals/tests/run-failure-gates.sh`, `evals/tests/check-fixture.sh`, `evals/tests/check-baseline.sh`, `evals/tests/check-semantics.sh`, the 37-case linter matrix, `/bin/bash -n` over every tracked shell script, and `git diff --check` passed · notes both Claude and Codex subjects and mechanical postconditions now run under the pinned Codex local-write boundary with the fixture writable, `.agents/` writable, `.git/` read-only, and sibling writes denied; preflight probes and post-execution canaries fail closed before scoring, summaries record the effective profile/backend/scope/network/inner bypass, historical reports disclose their unequal constraints, and test backends report a distinct non-production profile; network and host reads remain intentionally available, remote side effects are not contained, and a real paid Claude/Codex scenario run was not repeated because deterministic fake subjects exercise both adapter paths without agent-token spend
 
 ### [ ] R07 — Eval Fixture Trees Are Never Cleaned Up
 

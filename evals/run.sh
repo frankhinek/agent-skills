@@ -11,12 +11,19 @@
 set -uo pipefail
 
 EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SANDBOX="$EVALS/harness-sandbox.sh"
 HARNESS="${1:?usage: run.sh <claude|codex> [scenario ...]}"
 shift || true
 
 case "$HARNESS" in
-claude) HARNESS_NAME="Claude" ;;
-codex) HARNESS_NAME="Codex" ;;
+claude)
+  HARNESS_NAME="Claude"
+  HARNESS_BIN="$(type -P claude 2>/dev/null || true)"
+  ;;
+codex)
+  HARNESS_NAME="Codex"
+  HARNESS_BIN="$(type -P codex 2>/dev/null || true)"
+  ;;
 *)
   echo "unsupported harness: $HARNESS" >&2
   exit 2
@@ -110,17 +117,31 @@ fi
 mkdir -p "$OUT/logs"
 write_summary_header
 
+if ! safety_profile="$("$SANDBOX" --profile-id 2>/dev/null)" || [ -z "$safety_profile" ]; then
+  safety_profile="unavailable"
+fi
+if ! sandbox_version="$("$SANDBOX" --backend-version 2>/dev/null)" || [ -z "$sandbox_version" ]; then
+  sandbox_version="unavailable"
+fi
+
 {
   echo
   echo "# Eval run: $HARNESS, $DATE"
   echo
-  case "$HARNESS" in
-  claude) version="$(claude --version 2>/dev/null | head -1)" ;;
-  codex) version="$(codex --version 2>/dev/null | head -1)" ;;
-  esac
+  if [ -n "$HARNESS_BIN" ]; then
+    version="$("$HARNESS_BIN" --version 2>/dev/null | head -1)"
+  else
+    version=""
+  fi
   echo "- version: ${version:-unavailable}"
   [ -z "${EVAL_CLAUDE_ARGS:-}${EVAL_CODEX_ARGS:-}" ] ||
     echo "- pinned args: ${EVAL_CLAUDE_ARGS:-}${EVAL_CODEX_ARGS:-}"
+  echo "- safety profile: $safety_profile"
+  echo "- sandbox backend: $sandbox_version"
+  echo "- writable project tree: scenario fixture only (.git read-only; .agents writable)"
+  echo "- network: enabled for harness and child processes"
+  echo "- harness permissions: inner checks bypassed; outer sandbox authoritative"
+  echo "- safety checks: .agents write and .git/sibling denial before subject; sibling escape canaries after subject and postconditions"
   echo "- final responses and diagnostics: logs/"
   echo "- mechanical checks below; judge escalation quality from final responses"
 } >>"$summary"
@@ -141,6 +162,16 @@ record_invalid() {
   } >>"$summary"
   echo "INVALID: $reason — $detail"
   echo
+}
+
+remove_probe_artifact() {
+  local path="$1"
+
+  if [ -d "$path" ] && [ ! -L "$path" ]; then
+    rmdir -- "$path"
+  else
+    rm -f -- "$path"
+  fi
 }
 
 overall=0
@@ -203,25 +234,126 @@ for s in "${SCENARIOS[@]}"; do
     continue
   fi
 
-  case "$HARNESS" in
-  claude)
-    # shellcheck disable=SC2086
-    (cd "$fx" && claude -p "$prompt" --dangerously-skip-permissions ${EVAL_CLAUDE_ARGS:-} \
-      --output-format text </dev/null) >"$response" 2>>"$log"
-    rc=$?
-    ;;
-  codex)
-    # shellcheck disable=SC2086
-    codex exec ${EVAL_CODEX_ARGS:-} -s workspace-write -C "$fx" \
-      -o "$response" "$prompt" </dev/null >>"$log" 2>&1
-    rc=$?
-    ;;
-  esac
+  runtime="$fx/.eval-runtime"
+  runtime_response="$runtime/final-response.txt"
+  escape_target="$fixture_parent/.eval-escape-probe"
+  agents_probe="$fx/.agents/.eval-safety-probe-$$"
+  git_probe="$fx/.git/.eval-safety-probe-$$"
+  if [ -e "$runtime" ] || [ -L "$runtime" ] ||
+    [ -e "$escape_target" ] || [ -L "$escape_target" ] ||
+    [ -e "$agents_probe" ] || [ -L "$agents_probe" ] ||
+    [ -e "$git_probe" ] || [ -L "$git_probe" ]; then
+    dur=$(($(date +%s) - start))
+    overall=1
+    record_invalid "$s" "safety boundary" "private probe paths were not initially empty" "$dur"
+    continue
+  fi
+  if ! mkdir -p "$runtime/tmp"; then
+    dur=$(($(date +%s) - start))
+    overall=1
+    record_invalid "$s" "safety boundary" "private runtime creation failed" "$dur"
+    continue
+  fi
+
+  "$SANDBOX" "$fx" -- /bin/sh -c '
+    printf "%s\n" writable >"$1" || exit 70
+    rm -f -- "$1" || exit 71
+    if printf "%s\n" escaped >"$2" 2>/dev/null; then
+      rm -f -- "$2"
+      exit 72
+    fi
+    [ ! -e "$2" ] || exit 73
+    if printf "%s\n" escaped >"$3" 2>/dev/null; then
+      rm -f -- "$3"
+      exit 74
+    fi
+    [ ! -e "$3" ] || exit 75
+    printf "%s\n" contained >"$4" || exit 76
+  ' sh "$agents_probe" "$git_probe" "$escape_target" \
+    "$runtime/inside-probe" >>"$log" 2>&1
+  boundary_rc=$?
+  if [ "$boundary_rc" -eq 0 ]; then
+    grep -qx contained "$runtime/inside-probe" 2>>"$log"
+    boundary_rc=$?
+  fi
+  cleanup_rc=0
+  for probe_path in "$agents_probe" "$git_probe" "$escape_target"; do
+    if [ -e "$probe_path" ] || [ -L "$probe_path" ]; then
+      [ "$boundary_rc" -ne 0 ] || boundary_rc=77
+      remove_probe_artifact "$probe_path" 2>>"$log" || cleanup_rc=1
+    fi
+  done
+  if [ "$boundary_rc" -ne 0 ]; then
+    rm -rf -- "$runtime" 2>>"$log" || cleanup_rc=1
+    dur=$(($(date +%s) - start))
+    overall=1
+    if [ "$cleanup_rc" -eq 0 ]; then
+      record_invalid "$s" "safety boundary" "common sandbox escape probe failed (exit $boundary_rc); harness not invoked" "$dur"
+    else
+      record_invalid "$s" "safety boundary" "common sandbox escape probe failed (exit $boundary_rc) and runtime cleanup failed (exit $cleanup_rc); harness not invoked" "$dur"
+    fi
+    continue
+  fi
+
+  if [ -z "$HARNESS_BIN" ]; then
+    rc=127
+  else
+    case "$HARNESS" in
+    claude)
+      # shellcheck disable=SC2086
+      EVAL_BOUNDARY_ESCAPE_TARGET="$escape_target" \
+        "$SANDBOX" "$fx" -- "$HARNESS_BIN" -p "$prompt" ${EVAL_CLAUDE_ARGS:-} \
+        --dangerously-skip-permissions --no-session-persistence \
+        --output-format text </dev/null >"$runtime_response" 2>>"$log"
+      rc=$?
+      ;;
+    codex)
+      # shellcheck disable=SC2086
+      EVAL_BOUNDARY_ESCAPE_TARGET="$escape_target" \
+        "$SANDBOX" "$fx" -- "$HARNESS_BIN" exec ${EVAL_CODEX_ARGS:-} \
+        --dangerously-bypass-approvals-and-sandbox --ephemeral -C "$fx" \
+        -o "$runtime_response" "$prompt" </dev/null >>"$log" 2>&1
+      rc=$?
+      ;;
+    esac
+  fi
   dur=$(($(date +%s) - start))
 
+  post_boundary_rc=0
+  if [ -e "$escape_target" ] || [ -L "$escape_target" ]; then
+    post_boundary_rc=78
+    remove_probe_artifact "$escape_target" 2>>"$log" || post_boundary_rc=79
+  fi
+
+  response_artifact_rc=0
+  if [ -e "$runtime_response" ] || [ -L "$runtime_response" ]; then
+    if [ -f "$runtime_response" ] && [ ! -L "$runtime_response" ]; then
+      cp -- "$runtime_response" "$response" 2>>"$log" || response_artifact_rc=$?
+    else
+      response_artifact_rc=74
+    fi
+  fi
+  rm -rf -- "$runtime" 2>>"$log"
+  runtime_cleanup_rc=$?
+
+  if [ "$post_boundary_rc" -ne 0 ]; then
+    overall=1
+    record_invalid "$s" "safety boundary" "subject escaped the common sandbox during execution (exit $post_boundary_rc); grading skipped" "$dur"
+    continue
+  fi
   if [ "$rc" -ne 0 ]; then
     overall=1
     record_invalid "$s" "harness (exit $rc)" "agent command did not complete; grading skipped" "$dur"
+    continue
+  fi
+  if [ "$runtime_cleanup_rc" -ne 0 ]; then
+    overall=1
+    record_invalid "$s" "safety boundary" "private runtime cleanup failed (exit $runtime_cleanup_rc); grading skipped" "$dur"
+    continue
+  fi
+  if [ "$response_artifact_rc" -ne 0 ]; then
+    overall=1
+    record_invalid "$s" "response artifact" "final response could not be copied safely (exit $response_artifact_rc)" "$dur"
     continue
   fi
 
@@ -245,8 +377,33 @@ for s in "${SCENARIOS[@]}"; do
     continue
   fi
 
-  check="$(cd "$fx" && EVAL_BASE="$base" bash "$sd/check.sh" 2>&1)"
+  if [ -e "$runtime" ] || [ -L "$runtime" ] || ! mkdir -p "$runtime/tmp"; then
+    overall=1
+    record_invalid "$s" "safety boundary" "private checker runtime creation failed; grading skipped" "$dur"
+    continue
+  fi
+
+  check="$(EVAL_BASE="$base" EVAL_BOUNDARY_ESCAPE_TARGET="$escape_target" \
+    "$SANDBOX" "$fx" -- /bin/bash "$sd/check.sh" 2>&1)"
   crc=$?
+  checker_boundary_rc=0
+  if [ -e "$escape_target" ] || [ -L "$escape_target" ]; then
+    checker_boundary_rc=80
+    remove_probe_artifact "$escape_target" 2>>"$log" || checker_boundary_rc=81
+  fi
+  rm -rf -- "$runtime" 2>>"$log"
+  checker_cleanup_rc=$?
+  dur=$(($(date +%s) - start))
+  if [ "$checker_boundary_rc" -ne 0 ]; then
+    overall=1
+    record_invalid "$s" "safety boundary" "postcondition evaluation escaped the common sandbox (exit $checker_boundary_rc); grading skipped" "$dur"
+    continue
+  fi
+  if [ "$checker_cleanup_rc" -ne 0 ]; then
+    overall=1
+    record_invalid "$s" "safety boundary" "private checker runtime cleanup failed (exit $checker_cleanup_rc); grading skipped" "$dur"
+    continue
+  fi
   scenario_status=PASS
   if [ "$signal_rc" -ne 0 ] || [ "$crc" -ne 0 ]; then
     scenario_status=FAIL
@@ -258,6 +415,7 @@ for s in "${SCENARIOS[@]}"; do
     echo "## $s"
     echo
     echo "- status: $scenario_status"
+    echo "- PASS: safety boundary"
     if [ "$signal_rc" -eq 0 ]; then
       echo "- PASS: response signal"
     else
@@ -278,6 +436,7 @@ for s in "${SCENARIOS[@]}"; do
     echo '```'
   } >>"$summary"
   echo "$scenario_status: $s"
+  echo "PASS: safety boundary"
   if [ "$signal_rc" -eq 0 ]; then
     echo "PASS: response signal"
   else

@@ -7,6 +7,7 @@ REAL_GIT="$(command -v git)"
 REAL_MKTEMP="$(command -v mktemp)"
 BASE_PATH="/run/current-system/sw/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-run-gates.XXXXXX")"
+SANDBOX_BACKEND="$TEST_ROOT/sandbox-backend"
 RESULT_DIRS=()
 
 cleanup() {
@@ -147,6 +148,27 @@ printf '%s\n' \
   '' \
   >"$TEST_ROOT/trailing-blank.md"
 expect_invalid_eval_document "$TEST_ROOT/trailing-blank.md"
+
+cat >"$SANDBOX_BACKEND" <<'SHIM'
+#!/usr/bin/env bash
+if [ "${1:-}" = --version ]; then
+  echo "fake-sandbox 1.0"
+  exit 0
+fi
+[ "${1:-}" = sandbox ] || exit 90
+shift
+while [ "$#" -gt 0 ] && [ "$1" != -- ]; do
+  shift
+done
+[ "${1:-}" = -- ] || exit 91
+shift
+if [ "${1:-}" = /bin/sh ] && [ "${2:-}" = -c ] && [ "${4:-}" = sh ]; then
+  printf '%s\n' contained >"${8:?missing inside-probe path}"
+  exit 0
+fi
+exec "$@"
+SHIM
+chmod +x "$SANDBOX_BACKEND"
 
 make_shims() {
   local dir="$1"
@@ -314,6 +336,8 @@ run_case() {
     REAL_MKTEMP="$REAL_MKTEMP" \
     TMPDIR="$TEST_ROOT/tmp" \
     EVAL_LABEL="$label" \
+    EVAL_TESTING=1 \
+    EVAL_TEST_SANDBOX_BIN="$SANDBOX_BACKEND" \
     FAKE_MODE="$mode" \
     FAKE_GIT_COMMIT_FAIL="${FAKE_GIT_COMMIT_FAIL:-0}" \
     FAKE_INVOKED_FILE="${FAKE_INVOKED_FILE:-}" \
