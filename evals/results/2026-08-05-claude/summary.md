@@ -1,3 +1,11 @@
+---
+summary: "Records the Claude linked-records behavioral eval run from 2026-08-05."
+read_when:
+  - Comparing linked-records behavior across harnesses or model versions
+  - Investigating this eval run's mechanical and escalation results
+title: "Claude Eval Run — 2026-08-05"
+---
+
 # Eval run: claude, 2026-08-05
 
 - version: 2.1.220 (Claude Code)
@@ -51,4 +59,3 @@ PASS: no records created or modified for local mechanics
 ```
 
 - agent exit 0, 87s — transcript: logs/record-threshold.log
-

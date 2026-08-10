@@ -43,6 +43,111 @@ assert_not_contains() {
   fi
 }
 
+eval_document_conforms() {
+  local file="$1"
+
+  awk '
+    NR == 1 {
+      if ($0 != "---") invalid = 1
+      in_frontmatter = 1
+      next
+    }
+    in_frontmatter && $0 == "---" {
+      in_frontmatter = 0
+      closed = 1
+      next
+    }
+    in_frontmatter {
+      if ($0 ~ /^summary:[[:space:]]*"[^"]+"[[:space:]]*$/) {
+        summary++
+        keys++
+        current = "summary"
+      } else if ($0 ~ /^read_when:[[:space:]]*$/) {
+        read_when++
+        keys++
+        current = "read_when"
+      } else if ($0 ~ /^title:[[:space:]]*"[^"]+"[[:space:]]*$/) {
+        title++
+        keys++
+        current = "title"
+      } else if ($0 ~ /^  -[[:space:]]+[^[:space:]]/ && current == "read_when") {
+        read_when_items++
+      } else {
+        invalid = 1
+      }
+    }
+    { last = $0 }
+    END {
+      if (NR == 0 || in_frontmatter || !closed || keys != 3 ||
+          summary != 1 || read_when != 1 || title != 1 ||
+          read_when_items < 1 || read_when_items > 2 ||
+          last !~ /[^[:space:]]/) invalid = 1
+      exit invalid
+    }
+  ' "$file"
+}
+
+assert_eval_document() {
+  eval_document_conforms "$1" || fail "$1 violates the eval document contract"
+}
+
+expect_invalid_eval_document() {
+  [ -f "$1" ] || fail "$1 does not exist"
+  if eval_document_conforms "$1"; then
+    fail "$1 unexpectedly satisfies the eval document contract"
+  fi
+}
+
+printf '%s\n' '# Missing frontmatter' >"$TEST_ROOT/missing-frontmatter.md"
+expect_invalid_eval_document "$TEST_ROOT/missing-frontmatter.md"
+
+printf '%s\n' \
+  '---' \
+  'summary: "Extra key"' \
+  'read_when:' \
+  '  - Testing invalid frontmatter' \
+  'title: "Extra Key"' \
+  'owner: "Nobody"' \
+  '---' \
+  '# Extra key' \
+  >"$TEST_ROOT/extra-key.md"
+expect_invalid_eval_document "$TEST_ROOT/extra-key.md"
+
+printf '%s\n' \
+  '---' \
+  'summary: "No read trigger"' \
+  'read_when:' \
+  'title: "No Read Trigger"' \
+  '---' \
+  '# No read trigger' \
+  >"$TEST_ROOT/no-read-trigger.md"
+expect_invalid_eval_document "$TEST_ROOT/no-read-trigger.md"
+
+printf '%s\n' \
+  '---' \
+  'summary: "Too many read triggers"' \
+  'read_when:' \
+  '  - First trigger' \
+  '  - Second trigger' \
+  '  - Third trigger' \
+  'title: "Too Many Read Triggers"' \
+  '---' \
+  '# Too many read triggers' \
+  >"$TEST_ROOT/too-many-read-triggers.md"
+expect_invalid_eval_document "$TEST_ROOT/too-many-read-triggers.md"
+
+printf '%s\n' \
+  '---' \
+  'summary: "Trailing blank line"' \
+  'read_when:' \
+  '  - Testing invalid document endings' \
+  'title: "Trailing Blank Line"' \
+  '---' \
+  '# Trailing blank line' \
+  '' \
+  >"$TEST_ROOT/trailing-blank.md"
+expect_invalid_eval_document "$TEST_ROOT/trailing-blank.md"
+
 make_shims() {
   local dir="$1"
   mkdir -p "$dir"
@@ -217,6 +322,8 @@ run_case() {
     bash "$RUNNER" "${runner_args[@]}" >"$LAST_CONSOLE" 2>&1
   LAST_RC=$?
   set -e
+
+  assert_eval_document "$LAST_OUT/summary.md"
 }
 
 expect_selection_error() {
@@ -346,6 +453,7 @@ PATH="$empty_shims:$BASE_PATH" \
 empty_rc=$?
 set -e
 [ "$empty_rc" -eq 2 ] || fail "empty discovery returned $empty_rc instead of usage exit 2"
+assert_eval_document "$empty_out/summary.md"
 assert_contains "$empty_out/summary.md" 'INVALID: scenario selection'
 assert_contains "$empty_out/summary.md" 'scenarios executed: 0'
 [ ! -e "$empty_version_marker" ] || fail "empty discovery queried the harness version"
@@ -357,5 +465,13 @@ assert_not_contains "$LAST_OUT/summary.md" 'INVALID:'
 for scenario in arch-drift bare-activation claim-staleness claim-writer gate-conflict gate-sweep-edit groom-claims record-threshold; do
   assert_contains "$LAST_OUT/summary.md" "^## $scenario$"
 done
+
+assert_eval_document "$EVALS/README.md"
+tracked_documents=0
+while IFS= read -r document; do
+  assert_eval_document "$EVALS/$document"
+  tracked_documents=$((tracked_documents + 1))
+done < <("$REAL_GIT" -C "$EVALS" ls-files -- 'results/*.md')
+[ "$tracked_documents" -gt 0 ] || fail "no tracked eval result documents were checked"
 
 echo "PASS: eval runner failure gates"

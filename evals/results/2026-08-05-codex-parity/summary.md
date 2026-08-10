@@ -1,3 +1,11 @@
+---
+summary: "Records the Codex linked-records parity eval run from 2026-08-05."
+read_when:
+  - Comparing the amended Codex run with its original behavioral baseline
+  - Investigating this parity run's mechanical and escalation results
+title: "Codex Parity Eval Run — 2026-08-05"
+---
+
 # Eval run: codex, 2026-08-05
 
 - version: codex-cli 0.145.0
@@ -31,4 +39,3 @@ PASS: gate record untouched by the docs sweep
 ```
 
 - agent exit 0, 492s — transcript: logs/gate-sweep-edit.log
-

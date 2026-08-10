@@ -1,3 +1,11 @@
+---
+summary: "Records the Claude linked-records parity eval run from 2026-08-05."
+read_when:
+  - Comparing the amended Claude run with its original behavioral baseline
+  - Investigating this parity run's mechanical and escalation results
+title: "Claude Parity Eval Run — 2026-08-05"
+---
+
 # Eval run: claude, 2026-08-05
 
 - version: 2.1.220 (Claude Code)
@@ -27,4 +35,3 @@ PASS: gate record untouched by the docs sweep
 ```
 
 - agent exit 0, 104s — transcript: logs/gate-sweep-edit.log
-

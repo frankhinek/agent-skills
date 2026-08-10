@@ -316,7 +316,7 @@ Resolve the destination to an absolute path once, before changing directory. Def
 
 **Completion record:** commit `fix(evals): make fixture setup path-safe` · validation `evals/tests/check-fixture.sh` (red before the fix: `vendor.sh: line 33: cd: relative-fixture: No such file or directory`; green after the fix); `evals/tests/run-failure-gates.sh`; `evals/tests/check-baseline.sh`; `evals/tests/check-semantics.sh`; `/bin/bash -n evals/fixture.sh evals/tests/check-fixture.sh`; `git diff --check` · notes the builder now resolves one physical absolute destination before entering it, requires a previously nonexistent leaf, and forwards the absolute path to vendoring; absolute, relative, and space-containing builds produce identical committed trees; existing directories, files, symlinks, and symlink targets remain unchanged; command and `INT`/`TERM` failures remove only the invocation-owned leaf while preserving exit status and unrelated siblings; cleanup failure preserves the original status, warns loudly, and retains partial evidence; `SIGKILL` remains inherently untrappable
 
-### [ ] F07 — Eval Documents Violate Required Frontmatter
+### [x] F07 — Eval Documents Violate Required Frontmatter
 
 **Priority:** P2
 **Location:** `evals/README.md:1`, `evals/results/*.md`, `evals/run.sh:27`
@@ -338,18 +338,18 @@ Add the exact required frontmatter to authored eval documents. Update the summar
 
 **Implementation checklist**
 
-- [ ] Add compliant frontmatter to `evals/README.md`.
-- [ ] Add compliant frontmatter to durable baseline/parity reports.
-- [ ] Generate compliant frontmatter for every run summary.
-- [ ] Ensure no extra YAML keys appear.
-- [ ] Add a generated-document conformance check.
+- [x] Add compliant frontmatter to `evals/README.md`.
+- [x] Add compliant frontmatter to durable baseline/parity reports.
+- [x] Generate compliant frontmatter for every run summary.
+- [x] Ensure no extra YAML keys appear.
+- [x] Add a generated-document conformance check.
 
 **Acceptance gate**
 
-- [ ] All authored and freshly generated eval Markdown passes the frontmatter rule.
-- [ ] `git diff --check` is clean.
+- [x] All authored and freshly generated eval Markdown passes the frontmatter rule.
+- [x] `git diff --check` is clean.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(evals): enforce eval document frontmatter` · validation red proof: the generated-summary conformance assertion first failed against the existing runner output; green proof: the focused failure-gates suite validated normal and invalid Claude/Codex summaries, all tracked durable eval Markdown, exact frontmatter keys, one-to-two `read_when` triggers, and clean EOFs; all install/vendor/eval/linter regression suites, `/bin/bash -n`, and `git diff --check` passed · notes durable-document discovery is restricted to tracked files and fails if it checks none, so abandoned run artifacts cannot poison or vacuously satisfy the gate; label-specific summary metadata and interruption-only header fragments remain separate non-blocking follow-ups
 
 ### [x] F08 — Argument Ordering Can Turn a Check Request into Mutation
 

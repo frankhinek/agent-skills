@@ -1,3 +1,11 @@
+---
+summary: "Records the Codex linked-records behavioral eval run from 2026-08-05."
+read_when:
+  - Comparing linked-records behavior across harnesses or model versions
+  - Investigating this eval run's mechanical and escalation results
+title: "Codex Eval Run — 2026-08-05"
+---
+
 # Eval run: codex, 2026-08-05
 
 - version: codex-cli 0.145.0
@@ -65,4 +73,3 @@ PASS: no records created or modified for local mechanics
 ```
 
 - agent exit 0, 481s — transcript: logs/record-threshold.log
-

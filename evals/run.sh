@@ -15,7 +15,8 @@ HARNESS="${1:?usage: run.sh <claude|codex> [scenario ...]}"
 shift || true
 
 case "$HARNESS" in
-claude|codex) ;;
+claude) HARNESS_NAME="Claude" ;;
+codex) HARNESS_NAME="Codex" ;;
 *)
   echo "unsupported harness: $HARNESS" >&2
   exit 2
@@ -56,9 +57,23 @@ DATE="$(date +%Y-%m-%d)"
 OUT="$EVALS/results/$DATE-$HARNESS${EVAL_LABEL:+-$EVAL_LABEL}"
 summary="$OUT/summary.md"
 
+write_summary_header() {
+  printf '%s\n' \
+    '---' \
+    "summary: \"Records the $HARNESS_NAME linked-records behavioral eval run from $DATE.\"" \
+    'read_when:' \
+    '  - Comparing linked-records behavior across harnesses or model versions' \
+    "  - Investigating this eval run's mechanical and escalation results" \
+    "title: \"$HARNESS_NAME Eval Run — $DATE\"" \
+    '---' \
+    >"$summary"
+}
+
 if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ] || [ "${#SCENARIOS[@]}" -eq 0 ]; then
   mkdir -p "$OUT"
+  write_summary_header
   {
+    echo
     echo "# Eval run: $HARNESS, $DATE"
     echo
     echo "- status: INVALID: scenario selection"
@@ -76,7 +91,7 @@ if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ] || [ "${#SCENARIOS[@]}" -eq 0 ]; then
     else
       echo "- detail: no scenarios discovered"
     fi
-  } >"$summary"
+  } >>"$summary"
 
   if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ]; then
     for unknown in "${UNKNOWN_SCENARIOS[@]}"; do
@@ -93,8 +108,10 @@ if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ] || [ "${#SCENARIOS[@]}" -eq 0 ]; then
 fi
 
 mkdir -p "$OUT/logs"
+write_summary_header
 
 {
+  echo
   echo "# Eval run: $HARNESS, $DATE"
   echo
   case "$HARNESS" in
@@ -106,8 +123,7 @@ mkdir -p "$OUT/logs"
     echo "- pinned args: ${EVAL_CLAUDE_ARGS:-}${EVAL_CODEX_ARGS:-}"
   echo "- final responses and diagnostics: logs/"
   echo "- mechanical checks below; judge escalation quality from final responses"
-  echo
-} >"$summary"
+} >>"$summary"
 
 record_invalid() {
   local scenario="$1"
@@ -115,13 +131,13 @@ record_invalid() {
   local detail="$3"
   local duration="$4"
   {
+    echo
     echo "## $scenario"
     echo
     echo "- status: INVALID: $reason"
     echo "- detail: $detail"
     echo "- duration: ${duration}s"
     echo "- diagnostics: logs/$scenario.log"
-    echo
   } >>"$summary"
   echo "INVALID: $reason — $detail"
   echo
@@ -238,6 +254,7 @@ for s in "${SCENARIOS[@]}"; do
   fi
 
   {
+    echo
     echo "## $s"
     echo
     echo "- status: $scenario_status"
@@ -259,7 +276,6 @@ for s in "${SCENARIOS[@]}"; do
     echo '```'
     echo "$check"
     echo '```'
-    echo
   } >>"$summary"
   echo "$scenario_status: $s"
   if [ "$signal_rc" -eq 0 ]; then
