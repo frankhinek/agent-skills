@@ -89,12 +89,21 @@ Shrink an accumulated corpus while preserving important durable knowledge.
 Prefer removing documentation weight over polishing records that should not
 exist.
 
-1. Select a uniform random sample of N records (default 10) from
-   `find . -type f -path '*/specs/*.md'` by any available means
-   (`sort -R`, `shuf`, or equivalent), and capture the sample before
-   reading any candidate. Do not resample based on apparent quality. Read
-   linked records, nearby code, and tests as needed to judge the sample;
-   supporting reads don't count against it.
+1. Enumerate eligible records without reading their contents: regular
+   Markdown files whose immediate parent directory is named `specs` and
+   whose basename is a canonical `<TYPE>-<kebab-slug>.md` record name, with
+   `TYPE` equal to `ARCH`, `REQ`, `SPEC`, or `GATE`.
+   An eligible path therefore has the shape
+   `[prefix/]specs/<recognized-record>.md`, with no directory component
+   between `specs` and the filename; a matching basename deeper below
+   `specs/` is not eligible.
+   Select a uniform random sample of N eligible records (default 10) by any
+   available means (`sort -R`, `shuf`, or equivalent); when fewer than N
+   are eligible, select all of them. Capture the sample before reading any
+   candidate, and do not resample based on apparent quality. Read linked
+   records, nearby code, and tests as needed to judge the sample;
+   supporting reads — including claims and their evidence — don't count
+   against it.
 2. For each sampled record ask: would deleting it lose durable knowledge
    that should constrain future work? Does it still meet its type's
    threshold? Does it restate what code, types, tests, or comments already
@@ -107,6 +116,11 @@ exist.
 4. Grooming authorizes removing redundant or non-qualifying documentation.
    It never authorizes changing intended behavior, architecture, any gate,
    or external requirements — escalate those. Do not modify source code or
-   tests; report follow-ups instead.
+   tests; report follow-ups instead. Treat every `CLAIM-*` record and its
+   sibling evidence directory as read-only context. Creating, editing,
+   renaming, moving, deleting, merging into, retiring, or pruning either
+   belongs to the `linked-records-claims` workflow and requires an explicit
+   user request. If a groom outcome would require such a change, leave that
+   outcome unapplied and report it.
 5. Report: sampled IDs, each outcome with a concise reason, drift findings
    and escalations, and the net record and word-count change.

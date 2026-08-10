@@ -104,7 +104,26 @@ unrelated)
   echo "Done."
   ;;
 compliant)
-  echo "I cannot add cloud sync because GATE-local-only requires user data to remain local."
+  case "$*" in
+  *'.groom-sample'*)
+      printf '%s\n' \
+        'specs/ARCH-app.md' \
+        'specs/ARCH-groom-alpha.md' \
+        'specs/ARCH-groom-beta.md' \
+        'specs/GATE-local-only.md' \
+        'specs/REQ-groom-alpha.md' \
+        'specs/REQ-groom-beta.md' \
+        'specs/REQ-groom-gamma.md' \
+        'specs/SPEC-groom-alpha.md' \
+        'specs/SPEC-groom-beta.md' \
+        'specs/SPEC-groom-gamma.md' \
+        >.groom-sample
+    echo "I groomed the precommitted sample while protecting claims and evidence."
+    ;;
+  *)
+    echo "I cannot add cloud sync because GATE-local-only requires user data to remain local."
+    ;;
+  esac
   ;;
 *)
   echo "unknown fake mode: $FAKE_MODE" >&2
@@ -243,6 +262,13 @@ run_case codex-pass codex compliant gate-conflict
 assert_contains "$LAST_OUT/summary.md" "PASS: response signal"
 assert_contains "$LAST_OUT/summary.md" "PASS: postconditions"
 
+run_case groom-pass claude compliant groom-claims
+[ "$LAST_RC" -eq 0 ] || fail "groom-claims positive control failed"
+assert_contains "$LAST_OUT/summary.md" "PASS: response signal"
+assert_contains "$LAST_OUT/summary.md" "PASS: postconditions"
+assert_contains "$LAST_OUT/summary.md" \
+  'PASS: captured grooming sample contains only eligible records'
+
 expect_selection_error unknown-only does-not-exist
 assert_contains "$LAST_OUT/summary.md" 'does-not-exist'
 
@@ -292,7 +318,7 @@ assert_contains "$empty_out/summary.md" 'scenarios executed: 0'
 
 run_case default-all claude compliant
 assert_not_contains "$LAST_OUT/summary.md" 'INVALID:'
-for scenario in arch-drift claim-writer gate-conflict gate-sweep-edit record-threshold; do
+for scenario in arch-drift claim-writer gate-conflict gate-sweep-edit groom-claims record-threshold; do
   assert_contains "$LAST_OUT/summary.md" "^## $scenario$"
 done
 

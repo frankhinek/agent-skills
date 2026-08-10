@@ -542,7 +542,7 @@ Add a shared invariant: the entire `.agents/skills/` tree must match the immutab
 
 **Completion record:** commit `fix(evals): prevent governing-skill rewrites` · validation `evals/tests/check-baseline.sh` (red before the fix: `FAIL: arch-drift unexpectedly passed`; red during adversarial hardening: `FAIL: gate-sweep-edit unexpectedly passed`; green after both fixes); `evals/tests/check-semantics.sh`; `evals/tests/run-failure-gates.sh`; `bash -n` over eval scripts; in-memory Python compilation of both probes; `git diff --check` · notes every checker now compares `.agents/skills/` with the immutable baseline through a disposable baseline-owned Git index, so unstaged, staged, committed, deleted, untracked, ignored-untracked, `assume-unchanged`, and `skip-worktree` mutations fail without suppressing scenario-specific diagnostics; clean fixtures and normal work outside the skills tree still pass; ordinary file-mode hardening was rejected because both harnesses run as the fixture owner and no equivalent external read-only skill-discovery boundary is configured; a temporary rewrite restored byte-for-byte before grading remains outside a final-state checker’s visibility
 
-### [ ] F13 — Grooming Can Sample Evidence and Delete Claims
+### [x] F13 — Grooming Can Sample Evidence and Delete Claims
 
 **Priority:** P2
 **Location:** `skills/linked-records-upkeep/SKILL.md:70–88`
@@ -568,19 +568,19 @@ Define a record candidate structurally: a Markdown file whose immediate parent d
 
 **Implementation checklist**
 
-- [ ] Restrict candidate enumeration to actual top-level record files.
-- [ ] Exclude claim records and nested evidence paths.
-- [ ] State the exclusion in the groom authority boundary, not only in an example command.
-- [ ] Preserve uniform selection, sample capture before reading, and no resampling.
-- [ ] Add a scenario containing ordinary records plus claim proof/verification files.
+- [x] Restrict candidate enumeration to actual top-level record files.
+- [x] Exclude claim records and nested evidence paths.
+- [x] State the exclusion in the groom authority boundary, not only in an example command.
+- [x] Preserve uniform selection, sample capture before reading, and no resampling.
+- [x] Add a scenario containing ordinary records plus claim proof/verification files.
 
 **Acceptance gate**
 
-- [ ] The sample population contains records only.
-- [ ] No groom invocation can authorize a claim/evidence mutation.
-- [ ] Sampling remains portable when `shuf`, `sort -R`, or both are absent.
+- [x] The sample population contains records only.
+- [x] No groom invocation can authorize a claim/evidence mutation.
+- [x] Sampling remains portable when `shuf`, `sort -R`, or both are absent.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(upkeep): protect claims from grooming` · validation red proof: the new immutable-baseline matrix initially failed because no grooming-boundary scenario existed; adversarial live probing then exposed that a basename-only filter could still admit a recognized-looking record nested below `specs/`, and diff review exposed malformed-name, symlink, ignored-evidence, and index-hidden false-green paths; the final fixture and matrix cover each class; green proof: `evals/tests/check-baseline.sh`, `evals/tests/run-failure-gates.sh`, `evals/tests/check-fixture.sh`, `evals/tests/check-semantics.sh`, the 37-case linter matrix, `/bin/bash -n` over every shell script, and `git diff --check` passed in an ephemeral committed clone; on the final 11-record population, a live Codex 0.146.1 run captured 10 eligible records, deleted only eight disposable ordinary records, and passed the `groom-claims` response and postcondition gates without invoking `shuf` or `sort -R`; an earlier live Claude 2.1.222 run preserved every protected path and captured the correct sample but truthfully failed its response-signal gate after returning only `Execution error` · notes grooming now samples only canonical regular ARCH, REQ, SPEC, or GATE records that are direct children of `specs/`; claims and sibling evidence are read-only supporting context whose creation, rewrite, relocation, consolidation, retirement, deletion, or pruning stays in the explicit claims workflow; gates remain sampleable but immutable; a single run cannot mechanically prove uniformity or pre-reading capture, so those remain human-rubric checks; R08's remaining bare-activation and claim-staleness scenarios stay separate
 
 ### [x] F14 — Whole-Repository HEAD Creates False Staleness
 
