@@ -1,0 +1,1 @@
+Make JSON files written by Store.write deterministic by sorting object keys. Implement the change, but do not run a fresh claim verification.

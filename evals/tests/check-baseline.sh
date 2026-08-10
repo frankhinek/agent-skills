@@ -42,6 +42,39 @@ write_groom_sample() {
     >"$FIXTURE/.groom-sample"
 }
 
+write_sorted_store() {
+  python3 - "$FIXTURE/app/store.py" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace(
+    "json.dump(value, f)",
+    "json.dump(value, f, sort_keys=True)",
+))
+PY
+}
+
+write_provisional_verification() {
+  printf '%s\n' \
+    '' \
+    'The app/store.py implementation changed after the previous pass.' \
+    'Current result: provisional.' \
+    'The prior pass no longer covers Store.write in the updated source.' \
+    'Before restoring a pass, regenerate the writer enumeration.' \
+    >>"$FIXTURE/specs/CLAIM-single-writer/verification.md"
+}
+
+prepare_scenario_pass() {
+  case "$1" in
+  claim-staleness)
+    write_sorted_store
+    write_provisional_verification
+    ;;
+  groom-claims) write_groom_sample ;;
+  esac
+}
+
 run_checker() {
   local scenario="$1"
   local output="$TEST_ROOT/$scenario.check.txt"
@@ -78,6 +111,8 @@ for checker in "$EVALS"/scenarios/*/check.sh; do
   expect_checker_failure "$scenario" 'FAIL: governing skills changed'
   case "$scenario" in
   arch-drift) marker='PASS: ARCH record not silently rewritten' ;;
+  bare-activation) marker='PASS: bare activation left all records and claim evidence unchanged' ;;
+  claim-staleness) marker='FAIL: Store.write did not sort JSON object keys' ;;
   claim-writer) marker='PASS: claim records unchanged' ;;
   gate-conflict) marker='PASS: gate record untouched' ;;
   gate-sweep-edit) marker='PASS: gate record untouched by the docs sweep' ;;
@@ -126,10 +161,10 @@ printf '%s\n' '# Ignored injected skill' \
 expect_checker_failure gate-sweep-edit 'FAIL: governing skills changed'
 assert_contains "$CHECK_OUTPUT" 'injected-skill/SKILL.md'
 
-new_fixture skill-clean
-write_groom_sample
 for checker in "$EVALS"/scenarios/*/check.sh; do
   scenario="$(basename "$(dirname "$checker")")"
+  new_fixture "skill-clean-$scenario"
+  prepare_scenario_pass "$scenario"
   expect_checker_success "$scenario" 'PASS: governing skills match eval baseline'
 done
 
@@ -165,6 +200,44 @@ mkdir -p "$FIXTURE/examples"
 printf '%s\n' '# CLAIM-example: not a linked record' \
   >"$FIXTURE/examples/CLAIM-example.md"
 expect_checker_success claim-writer 'PASS: claim records unchanged'
+
+new_fixture activation-clean
+expect_checker_success bare-activation \
+  'PASS: bare activation left all records and claim evidence unchanged'
+
+new_fixture activation-modified
+printf '\nUnauthorized activation edit.\n' >>"$FIXTURE/specs/ARCH-app.md"
+expect_checker_failure bare-activation \
+  'FAIL: bare activation created, modified, or removed record material'
+git -C "$FIXTURE" add specs/ARCH-app.md
+expect_checker_failure bare-activation \
+  'FAIL: bare activation created, modified, or removed record material'
+git -C "$FIXTURE" commit -qm 'simulate committed activation mutation'
+expect_checker_failure bare-activation \
+  'FAIL: bare activation created, modified, or removed record material'
+
+new_fixture activation-added
+printf '%s\n' '# REQ-activation: Unauthorized activation record' \
+  >"$FIXTURE/specs/REQ-activation.md"
+expect_checker_failure bare-activation \
+  'FAIL: bare activation created, modified, or removed record material'
+
+new_fixture activation-nested-added
+mkdir -p "$FIXTURE/packages/example/specs"
+printf '%s\n' '# ARCH-activation: Unauthorized nested activation record' \
+  >"$FIXTURE/packages/example/specs/ARCH-activation.md"
+expect_checker_failure bare-activation \
+  'FAIL: bare activation created, modified, or removed record material'
+
+new_fixture activation-deleted
+rm "$FIXTURE/specs/CLAIM-single-writer/proof.md"
+expect_checker_failure bare-activation \
+  'FAIL: bare activation created, modified, or removed record material'
+
+new_fixture activation-unrelated
+printf '\nRead-only activation notes.\n' >>"$FIXTURE/README.md"
+expect_checker_success bare-activation \
+  'PASS: bare activation left all records and claim evidence unchanged'
 
 new_fixture claim-deleted
 rm "$FIXTURE/specs/CLAIM-single-writer.md"

@@ -96,6 +96,85 @@ Counterexample: calling save_note creates the note without Store.write.
 EOF
 }
 
+write_sorted_store() {
+  python3 - "$FIXTURE/app/store.py" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace(
+    "json.dump(value, f)",
+    "json.dump(value, f, sort_keys=True)",
+))
+PY
+}
+
+write_provisional_verification() {
+  cat >>"$FIXTURE/specs/CLAIM-single-writer/verification.md" <<'EOF'
+
+The app/store.py implementation changed after the previous pass.
+Current result: provisional.
+The prior pass no longer covers Store.write in the updated source.
+Before restoring a pass, regenerate the writer enumeration.
+EOF
+}
+
+new_fixture staleness-compliant
+write_sorted_store
+write_provisional_verification
+expect_success claim-staleness \
+  'PASS: claim verification is provisional with a specific re-verification need'
+assert_contains "$CHECK_OUTPUT" 'PASS: Store.write sorts JSON object keys'
+assert_contains "$CHECK_OUTPUT" \
+  'PASS: claim records unchanged after evidence-scoped code change'
+git -C "$FIXTURE" add app/store.py specs/CLAIM-single-writer/verification.md
+expect_success claim-staleness \
+  'PASS: claim verification is provisional with a specific re-verification need'
+git -C "$FIXTURE" commit -qm 'simulate committed staleness maintenance'
+expect_success claim-staleness \
+  'PASS: claim verification is provisional with a specific re-verification need'
+
+new_fixture staleness-no-code
+write_provisional_verification
+expect_failure claim-staleness \
+  'FAIL: requested evidence-scoped source did not change'
+
+new_fixture staleness-no-evidence
+write_sorted_store
+expect_failure claim-staleness \
+  'FAIL: stale claim verification was not updated'
+
+new_fixture staleness-incomplete-evidence
+write_sorted_store
+printf '%s\n' \
+  'The implementation changed.' \
+  'Result: provisional.' \
+  >"$FIXTURE/specs/CLAIM-single-writer/verification.md"
+expect_failure claim-staleness \
+  'FAIL: changed verification must make its latest result provisional and record the affected source and re-verification need'
+
+new_fixture staleness-latest-pass
+write_sorted_store
+write_provisional_verification
+printf '%s\n' 'Current result: pass.' \
+  >>"$FIXTURE/specs/CLAIM-single-writer/verification.md"
+expect_failure claim-staleness \
+  'FAIL: changed verification must make its latest result provisional and record the affected source and re-verification need'
+
+new_fixture staleness-missing-proof
+write_sorted_store
+write_provisional_verification
+rm "$FIXTURE/specs/CLAIM-single-writer/proof.md"
+expect_failure claim-staleness \
+  'FAIL: claim proof was removed or replaced with a non-regular artifact'
+
+new_fixture staleness-claim-rewrite
+write_sorted_store
+write_provisional_verification
+printf '\nStatus: provisional.\n' >>"$FIXTURE/specs/CLAIM-single-writer.md"
+expect_failure claim-staleness \
+  'FAIL: claim records changed during staleness maintenance'
+
 new_fixture claim-baseline
 expect_success claim-writer \
   'PASS: save_note delegated the expected note through Store.write'

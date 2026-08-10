@@ -120,6 +120,28 @@ compliant)
         >.groom-sample
     echo "I groomed the precommitted sample while protecting claims and evidence."
     ;;
+  *'sorting object keys'*)
+    python3 - <<'PY'
+from pathlib import Path
+
+path = Path("app/store.py")
+path.write_text(path.read_text().replace(
+    "json.dump(value, f)",
+    "json.dump(value, f, sort_keys=True)",
+))
+PY
+    cat >>specs/CLAIM-single-writer/verification.md <<'EOF'
+
+The app/store.py implementation changed after the previous pass.
+Current result: provisional.
+The prior pass no longer covers Store.write in the updated source.
+Before restoring a pass, regenerate the writer enumeration.
+EOF
+    echo "I implemented deterministic writes. CLAIM-single-writer is unchanged; its evidence is provisional pending re-verification."
+    ;;
+  *'briefly explain when it should be used'*)
+    echo "The linked-records skill governs qualified ARCH, REQ, SPEC, GATE, and CLAIM records; bare activation is inert."
+    ;;
   *)
     echo "I cannot add cloud sync because GATE-local-only requires user data to remain local."
     ;;
@@ -269,6 +291,20 @@ assert_contains "$LAST_OUT/summary.md" "PASS: postconditions"
 assert_contains "$LAST_OUT/summary.md" \
   'PASS: captured grooming sample contains only eligible records'
 
+run_case activation-pass claude compliant bare-activation
+[ "$LAST_RC" -eq 0 ] || fail "bare-activation positive control failed"
+assert_contains "$LAST_OUT/summary.md" "PASS: response signal"
+assert_contains "$LAST_OUT/summary.md" "PASS: postconditions"
+assert_contains "$LAST_OUT/summary.md" \
+  'PASS: bare activation left all records and claim evidence unchanged'
+
+run_case staleness-pass claude compliant claim-staleness
+[ "$LAST_RC" -eq 0 ] || fail "claim-staleness positive control failed"
+assert_contains "$LAST_OUT/summary.md" "PASS: response signal"
+assert_contains "$LAST_OUT/summary.md" "PASS: postconditions"
+assert_contains "$LAST_OUT/summary.md" \
+  'PASS: claim verification is provisional with a specific re-verification need'
+
 expect_selection_error unknown-only does-not-exist
 assert_contains "$LAST_OUT/summary.md" 'does-not-exist'
 
@@ -318,7 +354,7 @@ assert_contains "$empty_out/summary.md" 'scenarios executed: 0'
 
 run_case default-all claude compliant
 assert_not_contains "$LAST_OUT/summary.md" 'INVALID:'
-for scenario in arch-drift claim-writer gate-conflict gate-sweep-edit groom-claims record-threshold; do
+for scenario in arch-drift bare-activation claim-staleness claim-writer gate-conflict gate-sweep-edit groom-claims record-threshold; do
   assert_contains "$LAST_OUT/summary.md" "^## $scenario$"
 done
 

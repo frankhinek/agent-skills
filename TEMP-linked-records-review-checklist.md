@@ -862,7 +862,7 @@ Clean fixtures with a guarded trap after results are copied. Provide an explicit
 
 **Completion record:** commit ___ · validation ___ · notes ___
 
-### [ ] R08 — Requested Scenario Coverage Is Still Incomplete
+### [x] R08 — Requested Scenario Coverage Is Still Incomplete
 
 **Location:** `evals/scenarios/`
 
@@ -874,16 +874,16 @@ The proposed suite called for roughly six probes, including bare activation, cla
 
 Add focused scenarios for:
 
-- [ ] Bare activation: loading the skill alone does not create or mutate records.
-- [ ] Claim staleness: code changes affecting evidence cause the required claim response.
-- [ ] Groom: random pre-commitment is preserved and claims/evidence remain out of scope.
-- [ ] Record each scenario’s positive liveness condition and judgment rubric.
+- [x] Bare activation: loading the skill alone does not create or mutate records.
+- [x] Claim staleness: code changes affecting evidence cause the required claim response.
+- [x] Groom: random pre-commitment is preserved and claims/evidence remain out of scope.
+- [x] Record each scenario’s positive liveness condition and judgment rubric.
 
 **Acceptance gate**
 
-- [ ] The suite covers every originally proposed behavioral risk or explicitly documents why a scenario was replaced.
+- [x] The suite covers every originally proposed behavioral risk or explicitly documents why a scenario was replaced.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(evals): complete requested behavior coverage` · validation red proof: with the two requested scenario directories present, the immutable-baseline suite failed because it had neither a diagnostic contract nor compliant fixture state for bare activation and claim staleness; green proof: `evals/tests/check-fixture.sh`, `evals/tests/run-failure-gates.sh`, `evals/tests/check-baseline.sh`, `evals/tests/check-semantics.sh`, the 37-case linter matrix, `/bin/bash -n` over every shell script, in-memory compilation of the new Python probe, and `git diff --check` passed; a focused Codex 0.146.1 run produced scorable PASS results for both new scenarios (17s bare activation, 560s claim staleness), with no record changes on activation and an implemented deterministic write plus provisional claim evidence on staleness · notes the activation checker compares every `specs/` tree through the immutable baseline, including nested records, claim evidence, and ignored or index-hidden paths; the staleness checker requires the requested runtime behavior, an actual `app/store.py` change, unchanged claim records, retained proof, and a regular verification artifact whose latest explicit result is provisional and names the affected source and path back to a pass; a historical revision-scoped pass may remain, while a later/current pass fails; F13's existing `groom-claims` scenario supplies the third requested probe; response signals remain weak engagement checks and the documented rubrics remain the semantic judgment layer
 
 ### [ ] R09 — No Committed Regression Suite Covers Vendor, Installer, or Linter Contracts
 
