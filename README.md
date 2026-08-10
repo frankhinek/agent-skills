@@ -34,6 +34,18 @@ lib/vendor-inventory.sh             # versioned typed-manifest implementation
 lib/vendor-transaction.sh           # staged copy, rollback, and recovery
 ```
 
+## Testing
+
+Run the complete vendor, installer, and linter contract suite with one command:
+
+```sh
+tests/check-regressions.sh
+```
+
+The runner snapshots the current contract files into a temporary committed Git
+fixture, so it tests uncommitted changes without weakening `vendor.sh`'s
+committed-source requirement. The same command runs in CI on macOS and Linux.
+
 ## Install (per machine)
 
 ```sh

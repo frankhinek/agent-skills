@@ -885,7 +885,7 @@ Add focused scenarios for:
 
 **Completion record:** commit `fix(evals): complete requested behavior coverage` · validation red proof: with the two requested scenario directories present, the immutable-baseline suite failed because it had neither a diagnostic contract nor compliant fixture state for bare activation and claim staleness; green proof: `evals/tests/check-fixture.sh`, `evals/tests/run-failure-gates.sh`, `evals/tests/check-baseline.sh`, `evals/tests/check-semantics.sh`, the 37-case linter matrix, `/bin/bash -n` over every shell script, in-memory compilation of the new Python probe, and `git diff --check` passed; a focused Codex 0.146.1 run produced scorable PASS results for both new scenarios (17s bare activation, 560s claim staleness), with no record changes on activation and an implemented deterministic write plus provisional claim evidence on staleness · notes the activation checker compares every `specs/` tree through the immutable baseline, including nested records, claim evidence, and ignored or index-hidden paths; the staleness checker requires the requested runtime behavior, an actual `app/store.py` change, unchanged claim records, retained proof, and a regular verification artifact whose latest explicit result is provisional and names the affected source and path back to a pass; a historical revision-scoped pass may remain, while a later/current pass fails; F13's existing `groom-claims` scenario supplies the third requested probe; response signals remain weak engagement checks and the documented rubrics remain the semantic judgment layer
 
-### [ ] R09 — No Committed Regression Suite Covers Vendor, Installer, or Linter Contracts
+### [x] R09 — No Committed Regression Suite Covers Vendor, Installer, or Linter Contracts
 
 **Location:** repository-wide testing infrastructure
 
@@ -897,13 +897,13 @@ The review reproduced most failures with temporary fixtures. None of those check
 
 Create a portable shell regression suite with isolated temporary repositories and target directories. Cover state matrices rather than individual implementation lines. Run it in CI on at least macOS and Linux if both are supported.
 
-- [ ] Vendor matrix: copy/link/check, local edits, force, dirty source, missing/mixed state, argument order, offline remote, atomic failure.
-- [ ] Installer matrix: absent/default/extra targets, identical and divergent copies, partial failure, repeat runs.
-- [ ] Linter matrix: one good and one bad fixture per owned rule plus parsing edge cases.
-- [ ] Add a single documented command for local and CI execution.
-- [ ] Avoid new dependencies unless their portability and maintenance justify them.
+- [x] Vendor matrix: copy/link/check, local edits, force, dirty source, missing/mixed state, argument order, offline remote, atomic failure.
+- [x] Installer matrix: absent/default/extra targets, identical and divergent copies, partial failure, repeat runs.
+- [x] Linter matrix: one good and one bad fixture per owned rule plus parsing edge cases.
+- [x] Add a single documented command for local and CI execution.
+- [x] Avoid new dependencies unless their portability and maintenance justify them.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `ci: run contract regressions across platforms` · validation red proof: no aggregate regression command or CI workflow existed, direct leaf execution from a dirty skill source failed before reaching its assertions, and focused probes demonstrated missing, unregistered, and failing child suites; green proof: `tests/check-regressions.sh` passed all six vendor suites, the installer suite, and the 37-case linter matrix on macOS, including from a dirty contract tree and with hostile inherited Git variables; missing and unregistered-suite probes exited 1, an injected child failure preserved exit 73, `/bin/bash -n` passed for every shell script, the workflow YAML parsed successfully, and `git diff --check` passed · notes the runner commits current contract files only inside an isolated temporary fixture, preserves each leaf suite's `/bin/bash` portability checks, detects both missing registered suites and matching unregistered suites, and is wired unchanged to `macos-latest` and `ubuntu-latest`; the hosted matrix will first execute after a push, which is outside this commit-only request
 
 ### [ ] R10 — `cksum` Is an Accidental-Edit Detector, Not a Tamper Seal
 
