@@ -9,7 +9,9 @@ REAL_FIND="$(type -P find)"
 REAL_MKDIR="$(type -P mkdir)"
 REAL_MV="$(type -P mv)"
 REAL_RM="$(type -P rm)"
+REAL_GIT="$(type -P git)"
 ORIGINAL_PATH="$PATH"
+UNREACHABLE_BIN="$REPO/tests/fixtures/git-unreachable"
 TEST_PARENT="${TMPDIR:-/tmp}"
 TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-transaction.XXXXXX")"
 PROJECTS="$TEST_ROOT/projects"
@@ -60,9 +62,11 @@ run_vendor() {
   shift
   set +e
   if [ -n "$path_prefix" ]; then
-    RUN_OUTPUT="$(PATH="$path_prefix:$ORIGINAL_PATH" "$SYSTEM_BASH" "$VENDOR" "$@" 2>&1)"
+    RUN_OUTPUT="$(PATH="$path_prefix:$UNREACHABLE_BIN:$ORIGINAL_PATH" \
+      VENDOR_TEST_REAL_GIT="$REAL_GIT" "$SYSTEM_BASH" "$VENDOR" "$@" 2>&1)"
   else
-    RUN_OUTPUT="$(PATH="$ORIGINAL_PATH" "$SYSTEM_BASH" "$VENDOR" "$@" 2>&1)"
+    RUN_OUTPUT="$(PATH="$UNREACHABLE_BIN:$ORIGINAL_PATH" \
+      VENDOR_TEST_REAL_GIT="$REAL_GIT" "$SYSTEM_BASH" "$VENDOR" "$@" 2>&1)"
   fi
   RUN_STATUS=$?
   set -e
@@ -124,7 +128,7 @@ assert_no_transaction() {
 
 set_offline_remote() {
   local manifest="$1"
-  awk -v remote="$TEST_ROOT/unreachable-remote" '
+  awk -v remote="https://github.com/example/unreachable-fixture" '
     /^# vendored-from:/ { print "# vendored-from: " remote; next }
     { print }
   ' "$manifest" >"$manifest.tmp"

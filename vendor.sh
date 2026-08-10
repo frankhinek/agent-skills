@@ -62,6 +62,7 @@ fi
 cd "$PROJECT_DIR"
 
 source "$REPO/lib/vendor-inventory.sh"
+source "$REPO/lib/vendor-provenance.sh"
 source "$REPO/lib/vendor-transaction.sh"
 
 # An updater transaction outranks ordinary link/copy classification. Checks are
@@ -121,12 +122,22 @@ if [ "$MODE" = "check" ]; then
     rev=""
     url=""
     when=""
+    provenance_state=no-manifest
     payload_id_state=no-manifest
     manifest_format_state=no-manifest
   else
     rev="$(manifest_field revision)"
-    url="$(manifest_field vendored-from)"
     when="$(manifest_field date)"
+    provenance_state=invalid
+    url=""
+    if url="$(manifest_provenance_value)"; then
+      provenance_state=valid
+    else
+      provenance_status=$?
+      if [ "$provenance_status" -eq 1 ]; then
+        provenance_state=missing
+      fi
+    fi
     payload_id_state=invalid
     if payload_id="$(manifest_payload_id_value)"; then
       if git_object_id_valid "$payload_id"; then
@@ -148,7 +159,12 @@ if [ "$MODE" = "check" ]; then
       fi
     fi
   fi
-  echo "provenance : ${url:-unknown} @ ${rev:-unknown} (${when:-unknown})"
+  if [ "$provenance_state" = invalid ]; then
+    echo "provenance : invalid @ ${rev:-unknown} (${when:-unknown})"
+    status=1
+  else
+    echo "provenance : ${url:-unknown} @ ${rev:-unknown} (${when:-unknown})"
+  fi
 
   inventory_ok=yes
   if current="$(inventory_vendored)"; then
@@ -196,8 +212,11 @@ if [ "$MODE" = "check" ]; then
   elif [ "$payload_id_state" = invalid ]; then
     echo "published  : unknown (manifest has invalid payload identity; refresh after inspection)"
     [ "$status" -ne 0 ] || status=1
-  elif [ -n "$rev" ] && [ -n "$url" ]; then
-    if head_output="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$url" HEAD 2>/dev/null)"; then
+  elif [ "$provenance_state" = invalid ]; then
+    echo "published  : unknown (invalid provenance)"
+    [ "$status" -ne 0 ] || status=1
+  elif [ "$provenance_state" = valid ] && [ -n "$rev" ]; then
+    if head_output="$(provenance_remote_head "$url" 2>/dev/null)"; then
       head="$(printf '%s\n' "$head_output" | LC_ALL=C awk '
         NF == 2 && $2 == "HEAD" { matches++; value = $1; next }
         { invalid = 1 }
@@ -332,8 +351,21 @@ if [ "$MODE" = "copy" ] && git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; t
     fi
     exit 1
   fi
-  URL="$(git -C "$REPO" remote get-url origin 2>/dev/null |
-    sed -E 's#^git@([^:]+):#https://\1/#; s#\.git$##')" || URL=""
+  if source_origin="$(source_origin_value "$REPO")"; then
+    if URL="$(canonicalize_source_provenance "$source_origin")"; then
+      :
+    else
+      URL=""
+      echo "warning: source provenance was omitted because origin is not an approved GitHub URL." >&2
+    fi
+  else
+    source_origin_status=$?
+    URL=""
+    if [ "$source_origin_status" -ne 1 ]; then
+      echo "warning: source provenance was omitted because origin metadata is invalid." >&2
+    fi
+  fi
+  unset source_origin
 fi
 
 mkdir -p .agents/skills

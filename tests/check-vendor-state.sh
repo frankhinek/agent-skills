@@ -5,7 +5,9 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR="$REPO/vendor.sh"
 REAL_RM="$(type -P rm)"
 REAL_AWK="$(type -P awk)"
+REAL_GIT="$(type -P git)"
 ORIGINAL_PATH="$PATH"
+UNREACHABLE_BIN="$REPO/tests/fixtures/git-unreachable"
 TEST_PARENT="${TMPDIR:-/tmp}"
 TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-state.XXXXXX")"
 PROJECTS="$TEST_ROOT/projects"
@@ -76,7 +78,8 @@ assert_equals() {
 
 run_vendor() {
   set +e
-  RUN_OUTPUT="$("$VENDOR" "$@" 2>&1)"
+  RUN_OUTPUT="$(PATH="$UNREACHABLE_BIN:$ORIGINAL_PATH" \
+    VENDOR_TEST_REAL_GIT="$REAL_GIT" "$VENDOR" "$@" 2>&1)"
   RUN_STATUS=$?
   set -e
 }
@@ -89,7 +92,9 @@ run_vendor_split() {
   local stderr_file="$TEST_ROOT/$name.stderr"
 
   set +e
-  PATH="$command_path" "$VENDOR" "$@" >"$stdout_file" 2>"$stderr_file"
+  PATH="$command_path:$UNREACHABLE_BIN:$ORIGINAL_PATH" \
+    VENDOR_TEST_REAL_GIT="$REAL_GIT" \
+    "$VENDOR" "$@" >"$stdout_file" 2>"$stderr_file"
   RUN_STATUS=$?
   set -e
   RUN_STDOUT="$(<"$stdout_file")"
@@ -101,9 +106,9 @@ run_structural_check() {
   local no_positional="$2"
   set +e
   if [ "$no_positional" = yes ]; then
-    RUN_OUTPUT="$(cd "$root" && PATH="$SPY_BIN:$ORIGINAL_PATH" GIT_SPY_LOG="$GIT_SPY_LOG" "$VENDOR" --check 2>&1)"
+    RUN_OUTPUT="$(cd "$root" && PATH="$SPY_BIN:$UNREACHABLE_BIN:$ORIGINAL_PATH" GIT_SPY_LOG="$GIT_SPY_LOG" VENDOR_TEST_REAL_GIT="$REAL_GIT" "$VENDOR" --check 2>&1)"
   else
-    RUN_OUTPUT="$(PATH="$SPY_BIN:$ORIGINAL_PATH" GIT_SPY_LOG="$GIT_SPY_LOG" "$VENDOR" --check "$root" 2>&1)"
+    RUN_OUTPUT="$(PATH="$SPY_BIN:$UNREACHABLE_BIN:$ORIGINAL_PATH" GIT_SPY_LOG="$GIT_SPY_LOG" VENDOR_TEST_REAL_GIT="$REAL_GIT" "$VENDOR" --check "$root" 2>&1)"
   fi
   RUN_STATUS=$?
   set -e
@@ -187,7 +192,7 @@ linked_project="$(make_link_project all-linked)"
 copied_project="$(make_copy_project all-copied)"
 copied_manifest="$copied_project/.agents/skills/.vendored-manifest"
 {
-  printf '# vendored-from: %s\n' "$TEST_ROOT/unreachable-remote"
+  printf '%s\n' '# vendored-from: https://github.com/example/unreachable-fixture'
   grep -v '^# vendored-from:' "$copied_manifest"
 } >"$copied_manifest.tmp"
 mv "$copied_manifest.tmp" "$copied_manifest"
@@ -195,7 +200,7 @@ mv "$copied_manifest.tmp" "$copied_manifest"
 edited_project="$(make_copy_project edited-diagnostics)"
 edited_manifest="$edited_project/.agents/skills/.vendored-manifest"
 {
-  printf '# vendored-from: %s\n' "$TEST_ROOT/unreachable-remote"
+  printf '%s\n' '# vendored-from: https://github.com/example/unreachable-fixture'
   grep -v '^# vendored-from:' "$edited_manifest"
 } >"$edited_manifest.tmp"
 mv "$edited_manifest.tmp" "$edited_manifest"
@@ -280,8 +285,8 @@ chmod +x "$COMPARISON_SPY_BIN/awk"
 run_structural_check "$copied_project" no
 [ "$RUN_STATUS" -eq 0 ] ||
   fail "git spy positive control returned $RUN_STATUS: $RUN_OUTPUT"
-grep -Fq -- "git ls-remote" "$GIT_SPY_LOG" ||
-  fail "git spy positive control did not observe vendor.sh"
+grep -Fq -- "ls-remote" "$GIT_SPY_LOG" ||
+  fail "git spy positive control did not observe vendor.sh: $RUN_OUTPUT"
 : >"$GIT_SPY_LOG"
 
 assert_read_only_result all-linked "$linked_project" 0 --check "$linked_project"

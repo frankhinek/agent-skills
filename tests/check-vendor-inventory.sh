@@ -7,7 +7,9 @@ REAL_RM="$(type -P rm)"
 REAL_FIND="$(type -P find)"
 REAL_OD="$(type -P od)"
 REAL_STAT="$(type -P stat)"
+REAL_GIT="$(type -P git)"
 ORIGINAL_PATH="$PATH"
+UNREACHABLE_BIN="$REPO/tests/fixtures/git-unreachable"
 TEST_PARENT="${TMPDIR:-/tmp}"
 TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-inventory.XXXXXX")"
 PROJECTS="$TEST_ROOT/projects"
@@ -54,7 +56,8 @@ run_vendor() {
   local vendor="$1"
   shift
   set +e
-  RUN_OUTPUT="$(PATH="$ORIGINAL_PATH" "$vendor" "$@" 2>&1)"
+  RUN_OUTPUT="$(PATH="$UNREACHABLE_BIN:$ORIGINAL_PATH" \
+    VENDOR_TEST_REAL_GIT="$REAL_GIT" "$vendor" "$@" 2>&1)"
   RUN_STATUS=$?
   set -e
 }
@@ -64,14 +67,15 @@ run_vendor_with_path() {
   local vendor="$2"
   shift 2
   set +e
-  RUN_OUTPUT="$(PATH="$path_prefix:$ORIGINAL_PATH" "$vendor" "$@" 2>&1)"
+  RUN_OUTPUT="$(PATH="$path_prefix:$UNREACHABLE_BIN:$ORIGINAL_PATH" \
+    VENDOR_TEST_REAL_GIT="$REAL_GIT" "$vendor" "$@" 2>&1)"
   RUN_STATUS=$?
   set -e
 }
 
 set_offline_remote() {
   local manifest="$1"
-  awk -v remote="$TEST_ROOT/unreachable-remote" '
+  awk -v remote="https://github.com/example/unreachable-fixture" '
     /^# vendored-from:/ { print "# vendored-from: " remote; next }
     { print }
   ' "$manifest" >"$manifest.tmp"
@@ -268,12 +272,15 @@ git clone --quiet "$REPO" "$SYMLINK_SOURCE"
 git -C "$SYMLINK_SOURCE" config user.name "Vendor Inventory Test"
 git -C "$SYMLINK_SOURCE" config user.email "vendor-inventory@example.invalid"
 git -C "$SYMLINK_SOURCE" config commit.gpgsign false
+git -C "$SYMLINK_SOURCE" remote set-url origin \
+  'https://github.com/example/vendor-inventory-fixture.git'
 ln -s SKILL.md "$SYMLINK_SOURCE/skills/linked-records/source-link"
 git -C "$SYMLINK_SOURCE" add skills/linked-records/source-link
 git -C "$SYMLINK_SOURCE" commit --quiet -m "test: add source symlink"
 cp "$VENDOR" "$SYMLINK_SOURCE/vendor.sh"
 mkdir -p "$SYMLINK_SOURCE/lib"
 cp "$REPO/lib/vendor-inventory.sh" "$SYMLINK_SOURCE/lib/vendor-inventory.sh"
+cp "$REPO/lib/vendor-provenance.sh" "$SYMLINK_SOURCE/lib/vendor-provenance.sh"
 cp "$REPO/lib/vendor-transaction.sh" "$SYMLINK_SOURCE/lib/vendor-transaction.sh"
 
 retarget_project="$(make_copy_project link-retarget "$SYMLINK_SOURCE/vendor.sh")"

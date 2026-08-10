@@ -238,7 +238,7 @@ After the base fixture and scenario overlay are committed, store that revision a
 
 **Completion record:** commit `fix(evals): enforce truthful postcondition checks` · validation `evals/tests/check-baseline.sh`; `evals/tests/run-failure-gates.sh`; `bash -n` over runner, helper, fixture, tests, and all scenario checkers; no direct `git diff`/`git status` remains in scenario checkers; `git diff --check` · notes runner captures the committed post-overlay SHA and passes it as `EVAL_BASE`; tracked changes compare against that SHA and untracked non-ignored files are inventoried separately
 
-### [ ] F05 — Manifest Provenance Can Persist Credentials and Drive an Unsafe Git Remote
+### [x] F05 — Manifest Provenance Can Persist Credentials and Drive an Unsafe Git Remote
 
 **Priority:** P1
 **Location:** `vendor.sh:102`, `vendor.sh:61`, `vendor.sh:76`, `vendor.sh:138`
@@ -264,22 +264,22 @@ Store a sanitized, non-secret canonical provenance identifier. Strip or refuse U
 
 **Implementation checklist**
 
-- [ ] Decide the accepted provenance format and allowed hosts.
-- [ ] Strip or reject usernames, tokens, and passwords.
-- [ ] Reject non-HTTPS and custom transport forms.
-- [ ] Validate both source-derived and manifest-derived values.
-- [ ] Ensure diagnostics never echo secrets.
-- [ ] Add malicious URL fixtures that prove no Git/network command is invoked.
-- [ ] Document the network trust boundary for `--check`.
+- [x] Decide the accepted provenance format and allowed hosts.
+- [x] Strip or reject usernames, tokens, and passwords.
+- [x] Reject non-HTTPS and custom transport forms.
+- [x] Validate both source-derived and manifest-derived values.
+- [x] Ensure diagnostics never echo secrets.
+- [x] Add malicious URL fixtures that prove no Git/network command is invoked.
+- [x] Document the network trust boundary for `--check`.
 
 **Acceptance gate**
 
-- [ ] No credential-bearing remote can be persisted.
-- [ ] No unapproved transport can reach `git ls-remote`.
-- [ ] A valid canonical public HTTPS source still supports status checks.
-- [ ] Offline/unreachable status remains honest and non-destructive.
+- [x] No credential-bearing remote can be persisted.
+- [x] No unapproved transport can reach `git ls-remote`.
+- [x] A valid canonical public HTTPS source still supports status checks.
+- [x] Offline/unreachable status remains honest and non-destructive.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(vendor): constrain provenance trust boundary` · validation red proof: the focused provenance regression exposed credential-bearing origin persistence and manifest-controlled remote execution before the implementation; green proof: `tests/check-vendor-provenance.sh`, every `tests/check-vendor-*.sh` suite, `evals/tests/check-baseline.sh`, `evals/tests/check-fixture.sh`, `evals/tests/check-semantics.sh`, the 37-case linter matrix, `/bin/bash -n` over every shell script, and `git diff --check` all passed · notes persisted provenance is limited to exact canonical public `https://github.com/OWNER/REPOSITORY`; source SCP syntax is normalized, unsupported or credential-bearing origins are omitted without echoing their value, invalid manifest provenance fails before Git is invoked, and the approved HTTPS query excludes repository/user/system Git configuration, interactive credentials, ambient netrc, and Git TLS overrides; existing leaked manifests or Git history are not scrubbed
 
 ### [x] F06 — Relative Fixture Destination Leaves a Half-Built Fixture
 

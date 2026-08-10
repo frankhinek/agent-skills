@@ -3,7 +3,9 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR="$REPO/vendor.sh"
+REAL_GIT="$(type -P git)"
 REAL_RM="$(type -P rm)"
+UNREACHABLE_BIN="$REPO/tests/fixtures/git-unreachable"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-vendor-args.XXXXXX")"
 
 unset BASH_ENV ENV
@@ -40,7 +42,8 @@ snapshot_dir() {
 
 run_vendor() {
   set +e
-  RUN_OUTPUT="$("$VENDOR" "$@" 2>&1)"
+  RUN_OUTPUT="$(PATH="$UNREACHABLE_BIN:$PATH" VENDOR_TEST_REAL_GIT="$REAL_GIT" \
+    "$VENDOR" "$@" 2>&1)"
   RUN_RC=$?
   set -e
 }
@@ -132,7 +135,7 @@ mkdir -p "$copy_project"
 "$VENDOR" "$copy_project" >/dev/null
 manifest="$copy_project/.agents/skills/.vendored-manifest"
 {
-  printf '# vendored-from: %s\n' "$TEST_ROOT/missing-remote"
+  printf '%s\n' '# vendored-from: https://github.com/example/unreachable-fixture'
   grep -v '^# vendored-from:' "$manifest"
 } >"$manifest.tmp"
 mv "$manifest.tmp" "$manifest"

@@ -11,6 +11,7 @@ SOURCE="$TEST_ROOT/source"
 REMOTE="$TEST_ROOT/published"
 PROJECTS="$TEST_ROOT/projects"
 SNAPSHOTS="$TEST_ROOT/snapshots"
+SAFE_URL="https://github.com/example/linked-records-fixture"
 SKILLS=(linked-records linked-records-claims linked-records-upkeep)
 
 unset BASH_ENV ENV
@@ -89,8 +90,9 @@ mode_bits() {
 
 run_vendor() {
   set +e
-  RUN_OUTPUT="$(PATH="${RUN_PATH:-$PATH}" \
+  RUN_OUTPUT="$(PATH="${RUN_PATH:-$SHIMS:$PATH}" \
     VENDOR_TEST_REAL_GIT="$REAL_GIT" \
+    VENDOR_TEST_REMOTE="$REMOTE" \
     VENDOR_TEST_FORCE_PAYLOAD_READ_FAILURE="${VENDOR_TEST_FORCE_PAYLOAD_READ_FAILURE:-no}" \
     "$SYSTEM_BASH" "$SOURCE/vendor.sh" "$@" 2>&1)"
   RUN_STATUS=$?
@@ -185,12 +187,22 @@ mkdir -p "$SOURCE/lib" "$SOURCE/skills" "$PROJECTS" "$SNAPSHOTS" "$SHIMS"
   printf '%s\n' 'set -euo pipefail'
   printf '%s\n' 'object_read=no'
   printf '%s\n' 'payload_read=no'
+  printf '%s\n' 'remote_query=no'
+  printf '%s\n' 'remote_url=""'
   printf '%s\n' 'for arg in "$@"; do'
   printf '%s\n' '  case "$arg" in'
   printf '%s\n' '    cat-file) object_read=yes ;;'
   printf '%s\n' '    ls-tree) object_read=yes; payload_read=yes ;;'
+  printf '%s\n' '    ls-remote) remote_query=yes ;;'
+  printf '%s\n' '    https://*) remote_url="$arg" ;;'
   printf '%s\n' '  esac'
   printf '%s\n' 'done'
+  printf '%s\n' 'if [ "$remote_query" = yes ]; then'
+  printf '%s\n' '  [ "$remote_url" = "https://github.com/example/linked-records-fixture" ] || exit 87'
+  printf '%s\n' '  remote_head="$(unset GIT_DIR GIT_COMMON_DIR GIT_WORK_TREE; "$VENDOR_TEST_REAL_GIT" --git-dir="$VENDOR_TEST_REMOTE" rev-parse HEAD)"'
+  printf '%s\n' '  printf "%s\tHEAD\n" "$remote_head"'
+  printf '%s\n' '  exit 0'
+  printf '%s\n' 'fi'
   printf '%s\n' 'if [ "$object_read" = yes ] && [ "${GIT_NO_LAZY_FETCH:-}" != 1 ]; then'
   printf '%s\n' '  echo "managed payload read allowed lazy fetching" >&2'
   printf '%s\n' '  exit 85'
@@ -213,8 +225,9 @@ git -C "$SOURCE" init -q
 configure_repo "$SOURCE"
 commit_all "$SOURCE" "initial payload"
 git init -q --bare "$REMOTE"
-git -C "$SOURCE" remote add origin "$REMOTE"
-git -C "$SOURCE" push -q -u origin HEAD
+git -C "$SOURCE" remote add origin "$SAFE_URL"
+git -C "$SOURCE" remote add published "$REMOTE"
+git -C "$SOURCE" push -q -u published HEAD
 
 initial_revision="$(git -C "$SOURCE" rev-parse HEAD)"
 initial_payload="$(independent_payload_id "$initial_revision")"
@@ -252,7 +265,7 @@ assert_check unavailable-head "$current_project" 0 \
 assert_omits unavailable-head "$RUN_OUTPUT" "published  : current"
 assert_omits unavailable-head "$RUN_OUTPUT" "published  : STALE"
 
-git -C "$SOURCE" fetch -q origin
+git -C "$SOURCE" fetch -q published
 git -C "$SOURCE" merge -q --ff-only FETCH_HEAD
 missing_skill_backup="$TEST_ROOT/linked-records-claims.backup"
 cp -R "$SOURCE/skills/linked-records-claims" "$missing_skill_backup"
@@ -276,7 +289,7 @@ assert_omits payload-read-error "$RUN_OUTPUT" "published  : STALE"
 
 unreachable_project="$(make_project unreachable)"
 unreachable_manifest="$unreachable_project/.agents/skills/.vendored-manifest"
-awk -v remote="$TEST_ROOT/missing-remote" '
+awk -v remote="https://github.com/example/unreachable-fixture" '
   /^# vendored-from:/ { print "# vendored-from: " remote; next }
   { print }
 ' "$unreachable_manifest" >"$unreachable_manifest.tmp"

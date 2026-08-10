@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+for argument in "$@"; do
+  if [ "$argument" = ls-remote ]; then
+    exit 1
+  fi
+done
+
+exec "${VENDOR_TEST_REAL_GIT:?}" "$@"

@@ -99,16 +99,31 @@ default; conflicting modes, unknown options, extra directories, and
 
 The manifest records two different identities: the full source commit for
 provenance, and a deterministic payload ID covering exactly the three managed
-skill trees. `vendor.sh --check` prints provenance, local-edit status, and
-published payload status. A newer repository HEAD is `current` when those
-managed trees are unchanged and `STALE` only when their payload ID differs.
-The check uses one `git ls-remote`; when the published commit object is not
-available in the local source repository, or the remote is unreachable, it
-reports `unknown` instead of guessing. A published commit with an incomplete
-managed payload is also `unknown` and actionable, rather than mislabeled
-stale. Local object inspection disables Git's lazy fetching, so the one
-explicit remote query remains the entire network boundary. It does not fetch
-automatically.
+skill trees. Remote provenance is stored only as
+`https://github.com/OWNER/REPOSITORY`, without credentials, a port, query,
+fragment, or additional path. Copy mode accepts that HTTPS form and the common
+`git@github.com:OWNER/REPOSITORY.git` clone form, which it records as canonical
+HTTPS. An absent origin produces no remote stamp. Any other origin is omitted
+with a generic warning that never prints the rejected value; vendoring still
+succeeds because provenance is optional.
+
+`vendor.sh --check` strictly validates the stored provenance again before it
+prints or uses it. Invalid or duplicate provenance is actionable, is never
+echoed, and causes no remote command. For valid provenance, the check uses one
+`git ls-remote` against the canonical GitHub HTTPS URL. That command runs with
+repository, global, and system Git configuration excluded, HTTPS as the only
+allowed protocol, and interactive authentication and credential helpers
+disabled. This prevents a manifest or `url.*.insteadOf` configuration from
+selecting another host, local path, or custom remote helper. The command is the
+entire network boundary; the check never fetches automatically.
+
+The check also prints local-edit and published-payload status. A newer
+repository HEAD is `current` when the managed trees are unchanged and `STALE`
+only when their payload ID differs. When the published commit object is not
+available in the local source repository, or the approved remote is
+unreachable, it reports `unknown` instead of guessing. A published commit with
+an incomplete managed payload is also `unknown` and actionable, rather than
+mislabeled stale. Local object inspection disables Git's lazy fetching.
 
 Checking is on demand and updating is deliberate — nothing nags, and nothing
 mutates or touches the network outside `--check`. Copy mode vendors committed
