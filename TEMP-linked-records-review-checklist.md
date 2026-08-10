@@ -621,7 +621,7 @@ Stamp the `skills/` tree identity in addition to the source revision. Only label
 
 **Completion record:** commit ___ · validation ___ · notes ___
 
-### [ ] F15 — Replacement Is Non-Atomic and Misdiagnoses Interrupted Copies
+### [x] F15 — Replacement Is Non-Atomic and Misdiagnoses Interrupted Copies
 
 **Priority:** P2
 **Location:** `vendor.sh:126–142`
@@ -647,20 +647,20 @@ Copy every skill into a destination-local staging area, verify the staged invent
 
 **Implementation checklist**
 
-- [ ] Stage all skill copies before removing any current destination.
-- [ ] Verify staged content against the source inventory.
-- [ ] Use same-filesystem renames and defined rollback behavior.
-- [ ] Clean abandoned staging directories safely on the next run.
-- [ ] Classify incomplete install separately from local edits.
-- [ ] Add induced copy-failure and interruption recovery tests.
+- [x] Stage all skill copies before removing any current destination.
+- [x] Verify staged content against the source inventory.
+- [x] Use same-filesystem renames and defined rollback behavior.
+- [x] Clean abandoned staging directories safely on the next run.
+- [x] Classify incomplete install separately from local edits.
+- [x] Add induced copy-failure and interruption recovery tests.
 
 **Acceptance gate**
 
-- [ ] A failed refresh leaves either the old complete state or an explicitly recoverable state.
-- [ ] The manifest always describes the installed payload.
-- [ ] Recovery never recommends `--force` for updater-created damage.
+- [x] A failed refresh leaves either the old complete state or an explicitly recoverable state.
+- [x] The manifest always describes the installed payload.
+- [x] Recovery never recommends `--force` for updater-created damage.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(vendor): make copy refreshes recoverable` · validation red proof: `tests/check-vendor-transaction.sh` first failed because an induced `cp -R` failure followed the old remove-before-copy path without proving the installed copy remained intact; green proof: the final transaction suite passed normal refresh, failed and silently incomplete staging, rename and live-inventory failure rollback, TERM and SIGKILL interruption, private initialization cleanup, manifest-publication rollback, committed-phase finalization, fresh-install rollback, abandoned pre-commit cleanup, and malformed-metadata refusal; all vendor argument/state/inventory suites, all four eval suites, the 37-case linter matrix, `/bin/bash -n` over every shell script, and `git diff --check` also passed · notes copy mode now stages and inventories the entire source under `.agents/.vendor-transaction`, publishes no stale manifest during live swaps, restores the previous complete state after catchable failures, and leaves explicit destination-local recovery metadata after uncatchable interruption; `--check` stays read-only and updater-created damage is never labeled local edits or routed to `--force`; invalid metadata remains fail-closed with an explicit inspection/removal escape hatch; concurrent mutating invocations and fsync-grade power-loss durability remain unsupported residual risks, while CI/platform expansion (R09) and stronger checksums (R10) remain separate
 
 ### [x] F16 — Missing or Mixed Vendoring Reports Healthy
 

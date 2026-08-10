@@ -63,6 +63,14 @@ fi
 cd "$PROJECT_DIR"
 
 source "$REPO/lib/vendor-inventory.sh"
+source "$REPO/lib/vendor-transaction.sh"
+
+# An updater transaction outranks ordinary link/copy classification. Checks are
+# read-only; a mutating invocation performs at most recovery and asks for a
+# deliberate rerun before starting new work.
+if ! vendor_transaction_handle_existing "$MODE"; then
+  exit 1
+fi
 
 if [ "$MODE" = "check" ]; then
   SKILL_STATES=()
@@ -254,33 +262,15 @@ if { [ -n "$current" ] || [ -f "$MANIFEST" ]; } && [ "$FORCE" = "no" ]; then
 fi
 
 mkdir -p .agents/skills
-for s in "${SKILLS[@]}"; do
-  dst=".agents/skills/$s"
-  rm -rf "$dst"
-  if [ "$MODE" = "link" ]; then
+if [ "$MODE" = "link" ]; then
+  for s in "${SKILLS[@]}"; do
+    dst=".agents/skills/$s"
+    rm -rf "$dst"
     ln -sfn "$REPO/skills/$s" "$dst"
-  else
-    cp -R "$REPO/skills/$s" "$dst"
-  fi
-done
-
-if [ "$MODE" = "copy" ]; then
-  if current="$(inventory_vendored)"; then
-    :
-  else
-    rm -f "$MANIFEST"
-    echo "error: copied skills could not be inventoried; no manifest was written." >&2
-    exit 1
-  fi
-  {
-    echo "# manifest-format: $MANIFEST_FORMAT"
-    if [ -n "$URL" ]; then echo "# vendored-from: $URL"; fi
-    if [ -n "$REV" ]; then echo "# revision: $REV"; fi
-    echo "# date: $(date +%Y-%m-%d)"
-    printf '%s\n' "$current"
-  } >"$MANIFEST"
-else
+  done
   rm -f "$MANIFEST"
+else
+  vendor_transaction_copy "$REV" "$URL"
 fi
 
 POINTER='This project uses the linked-records convention; read

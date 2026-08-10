@@ -23,6 +23,7 @@ skills/
 install.sh                          # symlink skills into each tool's global dir
 vendor.sh                           # set up a project (vendor skills + AGENTS.md pointer)
 lib/vendor-inventory.sh             # versioned typed-manifest implementation
+lib/vendor-transaction.sh           # staged copy, rollback, and recovery
 ```
 
 ## Install (per machine)
@@ -70,6 +71,27 @@ work, then use one explicit `--force` refresh to replace the copy and write
 the current manifest format.
 
 Full non-executable permission bits are intentionally not tracked.
+
+Copy refreshes are transactional. `vendor.sh` first copies and verifies all
+three managed skills in a hidden staging directory on the destination
+filesystem. Only then does it move the old managed entries aside, activate the
+staged copies, verify the live inventory, and publish the prepared manifest.
+Unrelated entries under `.agents/skills/` are never moved.
+
+An ordinary copy, rename, or catchable-signal failure restores the previous
+payload and manifest before returning an error. An uncatchable interruption can
+leave `.agents/.vendor-transaction/` as durable recovery state, outside the
+vendored payload that projects normally commit.
+`vendor.sh --check` reports that incomplete updater transaction distinctly,
+returns nonzero, and stays read-only; it does not call the interrupted state
+local edits or recommend `--force`. Run a mutating invocation once to discard
+pre-commit staging or restore a commit-started refresh, then run it again to
+perform the requested update. Invalid recovery metadata fails closed and is
+retained for manual inspection. If the live installation is correct, inspect
+the retained state before moving or removing only that transaction directory.
+An uncatchable interruption during initialization leaves only a private
+`.agents/.vendor-transaction.initializing/` directory; a mutating invocation
+removes it without touching the installed payload, then asks for a rerun.
 
 Options may appear before or after the project directory. Copy mode is the
 default; conflicting modes, unknown options, extra directories, and

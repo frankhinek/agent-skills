@@ -274,6 +274,7 @@ git -C "$SYMLINK_SOURCE" commit --quiet -m "test: add source symlink"
 cp "$VENDOR" "$SYMLINK_SOURCE/vendor.sh"
 mkdir -p "$SYMLINK_SOURCE/lib"
 cp "$REPO/lib/vendor-inventory.sh" "$SYMLINK_SOURCE/lib/vendor-inventory.sh"
+cp "$REPO/lib/vendor-transaction.sh" "$SYMLINK_SOURCE/lib/vendor-transaction.sh"
 
 retarget_project="$(make_copy_project link-retarget "$SYMLINK_SOURCE/vendor.sh")"
 retarget_path="$retarget_project/.agents/skills/linked-records/source-link"
@@ -358,40 +359,6 @@ chmod +x "$stat_shim/stat"
 run_vendor_with_path "$stat_shim" "$VENDOR" --check "$stat_project"
 [ "$RUN_STATUS" -eq 0 ] || fail "stat probe check failed: $RUN_OUTPUT"
 assert_contains stat-probe "$RUN_OUTPUT" "local edits: none"
-
-# A post-copy inventory failure leaves the replaced tree without a stale manifest.
-post_project="$(make_copy_project post-copy-failure)"
-post_target="$post_project/.agents/skills/linked-records/SKILL.md"
-printf '%s\n' 'post-copy local marker' >>"$post_target"
-post_shim="$TEST_ROOT/post-copy-shim"
-post_state="$TEST_ROOT/post-copy-find-count"
-mkdir -p "$post_shim"
-{
-  printf '%s\n' '#!/usr/bin/env bash'
-  printf 'state=%q\n' "$post_state"
-  printf '%s\n' \
-    'count=0' \
-    '[ ! -f "$state" ] || read -r count <"$state"' \
-    'count=$((count + 1))' \
-    'printf "%s\\n" "$count" >"$state"' \
-    'if [ "$count" -eq 4 ]; then' \
-    '  echo "forced post-copy find failure" >&2' \
-    '  exit 75' \
-    'fi'
-  printf 'exec "%s" "$@"\n' "$REAL_FIND"
-} >"$post_shim/find"
-chmod +x "$post_shim/find"
-run_vendor_with_path "$post_shim" "$VENDOR" --copy --force "$post_project"
-[ "$RUN_STATUS" -eq 1 ] ||
-  fail "post-copy failure returned $RUN_STATUS instead of 1: $RUN_OUTPUT"
-assert_contains post-copy-failure "$RUN_OUTPUT" "forced post-copy find failure"
-assert_contains post-copy-failure "$RUN_OUTPUT" \
-  "copied skills could not be inventoried; no manifest was written"
-[ ! -e "$post_project/.agents/skills/.vendored-manifest" ] ||
-  fail "post-copy failure left the old manifest in place"
-if grep -Fq 'post-copy local marker' "$post_target"; then
-  fail "post-copy failure did not replace the vendored tree"
-fi
 
 # Legacy and unknown manifests never claim that the tree is pristine.
 legacy_project="$(make_copy_project legacy)"

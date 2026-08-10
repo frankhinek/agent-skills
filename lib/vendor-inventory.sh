@@ -101,7 +101,8 @@ executable_state() {
 }
 
 inventory_entry() {
-  local path="$1"
+  local physical_path="$1"
+  local path="${2:-$1}"
   local encoded_path target_with_marker target encoded_target
   local checksum_output checksum size executable
 
@@ -111,8 +112,8 @@ inventory_entry() {
     printf 'error: cannot encode vendored path: %s\n' "$path" >&2
     return 1
   fi
-  if [ -L "$path" ]; then
-    if target_with_marker="$({ readlink -n "$path" || exit $?; printf '\001'; })"; then
+  if [ -L "$physical_path" ]; then
+    if target_with_marker="$({ readlink -n "$physical_path" || exit $?; printf '\001'; })"; then
       target="${target_with_marker%?}"
     else
       printf 'error: cannot read symlink target: %s\n' "$path" >&2
@@ -125,11 +126,11 @@ inventory_entry() {
       return 1
     fi
     printf 'L\t%s\t%s\n' "$encoded_path" "$encoded_target"
-  elif [ -d "$path" ]; then
+  elif [ -d "$physical_path" ]; then
     printf 'D\t%s\n' "$encoded_path"
-  elif [ -f "$path" ]; then
-    executable="$(executable_state "$path")" || return 1
-    if checksum_output="$(cksum <"$path" 2>/dev/null)"; then
+  elif [ -f "$physical_path" ]; then
+    executable="$(executable_state "$physical_path")" || return 1
+    if checksum_output="$(cksum <"$physical_path" 2>/dev/null)"; then
       read -r checksum size _ <<<"$checksum_output"
     else
       printf 'error: cannot checksum vendored file: %s\n' "$path" >&2
@@ -145,22 +146,31 @@ inventory_entry() {
       "$encoded_path" "$executable" "$checksum" "$size"
   else
     printf 'error: unsupported vendored entry: %s (%s)\n' \
-      "$path" "$(unsupported_type_name "$path")" >&2
+      "$path" "$(unsupported_type_name "$physical_path")" >&2
     return 1
   fi
 }
 
-inventory_vendored() {
+inventory_skills() {
+  local root="$1"
+  local s d path relative canonical
+
   {
     for s in "${SKILLS[@]}"; do
-      d=".agents/skills/$s"
+      d="$root/$s"
       [ -L "$d" ] && continue
       [ -e "$d" ] || continue
       find "$d" -print0 || exit $?
     done
   } | while IFS= read -r -d '' path; do
-    inventory_entry "$path" || exit $?
+    relative="${path#"$root"/}"
+    canonical=".agents/skills/$relative"
+    inventory_entry "$path" "$canonical" || exit $?
   done | LC_ALL=C sort
+}
+
+inventory_vendored() {
+  inventory_skills ".agents/skills"
 }
 
 manifest_field() {
