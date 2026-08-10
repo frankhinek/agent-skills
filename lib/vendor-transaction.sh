@@ -286,6 +286,7 @@ vendor_transaction_begin() {
 vendor_transaction_prepare() {
   local revision="$1"
   local url="$2"
+  local payload_id="$3"
   local source_inventory stage_inventory skill
   local inventory_file="$VENDOR_TRANSACTION/staged-inventory"
   local prepared="$VENDOR_TRANSACTION/prepared-manifest"
@@ -317,6 +318,7 @@ vendor_transaction_prepare() {
     echo "# manifest-format: $MANIFEST_FORMAT"
     if [ -n "$url" ]; then echo "# vendored-from: $url"; fi
     if [ -n "$revision" ]; then echo "# revision: $revision"; fi
+    if [ -n "$payload_id" ]; then echo "# payload-id: $payload_id"; fi
     echo "# date: $(date +%Y-%m-%d)"
     printf '%s\n' "$stage_inventory"
   } >"$prepared.new" || return 1
@@ -386,6 +388,7 @@ vendor_transaction_signal() {
 vendor_transaction_copy() {
   local revision="$1"
   local url="$2"
+  local payload_id="$3"
   local status
 
   trap 'vendor_transaction_signal HUP 129' HUP
@@ -397,7 +400,7 @@ vendor_transaction_copy() {
     return 1
   fi
 
-  if vendor_transaction_prepare "$revision" "$url"; then
+  if vendor_transaction_prepare "$revision" "$url" "$payload_id"; then
     :
   else
     status=$?

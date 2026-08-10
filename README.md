@@ -56,8 +56,8 @@ repo. Use `--link` for throwaway local experiments (don't commit the links).
 
 Re-runs are guarded by a versioned filesystem manifest written at vendor
 time. It records directories, regular-file contents and executable state,
-and symlinks with their exact targets. A stale-but-pristine copy refreshes
-freely, but a supported local change is never silently overwritten —
+and symlinks with their exact targets. A payload-stale but locally pristine
+copy refreshes freely, but a supported local change is never silently overwritten —
 vendor.sh refuses and identifies content, executable state, type, target,
 addition, and removal differences. Merge those edits into this repo (they're
 usually convention improvements worth keeping), then re-run with `--force`.
@@ -97,14 +97,27 @@ Options may appear before or after the project directory. Copy mode is the
 default; conflicting modes, unknown options, extra directories, and
 `--check --force` are rejected before the project is touched.
 
-The manifest is stamped with the source revision, and
-`vendor.sh --check` prints a read-only status from any machine:
-provenance, local edits, and staleness against the published repo (one
-`git ls-remote`, no clone needed; nonzero exit when actionable). Checking
-is on demand and updating is deliberate — nothing nags, and nothing
-mutates or touches the network outside `--check`. Copy mode vendors
-committed content only (use `--link` while iterating on skills locally),
-so the stamp is always truthful.
+The manifest records two different identities: the full source commit for
+provenance, and a deterministic payload ID covering exactly the three managed
+skill trees. `vendor.sh --check` prints provenance, local-edit status, and
+published payload status. A newer repository HEAD is `current` when those
+managed trees are unchanged and `STALE` only when their payload ID differs.
+The check uses one `git ls-remote`; when the published commit object is not
+available in the local source repository, or the remote is unreachable, it
+reports `unknown` instead of guessing. A published commit with an incomplete
+managed payload is also `unknown` and actionable, rather than mislabeled
+stale. Local object inspection disables Git's lazy fetching, so the one
+explicit remote query remains the entire network boundary. It does not fetch
+automatically.
+
+Checking is on demand and updating is deliberate — nothing nags, and nothing
+mutates or touches the network outside `--check`. Copy mode vendors committed
+content only (use `--link` while iterating on skills locally). Before copying,
+it compares the physical managed-skill inventory with the raw committed Git
+trees, including content, entry type, executable state, links, and directories.
+That rejects ordinary changes plus ignored files, empty directories,
+index-hidden paths, checkout-filter differences, and embedded repositories so
+the payload stamp remains truthful.
 
 Before checking provenance, `--check` inventories all three expected skill
 destinations and their regular `SKILL.md` markers. A coherent install whose

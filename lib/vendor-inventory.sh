@@ -177,14 +177,16 @@ manifest_field() {
   sed -n "s/^# $1: //p" "$MANIFEST" 2>/dev/null | head -1
 }
 
-# Prints the sole nonempty format value. Status 1 means no format header
-# (legacy); status 2 means a duplicate or malformed format header.
-manifest_format_value() {
-  LC_ALL=C awk '
-    /^#[[:space:]]*manifest-format([[:space:]:]|$)/ {
+# Prints one strict, nonempty manifest header value. Status 1 means the header
+# is absent; status 2 means it is duplicate or malformed.
+manifest_strict_field_value() {
+  local field="$1"
+
+  LC_ALL=C awk -v field="$field" -v prefix="# $field: " '
+    $0 ~ "^#[[:space:]]*" field "([[:space:]:]|$)" {
       candidates++
-      if ($0 ~ /^# manifest-format: /) {
-        candidate = substr($0, 20)
+      if (index($0, prefix) == 1) {
+        candidate = substr($0, length(prefix) + 1)
         nonspace = candidate
         gsub(/[[:space:]]/, "", nonspace)
         if (nonspace != "") {
@@ -199,6 +201,134 @@ manifest_format_value() {
       print value
     }
   ' "$MANIFEST" 2>/dev/null
+}
+
+# Status 1 means no format header (legacy); status 2 means a duplicate or
+# malformed format header.
+manifest_format_value() {
+  manifest_strict_field_value manifest-format
+}
+
+# Object-ID syntax is validated by the caller so missing and invalid payload
+# identities can be reported distinctly.
+manifest_payload_id_value() {
+  manifest_strict_field_value payload-id
+}
+
+git_object_id_valid() {
+  local object_id="$1"
+
+  case "$object_id" in
+  "" | *[!0-9a-f]*) return 1 ;;
+  esac
+  [ "${#object_id}" -eq 40 ] || [ "${#object_id}" -eq 64 ]
+}
+
+# Hashes a canonical list of the three committed managed-skill tree IDs. This
+# excludes unrelated repository paths while retaining Git's object identity.
+# Status 2 means the revision does not contain the complete managed payload;
+# status 1 means Git could not inspect or hash it.
+git_managed_payload_id() {
+  local root="$1"
+  local revision="$2"
+  local skill path record metadata record_path mode type tree payload_id
+
+  payload_id="$({
+    for skill in "${SKILLS[@]}"; do
+      path="skills/$skill"
+      record="$(GIT_NO_LAZY_FETCH=1 git -C "$root" ls-tree \
+        "$revision" -- "$path" 2>/dev/null)" || exit 1
+      [ -n "$record" ] || exit 2
+      metadata="${record%%$'\t'*}"
+      record_path="${record#*$'\t'}"
+      read -r mode type tree <<<"$metadata"
+      [ "$mode" = 040000 ] && [ "$type" = tree ] && \
+        [ "$record_path" = "$path" ] || exit 2
+      git_object_id_valid "$tree" || exit 2
+      printf '%s\t%s\n' "$skill" "$tree"
+    done
+  } | GIT_NO_LAZY_FETCH=1 git -C "$root" hash-object --stdin)" || return $?
+  git_object_id_valid "$payload_id" || return 1
+  printf '%s\n' "$payload_id"
+}
+
+# Emits a manifest-format inventory for the raw committed managed trees. This
+# intentionally bypasses checkout filters: copy mode must prove that the bytes,
+# types, and executable state on disk equal the objects named by the payload.
+inventory_git_skills() {
+  local root="$1"
+  local revision="$2"
+  local record metadata path mode type object canonical encoded_path
+  local checksum_output checksum size executable encoded_target
+
+  {
+    for skill in "${SKILLS[@]}"; do
+      GIT_NO_LAZY_FETCH=1 git -C "$root" ls-tree -r -t -z \
+        "$revision" -- "skills/$skill" || exit $?
+    done
+  } | while IFS= read -r -d '' record; do
+    metadata="${record%%$'\t'*}"
+    path="${record#*$'\t'}"
+    [ "$path" != skills ] || continue
+    read -r mode type object <<<"$metadata"
+    canonical=".agents/${path}"
+    if encoded_path="$(printf '%s' "$canonical" | hex_encode)"; then
+      :
+    else
+      printf 'error: cannot encode vendored path: %s\n' "$canonical" >&2
+      exit 1
+    fi
+    case "$mode:$type" in
+    040000:tree)
+      printf 'D\t%s\n' "$encoded_path"
+      ;;
+    100644:blob | 100755:blob)
+      [ "$mode" = 100755 ] && executable=1 || executable=0
+      checksum_output="$(GIT_NO_LAZY_FETCH=1 git -C "$root" \
+        cat-file blob "$object" | cksum)" || exit 1
+      read -r checksum size _ <<<"$checksum_output"
+      case "$checksum:$size" in
+      *[!0-9:]* | :* | *:) exit 1 ;;
+      esac
+      printf 'F\t%s\t%s\t%s\t%s\n' \
+        "$encoded_path" "$executable" "$checksum" "$size"
+      ;;
+    120000:blob)
+      if encoded_target="$(GIT_NO_LAZY_FETCH=1 git -C "$root" \
+        cat-file blob "$object" | hex_encode)"; then
+        :
+      else
+        printf 'error: cannot encode symlink target: %s\n' "$canonical" >&2
+        exit 1
+      fi
+      printf 'L\t%s\t%s\n' "$encoded_path" "$encoded_target"
+      ;;
+    *)
+      printf 'error: unsupported committed entry: %s (%s %s)\n' \
+        "$path" "$mode" "$type" >&2
+      exit 1
+      ;;
+    esac
+  done | LC_ALL=C sort
+}
+
+# Copy mode copies the physical source tree, so cleanliness alone is not
+# enough: filters, index flags, ignored paths, empty directories, and gitlinks
+# can all make clean checkout bytes differ from the committed payload.
+# Status 2 means a real source/commit difference; status 1 means inspection
+# failed and therefore cannot authorize copying.
+git_managed_source_pristine() {
+  local root="$1"
+  local revision="$2"
+  local committed physical
+
+  committed="$(inventory_git_skills "$root" "$revision")" || return 1
+  physical="$(inventory_skills "$root/skills")" || return 1
+  [ "$committed" != "$physical" ] || return 0
+
+  printf 'source differences from committed managed payload:\n' >&2
+  report_inventory_changes "$committed" "$physical" >&2 || return 1
+  return 2
 }
 
 manifest_inventory() {

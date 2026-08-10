@@ -582,7 +582,7 @@ Define a record candidate structurally: a Markdown file whose immediate parent d
 
 **Completion record:** commit ___ · validation ___ · notes ___
 
-### [ ] F14 — Whole-Repository HEAD Creates False Staleness
+### [x] F14 — Whole-Repository HEAD Creates False Staleness
 
 **Priority:** P2
 **Location:** `vendor.sh:79–84`, `vendor.sh:101`
@@ -607,19 +607,19 @@ Stamp the `skills/` tree identity in addition to the source revision. Only label
 
 **Implementation checklist**
 
-- [ ] Choose the authoritative payload identity: tree hash, release tag, or versioned manifest.
-- [ ] Preserve the commit SHA as provenance without using it as proof of payload drift.
-- [ ] Define offline and remote-unreachable results.
-- [ ] Add unchanged-tree/new-HEAD and changed-tree/new-HEAD fixtures.
-- [ ] Update README terminology: source revision versus payload staleness.
+- [x] Choose the authoritative payload identity: tree hash, release tag, or versioned manifest.
+- [x] Preserve the commit SHA as provenance without using it as proof of payload drift.
+- [x] Define offline and remote-unreachable results.
+- [x] Add unchanged-tree/new-HEAD and changed-tree/new-HEAD fixtures.
+- [x] Update README terminology: source revision versus payload staleness.
 
 **Acceptance gate**
 
-- [ ] Unrelated repository commits do not report the payload as stale.
-- [ ] A changed skills payload is detected when sufficient remote information is available.
-- [ ] Unknown remains honest rather than becoming clean or stale by guesswork.
+- [x] Unrelated repository commits do not report the payload as stale.
+- [x] A changed skills payload is detected when sufficient remote information is available.
+- [x] Unknown remains honest rather than becoming clean or stale by guesswork.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(vendor): scope staleness to managed payload` · validation red proof: the new focused matrix first failed because fresh manifests had no deterministic managed-payload identity; green proof: `tests/check-vendor-staleness.sh`, all other vendor/eval regression suites, the 37-case linter matrix, `/bin/bash -n` over every shell script, and `git diff --check` passed under macOS system Bash/tools · notes manifest format 2 now carries a deterministic ID derived from exactly the three managed Git trees while retaining the full commit as provenance; checks label only known payload differences stale and report unreachable, locally unavailable, unreadable, or incomplete published payloads as explicit unknown states; copy mode compares the physical source inventory with raw committed Git objects before mutation, rejecting Git-clean filter/mode divergence, hidden changes, ignored content, empty directories, and gitlinks; local object inspection disables lazy fetching; unavailable remote objects remain non-actionable by design, while missing/invalid payload stamps and structurally incomplete published payloads exit nonzero; manifest URL trust remains F05 and stronger manifest hashing remains R10
 
 ### [x] F15 — Replacement Is Non-Atomic and Misdiagnoses Interrupted Copies
 

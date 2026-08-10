@@ -6,14 +6,13 @@
 #             commit them;
 #             works for collaborators and cloud sandboxes (Codex cloud etc.)
 #   --link  : symlink instead — local experiments only; don't commit links
-#   --check : read-only status — provenance, local edits, and staleness vs
-#             the published repo (git ls-remote); nonzero exit if actionable
+#   --check : read-only status — provenance, local edits, and managed-payload
+#             staleness vs the published repo; nonzero exit if actionable
 #   --force : overwrite vendored skills even if they were locally edited
 #
 # Copy mode vendors committed content only (it refuses on a dirty skills/
-# tree) and stamps the manifest with the source revision and remote, so
-# --check can compare against the published HEAD from any machine — no
-# local clone of the skills repo needed.
+# tree) and stamps the manifest with source and payload identities. --check
+# compares payloads when the published HEAD object is locally available.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -117,16 +116,36 @@ if [ "$MODE" = "check" ]; then
   fi
 
   status=0
-  rev="$(manifest_field revision)"
-  url="$(manifest_field vendored-from)"
-  when="$(manifest_field date)"
-  manifest_format_state=invalid
-  if manifest_format="$(manifest_format_value)"; then
-    manifest_format_state=valid
+  payload_id=""
+  if [ ! -f "$MANIFEST" ]; then
+    rev=""
+    url=""
+    when=""
+    payload_id_state=no-manifest
+    manifest_format_state=no-manifest
   else
-    manifest_format_status=$?
-    if [ "$manifest_format_status" -eq 1 ]; then
-      manifest_format_state=legacy
+    rev="$(manifest_field revision)"
+    url="$(manifest_field vendored-from)"
+    when="$(manifest_field date)"
+    payload_id_state=invalid
+    if payload_id="$(manifest_payload_id_value)"; then
+      if git_object_id_valid "$payload_id"; then
+        payload_id_state=valid
+      fi
+    else
+      payload_id_status=$?
+      if [ "$payload_id_status" -eq 1 ]; then
+        payload_id_state=missing
+      fi
+    fi
+    manifest_format_state=invalid
+    if manifest_format="$(manifest_format_value)"; then
+      manifest_format_state=valid
+    else
+      manifest_format_status=$?
+      if [ "$manifest_format_status" -eq 1 ]; then
+        manifest_format_state=legacy
+      fi
     fi
   fi
   echo "provenance : ${url:-unknown} @ ${rev:-unknown} (${when:-unknown})"
@@ -168,15 +187,50 @@ if [ "$MODE" = "check" ]; then
       status="$comparison_status"
     fi
   fi
-  if [ -n "$rev" ] && [ -n "$url" ]; then
-    head="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$url" HEAD 2>/dev/null | awk '{print $1}')" || head=""
-    if [ -z "$head" ]; then
-      echo "published  : unknown (remote unreachable)"
-    elif [ "$head" = "$rev" ]; then
-      echo "published  : current (matches HEAD)"
+  if [ "$payload_id_state" = no-manifest ]; then
+    echo "published  : unknown (no manifest)"
+    [ "$status" -ne 0 ] || status=1
+  elif [ "$payload_id_state" = missing ]; then
+    echo "published  : unknown (manifest has no payload identity; refresh to add one)"
+    [ "$status" -ne 0 ] || status=1
+  elif [ "$payload_id_state" = invalid ]; then
+    echo "published  : unknown (manifest has invalid payload identity; refresh after inspection)"
+    [ "$status" -ne 0 ] || status=1
+  elif [ -n "$rev" ] && [ -n "$url" ]; then
+    if head_output="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$url" HEAD 2>/dev/null)"; then
+      head="$(printf '%s\n' "$head_output" | LC_ALL=C awk '
+        NF == 2 && $2 == "HEAD" { matches++; value = $1; next }
+        { invalid = 1 }
+        END {
+          if (matches != 1 || invalid) exit 1
+          print value
+        }
+      ')" || head=""
     else
-      echo "published  : STALE — HEAD is $head; re-run vendor.sh to refresh"
-      [ "$status" -ne 0 ] || status=1
+      head=""
+    fi
+    if [ -z "$head_output" ]; then
+      echo "published  : unknown (remote unreachable)"
+    elif ! git_object_id_valid "$head"; then
+      echo "published  : unknown (invalid remote HEAD response)"
+    elif ! GIT_NO_LAZY_FETCH=1 git -C "$REPO" \
+      cat-file -e "${head}^{commit}" 2>/dev/null; then
+      echo "published  : unknown (HEAD $head is not available locally; fetch the source repo and re-run)"
+    elif published_payload_id="$(git_managed_payload_id "$REPO" "$head")"; then
+      if [ "$published_payload_id" = "$payload_id" ]; then
+        echo "published  : current (managed payload matches HEAD $head)"
+      else
+        echo "published  : STALE — managed payload changed at HEAD $head; re-run vendor.sh to refresh"
+        [ "$status" -ne 0 ] || status=1
+      fi
+    else
+      payload_status=$?
+      if [ "$payload_status" -eq 2 ]; then
+        echo "published  : unknown (HEAD $head has no complete managed payload; inspect the published source layout)"
+        [ "$status" -ne 0 ] || status=1
+      else
+        echo "published  : unknown (managed payload at HEAD $head could not be evaluated locally)"
+      fi
     fi
   else
     echo "published  : unknown (manifest has no provenance stamp; refresh to add one)"
@@ -185,19 +239,9 @@ if [ "$MODE" = "check" ]; then
   exit "$status"
 fi
 
-# Copy mode distributes committed content only, so the stamp is truthful.
 REV=""
 URL=""
-if [ "$MODE" = "copy" ] && git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
-  if [ -n "$(git -C "$REPO" status --porcelain -- skills/)" ]; then
-    echo "error: uncommitted changes in $REPO/skills/ — commit them first." >&2
-    echo "Copy mode vendors committed content only; use --link to iterate." >&2
-    exit 1
-  fi
-  REV="$(git -C "$REPO" rev-parse HEAD)"
-  URL="$(git -C "$REPO" remote get-url origin 2>/dev/null |
-    sed -E 's#^git@([^:]+):#https://\1/#; s#\.git$##')" || URL=""
-fi
+PAYLOAD_ID=""
 
 # Refuse to discard local edits to vendored copies (see --force). Unsupported
 # live entries and inventory errors are never force-overridden: remove or
@@ -261,6 +305,37 @@ if { [ -n "$current" ] || [ -f "$MANIFEST" ]; } && [ "$FORCE" = "no" ]; then
   fi
 fi
 
+# Copy mode distributes committed content only, so the stamp is truthful.
+# Destination safety is established first; both checks precede mutation.
+if [ "$MODE" = "copy" ] && git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  REV="$(git -C "$REPO" rev-parse HEAD)"
+  if git_managed_source_pristine "$REPO" "$REV"; then
+    :
+  else
+    source_status=$?
+    if [ "$source_status" -eq 2 ]; then
+      echo "error: source skills differ from the committed managed payload." >&2
+    else
+      echo "error: source skills could not be compared with the committed managed payload." >&2
+    fi
+    echo "Copy mode vendors committed content only; use --link to iterate." >&2
+    exit 1
+  fi
+  if PAYLOAD_ID="$(git_managed_payload_id "$REPO" "$REV")"; then
+    :
+  else
+    payload_status=$?
+    if [ "$payload_status" -eq 2 ]; then
+      echo "error: committed managed payload is incomplete." >&2
+    else
+      echo "error: committed managed payload could not be identified." >&2
+    fi
+    exit 1
+  fi
+  URL="$(git -C "$REPO" remote get-url origin 2>/dev/null |
+    sed -E 's#^git@([^:]+):#https://\1/#; s#\.git$##')" || URL=""
+fi
+
 mkdir -p .agents/skills
 if [ "$MODE" = "link" ]; then
   for s in "${SKILLS[@]}"; do
@@ -270,7 +345,7 @@ if [ "$MODE" = "link" ]; then
   done
   rm -f "$MANIFEST"
 else
-  vendor_transaction_copy "$REV" "$URL"
+  vendor_transaction_copy "$REV" "$URL" "$PAYLOAD_ID"
 fi
 
 POINTER='This project uses the linked-records convention; read
