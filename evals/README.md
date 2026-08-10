@@ -102,6 +102,23 @@ evals/run.sh codex           # all scenarios
 evals/run.sh claude gate-conflict
 ```
 
+The runner removes its temporary fixture trees after every successful,
+failed, invalid, or interrupted run. Retain failed runs for diagnosis or all
+runs for debugging with the explicit lifecycle setting:
+
+```sh
+EVAL_FIXTURE_RETENTION=failed evals/run.sh claude gate-conflict
+EVAL_FIXTURE_RETENTION=always evals/run.sh codex gate-conflict
+```
+
+Valid values are `never` (the default), `failed`, and `always`. A retained
+run prints its absolute fixture-root path to the console. `INT` and `TERM`
+are forwarded to the active harness; the runner then preserves any partial
+final response, records an interrupted result, and performs the same fixture
+lifecycle handling. `SIGKILL` cannot run shell cleanup and may leave a
+temporary root behind. If normal cleanup fails, the runner exits nonzero and
+prints the retained root for diagnosis.
+
 Both routes require a local Codex CLI with the `codex sandbox` command; it is
 the pinned outer boundary even when Claude is the subject. The runner records
 the boundary profile, backend version, writable scope, network posture, inner
@@ -133,7 +150,8 @@ evals/fixture.sh "$fixture_parent/fixture"
 
 Apply and commit any scenario overlay, and save that revision before running
 the agent. Then run `check.sh` inside the fixture with the saved revision in
-`EVAL_BASE`, and judge the final response.
+`EVAL_BASE`, and judge the final response. This manual fixture parent is
+caller-owned; remove it when inspection is complete.
 
 Results land in `results/<date>-<harness>/`: `summary.md` is committed,
 final responses (`*.response.txt`) and console diagnostics (`*.log`) under
@@ -147,6 +165,7 @@ uses fake Claude and Codex adapters:
 
 ```sh
 evals/tests/check-fixture.sh
+evals/tests/check-fixture-cleanup.sh
 evals/tests/run-failure-gates.sh
 evals/tests/check-safety-boundary.sh
 evals/tests/check-baseline.sh

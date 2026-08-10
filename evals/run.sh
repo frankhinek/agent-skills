@@ -12,8 +12,18 @@ set -uo pipefail
 
 EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SANDBOX="$EVALS/harness-sandbox.sh"
+source "$EVALS/run-fixture-lifecycle.sh"
 HARNESS="${1:?usage: run.sh <claude|codex> [scenario ...]}"
 shift || true
+
+EVAL_FIXTURE_RETENTION="${EVAL_FIXTURE_RETENTION:-never}"
+case "$EVAL_FIXTURE_RETENTION" in
+never|failed|always) ;;
+*)
+  echo "EVAL_FIXTURE_RETENTION must be never, failed, or always" >&2
+  exit 2
+  ;;
+esac
 
 case "$HARNESS" in
 claude)
@@ -175,6 +185,19 @@ remove_probe_artifact() {
 }
 
 overall=0
+eval_fixture_temp_init
+fixture_temp_rc=$?
+if [ "$fixture_temp_rc" -ne 0 ]; then
+  for s in "${SCENARIOS[@]}"; do
+    : >"$OUT/logs/$s.log"
+    record_invalid "$s" "setup" \
+      "temporary fixture root creation or validation failed (exit $fixture_temp_rc)" 0
+  done
+  echo "summary: $summary"
+  exit 1
+fi
+
+scenario_number=0
 for s in "${SCENARIOS[@]}"; do
   sd="$EVALS/scenarios/$s"
 
@@ -185,11 +208,11 @@ for s in "${SCENARIOS[@]}"; do
   echo "== $s ($HARNESS) =="
   start="$(date +%s)"
 
-  fixture_parent="$(mktemp -d)"
-  mktemp_rc=$?
-  if [ "$mktemp_rc" -ne 0 ]; then
+  scenario_number=$((scenario_number + 1))
+  fixture_parent="$EVAL_FIXTURE_ROOT/$scenario_number-$s"
+  if ! mkdir -- "$fixture_parent"; then
     overall=1
-    record_invalid "$s" "setup" "temporary fixture creation failed (exit $mktemp_rc)" 0
+    record_invalid "$s" "setup" "temporary fixture directory creation failed" 0
     continue
   fi
   fx="$fixture_parent/fixture"
@@ -298,24 +321,27 @@ for s in "${SCENARIOS[@]}"; do
   if [ -z "$HARNESS_BIN" ]; then
     rc=127
   else
+    EVAL_FIXTURE_INTERRUPT_STATUS=0
     case "$HARNESS" in
     claude)
       # shellcheck disable=SC2086
       EVAL_BOUNDARY_ESCAPE_TARGET="$escape_target" \
         "$SANDBOX" "$fx" -- "$HARNESS_BIN" -p "$prompt" ${EVAL_CLAUDE_ARGS:-} \
         --dangerously-skip-permissions --no-session-persistence \
-        --output-format text </dev/null >"$runtime_response" 2>>"$log"
-      rc=$?
+        --output-format text </dev/null >"$runtime_response" 2>>"$log" &
+      EVAL_FIXTURE_CHILD_PID=$!
       ;;
     codex)
       # shellcheck disable=SC2086
       EVAL_BOUNDARY_ESCAPE_TARGET="$escape_target" \
         "$SANDBOX" "$fx" -- "$HARNESS_BIN" exec ${EVAL_CODEX_ARGS:-} \
         --dangerously-bypass-approvals-and-sandbox --ephemeral -C "$fx" \
-        -o "$runtime_response" "$prompt" </dev/null >>"$log" 2>&1
-      rc=$?
+        -o "$runtime_response" "$prompt" </dev/null >>"$log" 2>&1 &
+      EVAL_FIXTURE_CHILD_PID=$!
       ;;
     esac
+    eval_fixture_wait_for_child
+    rc=$?
   fi
   dur=$(($(date +%s) - start))
 
@@ -335,6 +361,14 @@ for s in "${SCENARIOS[@]}"; do
   fi
   rm -rf -- "$runtime" 2>>"$log"
   runtime_cleanup_rc=$?
+
+  if [ "$EVAL_FIXTURE_INTERRUPT_STATUS" -ne 0 ]; then
+    overall=1
+    record_invalid "$s" "interrupted (exit $EVAL_FIXTURE_INTERRUPT_STATUS)" \
+      "agent command was interrupted; grading skipped" "$dur"
+    echo "summary: $summary"
+    exit "$EVAL_FIXTURE_INTERRUPT_STATUS"
+  fi
 
   if [ "$post_boundary_rc" -ne 0 ]; then
     overall=1

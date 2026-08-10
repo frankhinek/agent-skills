@@ -845,7 +845,7 @@ Run every supported harness inside the same outer filesystem/process boundary, w
 
 **Completion record:** commit `fix(evals): equalize harness safety boundaries` · validation red proof: the initial boundary regression returned `FAIL: contained Claude run returned 1` before a common outer sandbox existed; green proof: `evals/tests/check-safety-boundary.sh`, `evals/tests/run-failure-gates.sh`, `evals/tests/check-fixture.sh`, `evals/tests/check-baseline.sh`, `evals/tests/check-semantics.sh`, the 37-case linter matrix, `/bin/bash -n` over every tracked shell script, and `git diff --check` passed · notes both Claude and Codex subjects and mechanical postconditions now run under the pinned Codex local-write boundary with the fixture writable, `.agents/` writable, `.git/` read-only, and sibling writes denied; preflight probes and post-execution canaries fail closed before scoring, summaries record the effective profile/backend/scope/network/inner bypass, historical reports disclose their unequal constraints, and test backends report a distinct non-production profile; network and host reads remain intentionally available, remote side effects are not contained, and a real paid Claude/Codex scenario run was not repeated because deterministic fake subjects exercise both adapter paths without agent-token spend
 
-### [ ] R07 — Eval Fixture Trees Are Never Cleaned Up
+### [x] R07 — Eval Fixture Trees Are Never Cleaned Up
 
 **Location:** `evals/run.sh`
 
@@ -857,10 +857,10 @@ Each scenario uses `mktemp -d` and leaves the vendored fixture behind. A full su
 
 Clean fixtures with a guarded trap after results are copied. Provide an explicit retain-on-failure/debug option and print retained paths.
 
-- [ ] Verify success cleanup, failure cleanup, interrupt cleanup, and retain mode.
-- [ ] Ensure cleanup targets are validated non-empty temporary paths.
+- [x] Verify success cleanup, failure cleanup, interrupt cleanup, and retain mode.
+- [x] Ensure cleanup targets are validated non-empty temporary paths.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(evals): clean runner fixture trees` · validation red proof: the focused lifecycle regression initially failed because a successful run retained its captured temporary root; green proof: `evals/tests/check-fixture-cleanup.sh`, every existing eval regression suite, `/bin/bash -n` over every tracked shell script, and `git diff --check` passed, and zero `linked-records-eval.*` roots remained after the suite · notes the runner now owns one physically validated prefixed root per invocation, places every scenario below it, and removes it after PASS, FAIL, INVALID, INT, or TERM; `EVAL_FIXTURE_RETENTION=failed|always` explicitly retains and prints roots; runner-only INT/TERM stops the active harness, preserves available response evidence, records interruption, and then applies retention; cleanup refusal or failure is diagnostic and nonzero; direct fixture consumers remain caller-owned; historical fixture trees were not removed; `SIGKILL` and the narrow interval between successful `mktemp` creation and trap installation remain inherently untrappable
 
 ### [x] R08 — Requested Scenario Coverage Is Still Incomplete
 

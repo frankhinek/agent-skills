@@ -91,13 +91,12 @@ escaped_agents="${AGENTS//\\/\\\\}"
 escaped_agents="${escaped_agents//\"/\\\"}"
 writable_roots="[\"$escaped_agents\"]"
 
-(
-  cd "$FIXTURE" || exit 2
-  TMPDIR="$RUNTIME/tmp" "$backend" sandbox \
-    -c 'sandbox_mode="workspace-write"' \
-    -c 'sandbox_workspace_write.exclude_tmpdir_env_var=true' \
-    -c 'sandbox_workspace_write.exclude_slash_tmp=true' \
-    -c "sandbox_workspace_write.writable_roots=$writable_roots" \
-    -c 'sandbox_workspace_write.network_access=true' \
-    -- "$@"
-)
+cd "$FIXTURE" || exit 2
+export TMPDIR="$RUNTIME/tmp"
+exec "$backend" sandbox \
+  -c 'sandbox_mode="workspace-write"' \
+  -c 'sandbox_workspace_write.exclude_tmpdir_env_var=true' \
+  -c 'sandbox_workspace_write.exclude_slash_tmp=true' \
+  -c "sandbox_workspace_write.writable_roots=$writable_roots" \
+  -c 'sandbox_workspace_write.network_access=true' \
+  -- "$@"
