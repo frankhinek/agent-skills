@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command_name="${0##*/}"
+last_argument=""
+for argument in "$@"; do
+  last_argument="$argument"
+done
+
+case "$command_name" in
+rm)
+  real_command="${INSTALL_TEST_REAL_RM:?}"
+  fail_target="${INSTALL_TEST_FAIL_RM:-}"
+  ;;
+ln)
+  real_command="${INSTALL_TEST_REAL_LN:?}"
+  fail_target="${INSTALL_TEST_FAIL_LN:-}"
+  ;;
+*)
+  echo "unsupported installer failure shim: $command_name" >&2
+  exit 2
+  ;;
+esac
+
+if [ -n "$fail_target" ] && [ "$last_argument" = "$fail_target" ]; then
+  echo "injected $command_name failure: $last_argument" >&2
+  exit 71
+fi
+
+exec "$real_command" "$@"

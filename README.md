@@ -1,3 +1,11 @@
+---
+summary: "Install and use Frank's portable linked-records agent skills."
+read_when:
+  - Installing skills globally for an Agent Skills client
+  - Vendoring linked-records into a project
+title: "Agent Skills"
+---
+
 # agent-skills
 
 Frank's personal agent skills, usable from any tool that reads the
@@ -36,10 +44,14 @@ Symlinks every skill into the global skills directory of each tool present
 on the machine — the defaults (`~/.claude/skills`, `~/.codex/skills`,
 `~/.config/goose/skills`) are the tools verified here, skipped when absent.
 For any other Agent Skills client, pass its global skills directory as an
-argument (e.g. `./install.sh ~/.gemini/antigravity/skills`); explicit
-targets are always installed. Idempotent; edit skills here, every tool sees
-the change immediately. Project-level vendoring via `vendor.sh` is the
-universal path and needs no installer at all.
+argument (e.g. `./install.sh ~/.gemini/antigravity/skills`). Explicit targets
+are attempted before the optional defaults, and a failure in one target does
+not suppress later independent targets. Divergent local copies are preserved
+for manual reconciliation; the installer reports that target as partial and
+returns nonzero after processing all targets. Missing optional tool directories
+remain ordinary skips. Idempotent; edit skills here, every tool sees the change
+immediately. Project-level vendoring via `vendor.sh` is the universal path and
+needs no installer at all.
 
 ## New project
 

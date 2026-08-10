@@ -738,7 +738,7 @@ Treat every unknown requested scenario as a usage failure, record it in the summ
 
 These items were not all promoted into the 17 confirmed findings. They remain worth preserving and resolving because they affect trust, portability, or maintenance cost.
 
-### [ ] R01 — Installer Reports Partial Installation as Success
+### [x] R01 — Installer Reports Partial Installation as Success
 
 **Location:** `install.sh:18–39`
 **Original fix affected:** 6 — extensible installer targets
@@ -751,11 +751,11 @@ These items were not all promoted into the 17 confirmed findings. They remain wo
 
 Track per-skill installed, already-correct, and skipped states. Print an accurate target summary and return nonzero for partial installation. Consider processing explicit targets before optional defaults or adding an explicit-target-only mode so unrelated default configuration cannot block the user’s requested destination.
 
-- [ ] Add identical-copy, divergent-copy, symlink, missing target, partial target, and multiple-extra-target tests.
-- [ ] Define whether one failed target should stop later independent targets or produce an aggregate result.
-- [ ] Verify the success line is emitted only for complete targets.
+- [x] Add identical-copy, divergent-copy, symlink, missing target, partial target, and multiple-extra-target tests.
+- [x] Define whether one failed target should stop later independent targets or produce an aggregate result.
+- [x] Verify the success line is emitted only for complete targets.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(install): report partial target failures` · validation red proof: the initial matrix failed on the old unconditional `link TARGET -> REPO/skills` summary, and the adversarial self-target fixture then failed because the old identical-copy path replaced source skill directories; green proof: the focused installer matrix, `/bin/bash -n`, all vendor and eval regression scripts, the 37-case linter matrix, and `git diff --check` passed · notes explicit targets run before optional defaults; every independent target is attempted; per-skill installed, already-correct, skipped, and failed states determine truthful complete/partial summaries and the aggregate exit status; divergent copies and source-equivalent destinations remain untouched; an independent Claude adversarial review identified the self-target data-loss path and missing failure-path coverage, both fixed with disposable-fixture regressions
 
 ### [x] R02 — Linter Can Report Clean When Scratch Setup Fails
 
