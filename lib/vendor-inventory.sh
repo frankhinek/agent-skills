@@ -1,0 +1,316 @@
+#!/usr/bin/env bash
+# Typed manifest inventory helpers sourced by vendor.sh.
+
+# Manifest v2 stores one tab-delimited, C-sorted record per copied entry:
+#   D <hex path>
+#   F <hex path> <executable:0|1> <POSIX cksum> <byte count>
+#   L <hex path> <hex link target>
+# Hex fields keep path and target parsing independent of whitespace and locale.
+
+INVENTORY_STAT_STYLE=unavailable
+if inventory_stat_probe="$(stat -f '%Lp' "$REPO/vendor.sh" 2>/dev/null)"; then
+  case "$inventory_stat_probe" in
+  "" | *[!0-7]*) ;;
+  *) INVENTORY_STAT_STYLE=bsd ;;
+  esac
+fi
+if [ "$INVENTORY_STAT_STYLE" = unavailable ] &&
+  inventory_stat_probe="$(stat -c '%a' "$REPO/vendor.sh" 2>/dev/null)"; then
+  case "$inventory_stat_probe" in
+  "" | *[!0-7]*) ;;
+  *) INVENTORY_STAT_STYLE=gnu ;;
+  esac
+fi
+unset inventory_stat_probe
+
+hex_encode() {
+  LC_ALL=C od -An -v -tx1 | tr -d ' \n'
+}
+
+display_hex() {
+  local hex="$1"
+  local rest="$1"
+  local byte value char output=""
+
+  case "$hex" in
+  "" | *[!0-9a-f]*) printf 'hex:%s' "$hex"; return ;;
+  esac
+  [ $(( ${#hex} % 2 )) -eq 0 ] || {
+    printf 'hex:%s' "$hex"
+    return
+  }
+
+  while [ -n "$rest" ]; do
+    byte="${rest:0:2}"
+    rest="${rest:2}"
+    value=$((16#$byte))
+    if [ "$value" -lt 32 ] || [ "$value" -gt 126 ]; then
+      printf 'hex:%s' "$hex"
+      return
+    fi
+    printf -v char "\\x$byte"
+    output="$output$char"
+  done
+  printf '%s' "$output"
+}
+
+entry_type_name() {
+  case "$1" in
+  D) printf 'directory' ;;
+  F) printf 'file' ;;
+  L) printf 'symlink' ;;
+  *) printf 'unknown' ;;
+  esac
+}
+
+unsupported_type_name() {
+  local path="$1"
+  if [ -p "$path" ]; then
+    printf 'fifo'
+  elif [ -S "$path" ]; then
+    printf 'socket'
+  elif [ -b "$path" ]; then
+    printf 'block device'
+  elif [ -c "$path" ]; then
+    printf 'character device'
+  else
+    printf 'unsupported type'
+  fi
+}
+
+executable_state() {
+  local path="$1"
+  local mode
+
+  case "$INVENTORY_STAT_STYLE" in
+  bsd) mode="$(stat -f '%Lp' "$path" 2>/dev/null)" ;;
+  gnu) mode="$(stat -c '%a' "$path" 2>/dev/null)" ;;
+  *) mode="" ;;
+  esac
+  case "$mode" in
+  "" | *[!0-7]*)
+    printf 'error: cannot read executable state: %s\n' "$path" >&2
+    return 1
+    ;;
+  esac
+  if (( (8#$mode) & 0111 )); then
+    printf '1'
+  else
+    printf '0'
+  fi
+}
+
+inventory_entry() {
+  local path="$1"
+  local encoded_path target_with_marker target encoded_target
+  local checksum_output checksum size executable
+
+  if encoded_path="$(printf '%s' "$path" | hex_encode)"; then
+    :
+  else
+    printf 'error: cannot encode vendored path: %s\n' "$path" >&2
+    return 1
+  fi
+  if [ -L "$path" ]; then
+    if target_with_marker="$({ readlink -n "$path" || exit $?; printf '\001'; })"; then
+      target="${target_with_marker%?}"
+    else
+      printf 'error: cannot read symlink target: %s\n' "$path" >&2
+      return 1
+    fi
+    if encoded_target="$(printf '%s' "$target" | hex_encode)"; then
+      :
+    else
+      printf 'error: cannot encode symlink target: %s\n' "$path" >&2
+      return 1
+    fi
+    printf 'L\t%s\t%s\n' "$encoded_path" "$encoded_target"
+  elif [ -d "$path" ]; then
+    printf 'D\t%s\n' "$encoded_path"
+  elif [ -f "$path" ]; then
+    executable="$(executable_state "$path")" || return 1
+    if checksum_output="$(cksum <"$path" 2>/dev/null)"; then
+      read -r checksum size _ <<<"$checksum_output"
+    else
+      printf 'error: cannot checksum vendored file: %s\n' "$path" >&2
+      return 1
+    fi
+    case "$checksum:$size" in
+    *[!0-9:]* | :* | *:)
+      printf 'error: invalid checksum result for vendored file: %s\n' "$path" >&2
+      return 1
+      ;;
+    esac
+    printf 'F\t%s\t%s\t%s\t%s\n' \
+      "$encoded_path" "$executable" "$checksum" "$size"
+  else
+    printf 'error: unsupported vendored entry: %s (%s)\n' \
+      "$path" "$(unsupported_type_name "$path")" >&2
+    return 1
+  fi
+}
+
+inventory_vendored() {
+  {
+    for s in "${SKILLS[@]}"; do
+      d=".agents/skills/$s"
+      [ -L "$d" ] && continue
+      [ -e "$d" ] || continue
+      find "$d" -print0 || exit $?
+    done
+  } | while IFS= read -r -d '' path; do
+    inventory_entry "$path" || exit $?
+  done | LC_ALL=C sort
+}
+
+manifest_field() {
+  sed -n "s/^# $1: //p" "$MANIFEST" 2>/dev/null | head -1
+}
+
+# Prints the sole nonempty format value. Status 1 means no format header
+# (legacy); status 2 means a duplicate or malformed format header.
+manifest_format_value() {
+  LC_ALL=C awk '
+    /^#[[:space:]]*manifest-format([[:space:]:]|$)/ {
+      candidates++
+      if ($0 ~ /^# manifest-format: /) {
+        candidate = substr($0, 20)
+        nonspace = candidate
+        gsub(/[[:space:]]/, "", nonspace)
+        if (nonspace != "") {
+          values++
+          value = candidate
+        } else malformed = 1
+      } else malformed = 1
+    }
+    END {
+      if (candidates == 0) exit 1
+      if (candidates != 1 || values != 1 || malformed) exit 2
+      print value
+    }
+  ' "$MANIFEST" 2>/dev/null
+}
+
+manifest_inventory() {
+  sed -n '/^#/!p' "$MANIFEST"
+}
+
+validate_inventory() {
+  LC_ALL=C awk '
+    BEGIN { FS = "\t"; valid = 1 }
+    function is_hex(value, allow_empty) {
+      if (value == "") return allow_empty
+      return length(value) % 2 == 0 && value ~ /^[0-9a-f]+$/
+    }
+    {
+      if ($1 == "D") ok = NF == 2 && is_hex($2, 0)
+      else if ($1 == "F")
+        ok = NF == 5 && is_hex($2, 0) && $3 ~ /^[01]$/ &&
+          $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/
+      else if ($1 == "L") ok = NF == 3 && is_hex($2, 0) && is_hex($3, 1)
+      else ok = 0
+      if (!ok || seen[$2]++) valid = 0
+    }
+    END { exit NR > 0 && valid ? 0 : 1 }
+  '
+}
+
+inventory_change_records() {
+  local expected="$1"
+  local actual="$2"
+
+  LC_ALL=C awk '
+    BEGIN { FS = "\t"; OFS = "\t" }
+    FILENAME == ARGV[1] {
+      path = $2
+      expected_type[path] = $1
+      expected_exec[path] = $3
+      expected_value[path] = $4 OFS $5
+      expected_target[path] = $3
+      next
+    }
+    {
+      path = $2
+      actual_type[path] = $1
+      actual_exec[path] = $3
+      actual_value[path] = $4 OFS $5
+      actual_target[path] = $3
+    }
+    END {
+      for (path in expected_type) {
+        if (!(path in actual_type)) {
+          print path, "removed", expected_type[path], expected_target[path]
+          continue
+        }
+        if (expected_type[path] != actual_type[path]) {
+          print path, "type", expected_type[path], actual_type[path]
+          continue
+        }
+        if (expected_type[path] == "F") {
+          if (expected_value[path] != actual_value[path])
+            print path, "content"
+          if (expected_exec[path] != actual_exec[path])
+            print path, "executable", expected_exec[path], actual_exec[path]
+        } else if (expected_type[path] == "L" &&
+                   expected_target[path] != actual_target[path]) {
+          print path, "target", expected_target[path], actual_target[path]
+        }
+      }
+      for (path in actual_type) {
+        if (!(path in expected_type))
+          print path, "added", actual_type[path], actual_target[path]
+      }
+    }
+  ' <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") |
+    LC_ALL=C sort
+}
+
+report_inventory_changes() {
+  local expected="$1"
+  local actual="$2"
+  local changes comparison_status
+  local path_hex change before after path type target
+
+  if changes="$(inventory_change_records "$expected" "$actual" 2>&1)"; then
+    comparison_status=0
+  else
+    comparison_status=$?
+  fi
+  if [ "$comparison_status" -ne 0 ]; then
+    printf 'error: inventory comparison failed (status %s)\n' \
+      "$comparison_status" >&2
+    return "$comparison_status"
+  fi
+
+  while IFS=$'\t' read -r path_hex change before after; do
+    [ -n "$path_hex" ] || continue
+    path="$(display_hex "$path_hex")"
+    case "$change" in
+    added | removed)
+      type="$(entry_type_name "$before")"
+      if [ "$before" = L ]; then
+        target="$(display_hex "$after")"
+        printf '  %s: %s (%s -> %s)\n' "$change" "$path" "$type" "$target"
+      else
+        printf '  %s: %s (%s)\n' "$change" "$path" "$type"
+      fi
+      ;;
+    type)
+      printf '  type changed: %s (%s -> %s)\n' "$path" \
+        "$(entry_type_name "$before")" "$(entry_type_name "$after")"
+      ;;
+    content)
+      printf '  content changed: %s\n' "$path"
+      ;;
+    executable)
+      [ "$before" = 1 ] && before=yes || before=no
+      [ "$after" = 1 ] && after=yes || after=no
+      printf '  executable changed: %s (%s -> %s)\n' "$path" "$before" "$after"
+      ;;
+    target)
+      printf '  target changed: %s (%s -> %s)\n' "$path" \
+        "$(display_hex "$before")" "$(display_hex "$after")"
+      ;;
+    esac
+  done <<<"$changes"
+}

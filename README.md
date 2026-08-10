@@ -22,6 +22,7 @@ skills/
     └── lint.sh                     # executable mechanical checks (CI-ready)
 install.sh                          # symlink skills into each tool's global dir
 vendor.sh                           # set up a project (vendor skills + AGENTS.md pointer)
+lib/vendor-inventory.sh             # versioned typed-manifest implementation
 ```
 
 ## Install (per machine)
@@ -52,11 +53,24 @@ sandboxes that never see your home directory) and collaborators get the
 convention too. Re-run to refresh the vendored copies after updating this
 repo. Use `--link` for throwaway local experiments (don't commit the links).
 
-Re-runs are guarded by a checksum manifest written at vendor time: a
-stale-but-pristine copy refreshes freely, but locally edited vendored
-skills are never silently overwritten — vendor.sh refuses and lists the
-edited files. Merge those edits into this repo (they're usually
-convention improvements worth keeping), then re-run with `--force`.
+Re-runs are guarded by a versioned filesystem manifest written at vendor
+time. It records directories, regular-file contents and executable state,
+and symlinks with their exact targets. A stale-but-pristine copy refreshes
+freely, but a supported local change is never silently overwritten —
+vendor.sh refuses and identifies content, executable state, type, target,
+addition, and removal differences. Merge those edits into this repo (they're
+usually convention improvements worth keeping), then re-run with `--force`.
+Unsupported entries such as FIFOs, sockets, and devices fail closed even
+with `--force`; preserve or remove them explicitly first.
+
+An older unversioned manifest cannot prove that executable state, links, or
+directories are pristine. `--check` therefore reports its local state as
+unknown, and an ordinary refresh refuses. Inspect and preserve any local
+work, then use one explicit `--force` refresh to replace the copy and write
+the current manifest format.
+
+Full non-executable permission bits are intentionally not tracked.
+
 Options may appear before or after the project directory. Copy mode is the
 default; conflicting modes, unknown options, extra directories, and
 `--check --force` are rejected before the project is touched.

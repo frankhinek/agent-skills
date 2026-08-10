@@ -391,7 +391,7 @@ Parse the entire argument list. Permit at most one positional directory. Reject 
 
 **Completion record:** commit `fix(vendor): make mode parsing order-independent` · validation red proof: `tests/check-vendor-arguments.sh` failed because `check-after-directory` changed a symlinked destination before the parser fix; green proof: the same isolated matrix passed under macOS system Bash/tools across both check orders, copied and linked states, every placement of valid mode/force pairs, every placement of conflicting mode and check/force pairs, unknown options, and extra directories; `evals/tests/check-fixture.sh`, `/bin/bash -n`, and `git diff --check` passed · notes the full argument list is now validated before entering the project directory; explicit `--copy` retains the default copy behavior; invalid syntax exits 2 without destination mutation; `--force` remains valid for copy/link and is rejected with check; adversarial review found one missing copied-project read-only case, which was added and independently validated; F09, F10, F14, F15, F16, and R09 remain separate
 
-### [ ] F09 — Manifest Misses Permission and Symlink Edits
+### [x] F09 — Manifest Misses Permission and Symlink Edits
 
 **Priority:** P2
 **Location:** `vendor.sh:40–42`
@@ -417,19 +417,19 @@ Define a deterministic manifest record for each supported entry type. Include re
 
 **Implementation checklist**
 
-- [ ] Specify and version the manifest entry format.
-- [ ] Record executable mode for regular files.
-- [ ] Record symlinks and their targets.
-- [ ] Reject device, socket, FIFO, or other unsupported entries.
-- [ ] Make diagnostics identify mode/type/target changes accurately.
-- [ ] Test chmod, symlink add/remove/retarget, type replacement, and path rename.
+- [x] Specify and version the manifest entry format.
+- [x] Record executable mode for regular files.
+- [x] Record symlinks and their targets.
+- [x] Reject device, socket, FIFO, or other unsupported entries.
+- [x] Make diagnostics identify mode/type/target changes accurately.
+- [x] Test chmod, symlink add/remove/retarget, type replacement, and path rename.
 
 **Acceptance gate**
 
-- [ ] Every supported local filesystem change is either preserved or explicitly refused before refresh.
-- [ ] Identical copies remain portable across the supported macOS/Linux environments.
+- [x] Every supported local filesystem change is either preserved or explicitly refused before refresh.
+- [x] Identical copies remain portable across the supported macOS/Linux environments.
 
-**Completion record:** commit ___ · validation ___ · notes ___
+**Completion record:** commit `fix(vendor): inventory filesystem metadata` · validation red proof: the new inventory matrix first failed because removing the executable bit from vendored `lint.sh` still returned 0 with `local edits: none`; green proof: `tests/check-vendor-inventory.sh`, `tests/check-vendor-state.sh`, `tests/check-vendor-arguments.sh`, the 37-case linter matrix, all four eval regression suites, `/bin/bash -n` over every shell script, and `git diff --check` passed under macOS system Bash/tools; the focused inventory suite also passed under Linux Bash 3.2 and produced a byte-for-byte identical manifest body to macOS · notes manifest format 2 C-sorts typed records for directories, regular-file content and executable state, and exact symlink targets; paths and targets are hex encoded; unsupported entries and inventory-tool failures block check/refresh even with `--force`; legacy, unknown, contradictory, and malformed manifests never report pristine, while explicit force migration requires a safe live inventory; review-found error-masking, duplicate format-header, GNU/BSD `stat` probe, stale post-copy manifest, and overbroad permission wording defects were fixed and regression-covered; full non-executable permission bits, ACLs, xattrs, hard-link topology, atomic replacement (F15), CI matrix expansion (R09), and stronger hashes (R10) remain explicitly separate
 
 ### [x] F10 — `pipefail` Truncates Local-Edit Diagnostics
 

@@ -19,6 +19,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS=(linked-records linked-records-claims linked-records-upkeep)
 MANIFEST=".agents/skills/.vendored-manifest"
+MANIFEST_FORMAT=2
 
 MODE=copy
 MODE_SET=no
@@ -61,44 +62,7 @@ fi
 
 cd "$PROJECT_DIR"
 
-# Checksums of the currently vendored real files, deterministic order.
-# Symlinked skill dirs hold no local work and are excluded.
-checksum_vendored() {
-  for s in "${SKILLS[@]}"; do
-    d=".agents/skills/$s"
-    { [ -d "$d" ] && [ ! -L "$d" ]; } || continue
-    find "$d" -type f | sort
-  done | while IFS= read -r f; do cksum "$f"; done
-}
-
-manifest_field() {
-  sed -n "s/^# $1: //p" "$MANIFEST" 2>/dev/null | head -1
-}
-
-report_checksum_changes() {
-  local expected="$1"
-  local actual="$2"
-  local diff_output
-  local diff_status
-
-  if diff_output="$(diff <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") 2>&1)"; then
-    diff_status=0
-  else
-    diff_status=$?
-  fi
-
-  case "$diff_status" in
-  0) return 0 ;;
-  1)
-    printf '%s\n' "$diff_output" |
-      awk '/^[<>]/ {print "  " $NF}' | LC_ALL=C sort -u
-    ;;
-  *)
-    printf 'error: diff failed while comparing vendored skills (status %s)\n' "$diff_status" >&2
-    return "$diff_status"
-    ;;
-  esac
-}
+source "$REPO/lib/vendor-inventory.sh"
 
 if [ "$MODE" = "check" ]; then
   SKILL_STATES=()
@@ -145,21 +109,56 @@ if [ "$MODE" = "check" ]; then
   fi
 
   status=0
-  current="$(checksum_vendored)"
-  expected="$(grep -v '^#' "$MANIFEST" 2>/dev/null || true)"
   rev="$(manifest_field revision)"
   url="$(manifest_field vendored-from)"
   when="$(manifest_field date)"
+  manifest_format_state=invalid
+  if manifest_format="$(manifest_format_value)"; then
+    manifest_format_state=valid
+  else
+    manifest_format_status=$?
+    if [ "$manifest_format_status" -eq 1 ]; then
+      manifest_format_state=legacy
+    fi
+  fi
   echo "provenance : ${url:-unknown} @ ${rev:-unknown} (${when:-unknown})"
+
+  inventory_ok=yes
+  if current="$(inventory_vendored)"; then
+    :
+  else
+    inventory_ok=no
+    status=1
+  fi
   if [ ! -f "$MANIFEST" ]; then
     echo "local edits: unknown (no manifest)"
+    status=1
+  elif [ "$inventory_ok" = no ]; then
+    echo "local edits: unknown (inventory failed)"
+  elif [ "$manifest_format_state" = legacy ]; then
+    echo "local edits: unknown (legacy manifest format)"
+    status=1
+  elif [ "$manifest_format_state" = invalid ]; then
+    echo "local edits: unknown (invalid manifest format)"
+    status=1
+  elif [ "$manifest_format" != "$MANIFEST_FORMAT" ]; then
+    echo "local edits: unknown (unsupported manifest format $manifest_format)"
+    status=1
+  elif ! expected="$(manifest_inventory)" ||
+    ! printf '%s\n' "$expected" | validate_inventory; then
+    echo "local edits: unknown (invalid manifest inventory)"
     status=1
   elif [ "$current" = "$expected" ]; then
     echo "local edits: none"
   else
-    echo "local edits: YES — files differing from what was vendored:"
-    report_checksum_changes "$expected" "$current"
-    status=1
+    echo "local edits: YES — entries differing from what was vendored:"
+    if report_inventory_changes "$expected" "$current"; then
+      status=1
+    else
+      comparison_status=$?
+      echo "local edit details: unavailable (comparison failed)"
+      status="$comparison_status"
+    fi
   fi
   if [ -n "$rev" ] && [ -n "$url" ]; then
     head="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$url" HEAD 2>/dev/null | awk '{print $1}')" || head=""
@@ -169,11 +168,11 @@ if [ "$MODE" = "check" ]; then
       echo "published  : current (matches HEAD)"
     else
       echo "published  : STALE — HEAD is $head; re-run vendor.sh to refresh"
-      status=1
+      [ "$status" -ne 0 ] || status=1
     fi
   else
     echo "published  : unknown (manifest has no provenance stamp; refresh to add one)"
-    status=1
+    [ "$status" -ne 0 ] || status=1
   fi
   exit "$status"
 fi
@@ -192,19 +191,62 @@ if [ "$MODE" = "copy" ] && git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; t
     sed -E 's#^git@([^:]+):#https://\1/#; s#\.git$##')" || URL=""
 fi
 
-# Refuse to discard local edits to vendored copies (see --force).
-current="$(checksum_vendored)"
-if [ -n "$current" ] && [ "$FORCE" = "no" ]; then
+# Refuse to discard local edits to vendored copies (see --force). Unsupported
+# live entries and inventory errors are never force-overridden: remove or
+# preserve them explicitly before asking the script to replace the tree.
+if current="$(inventory_vendored)"; then
+  :
+else
+  echo "error: cannot safely inventory the existing vendored skills." >&2
+  exit 1
+fi
+if { [ -n "$current" ] || [ -f "$MANIFEST" ]; } && [ "$FORCE" = "no" ]; then
   if [ ! -f "$MANIFEST" ]; then
     echo "error: vendored skills exist but no manifest was found, so local" >&2
     echo "edits cannot be told apart from staleness. Re-run with --force to" >&2
     echo "overwrite, or remove .agents/skills/ manually first." >&2
     exit 1
   fi
-  expected="$(grep -v '^#' "$MANIFEST" 2>/dev/null || true)"
+  manifest_format_state=invalid
+  if manifest_format="$(manifest_format_value)"; then
+    manifest_format_state=valid
+  else
+    manifest_format_status=$?
+    if [ "$manifest_format_status" -eq 1 ]; then
+      manifest_format_state=legacy
+    fi
+  fi
+  if [ "$manifest_format_state" = legacy ]; then
+    echo "error: the vendored manifest uses the legacy unversioned format," >&2
+    echo "which cannot prove that executable state, links, or directories are pristine." >&2
+    echo "Inspect and preserve local work, then re-run with --force to replace it." >&2
+    exit 1
+  fi
+  if [ "$manifest_format_state" = invalid ]; then
+    echo "error: the vendored manifest has duplicate or malformed format headers." >&2
+    echo "Inspect and preserve local work before replacing this installation." >&2
+    exit 1
+  fi
+  if [ "$manifest_format" != "$MANIFEST_FORMAT" ]; then
+    echo "error: unsupported vendored manifest format: $manifest_format" >&2
+    echo "Inspect and preserve local work before replacing this installation." >&2
+    exit 1
+  fi
+  expected="$(manifest_inventory)"
+  if ! printf '%s\n' "$expected" | validate_inventory; then
+    echo "error: the vendored manifest inventory is invalid." >&2
+    echo "Inspect and preserve local work before replacing this installation." >&2
+    exit 1
+  fi
   if [ "$current" != "$expected" ]; then
     echo "error: vendored skills were edited since they were vendored:" >&2
-    report_checksum_changes "$expected" "$current" >&2
+    if report_inventory_changes "$expected" "$current" >&2; then
+      :
+    else
+      comparison_status=$?
+      echo "error: local edit details are unavailable." >&2
+      exit "$comparison_status"
+    fi
     echo "Merge those edits into the canonical repo, or re-run with --force" >&2
     echo "to discard them." >&2
     exit 1
@@ -223,11 +265,19 @@ for s in "${SKILLS[@]}"; do
 done
 
 if [ "$MODE" = "copy" ]; then
+  if current="$(inventory_vendored)"; then
+    :
+  else
+    rm -f "$MANIFEST"
+    echo "error: copied skills could not be inventoried; no manifest was written." >&2
+    exit 1
+  fi
   {
+    echo "# manifest-format: $MANIFEST_FORMAT"
     if [ -n "$URL" ]; then echo "# vendored-from: $URL"; fi
     if [ -n "$REV" ]; then echo "# revision: $REV"; fi
     echo "# date: $(date +%Y-%m-%d)"
-    checksum_vendored
+    printf '%s\n' "$current"
   } >"$MANIFEST"
 else
   rm -f "$MANIFEST"

@@ -4,20 +4,21 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR="$REPO/vendor.sh"
 REAL_RM="$(type -P rm)"
+REAL_AWK="$(type -P awk)"
 ORIGINAL_PATH="$PATH"
 TEST_PARENT="${TMPDIR:-/tmp}"
 TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-state.XXXXXX")"
 PROJECTS="$TEST_ROOT/projects"
 SNAPSHOTS="$TEST_ROOT/snapshots"
 SPY_BIN="$TEST_ROOT/git-spy-bin"
-DIFF_SPY_BIN="$TEST_ROOT/diff-spy-bin"
+COMPARISON_SPY_BIN="$TEST_ROOT/comparison-spy-bin"
 GIT_SPY_LOG="$TEST_ROOT/git-calls"
 SKILLS=(linked-records linked-records-claims linked-records-upkeep)
 
 unset BASH_ENV ENV
 unset -f rm 2>/dev/null || true
 unset -f git 2>/dev/null || true
-unset -f diff 2>/dev/null || true
+unset -f awk 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
@@ -179,7 +180,7 @@ assert_structural_failure() {
     fail "$name called git before rejecting structural state: $(sed -n '1,20p' "$GIT_SPY_LOG")"
 }
 
-mkdir -p "$PROJECTS" "$SNAPSHOTS" "$SPY_BIN" "$DIFF_SPY_BIN"
+mkdir -p "$PROJECTS" "$SNAPSHOTS" "$SPY_BIN" "$COMPARISON_SPY_BIN"
 
 linked_project="$(make_link_project all-linked)"
 
@@ -265,11 +266,14 @@ chmod +x "$SPY_BIN/git"
 
 {
   printf '%s\n' '#!/usr/bin/env bash'
-  printf '%s\n' "printf '%s\\n' '< 1 2 .agents/skills/fake-partial-path'"
-  printf '%s\n' "printf '%s\\n' '< 1 2 .agents/skills/fake-partial-path' >&2"
-  printf '%s\n' 'exit 2'
-} >"$DIFF_SPY_BIN/diff"
-chmod +x "$DIFF_SPY_BIN/diff"
+  printf '%s\n' 'if [ "$#" -eq 3 ] && [ -r "$2" ] && [ -r "$3" ]; then'
+  printf '%s\n' "    printf '%s\\n' '.agents/skills/fake-partial-path'"
+  printf '%s\n' "    printf '%s\\n' '.agents/skills/fake-partial-path' >&2"
+  printf '%s\n' '    exit 2'
+  printf '%s\n' 'fi'
+  printf 'exec %q "$@"\n' "$REAL_AWK"
+} >"$COMPARISON_SPY_BIN/awk"
+chmod +x "$COMPARISON_SPY_BIN/awk"
 
 # Prove the PATH spy observes vendor.sh's only network-capable command before
 # empty logs are accepted as evidence in structural-failure cases.
@@ -288,7 +292,7 @@ assert_contains all-copied "$RUN_OUTPUT" "provenance :"
 assert_contains all-copied "$RUN_OUTPUT" "local edits: none"
 assert_contains all-copied "$RUN_OUTPUT" "published  : unknown (remote unreachable)"
 
-expected_edit_paths="$(printf '  %s\n' \
+expected_edit_paths="$(printf '  content changed: %s\n' \
   '.agents/skills/linked-records-claims/SKILL.md' \
   '.agents/skills/linked-records/SKILL.md')"
 
@@ -329,23 +333,23 @@ cmp -s "$SNAPSHOTS/edited-refresh.before" "$SNAPSHOTS/edited-refresh.after" ||
   fail "edited refresh changed the project tree"
 
 for mode in check refresh; do
-  snapshot_tree "$edited_project" "$SNAPSHOTS/diff-error-$mode.before"
+  snapshot_tree "$edited_project" "$SNAPSHOTS/comparison-error-$mode.before"
   if [ "$mode" = check ]; then
-    run_vendor_split diff-error-check "$DIFF_SPY_BIN:$ORIGINAL_PATH" --check "$edited_project"
+    run_vendor_split comparison-error-check "$COMPARISON_SPY_BIN:$ORIGINAL_PATH" --check "$edited_project"
   else
-    run_vendor_split diff-error-refresh "$DIFF_SPY_BIN:$ORIGINAL_PATH" --copy "$edited_project"
+    run_vendor_split comparison-error-refresh "$COMPARISON_SPY_BIN:$ORIGINAL_PATH" --copy "$edited_project"
   fi
   [ "$RUN_STATUS" -eq 2 ] ||
-    fail "diff-error $mode returned $RUN_STATUS instead of 2: $RUN_STDOUT $RUN_STDERR"
-  assert_contains "diff-error $mode" "$RUN_STDERR" "error: diff failed while comparing vendored skills (status 2)"
-  assert_omits "diff-error $mode stdout" "$RUN_STDOUT" ".agents/skills/fake-partial-path"
-  assert_omits "diff-error $mode stderr" "$RUN_STDERR" ".agents/skills/fake-partial-path"
-  snapshot_tree "$edited_project" "$SNAPSHOTS/diff-error-$mode.after"
-  cmp -s "$SNAPSHOTS/diff-error-$mode.before" "$SNAPSHOTS/diff-error-$mode.after" ||
-    fail "diff-error $mode changed the project tree"
+    fail "comparison-error $mode returned $RUN_STATUS instead of 2: $RUN_STDOUT $RUN_STDERR"
+  assert_contains "comparison-error $mode" "$RUN_STDERR" "error: inventory comparison failed (status 2)"
+  assert_omits "comparison-error $mode stdout" "$RUN_STDOUT" ".agents/skills/fake-partial-path"
+  assert_omits "comparison-error $mode stderr" "$RUN_STDERR" ".agents/skills/fake-partial-path"
+  snapshot_tree "$edited_project" "$SNAPSHOTS/comparison-error-$mode.after"
+  cmp -s "$SNAPSHOTS/comparison-error-$mode.before" "$SNAPSHOTS/comparison-error-$mode.after" ||
+    fail "comparison-error $mode changed the project tree"
 done
 
-# A coherent copied tree stays in the legacy manifest pipeline, including its
+# A coherent copied tree stays in the manifest pipeline, including its
 # existing missing-manifest status and output semantics.
 assert_read_only_result copied-no-manifest "$missing_manifest_project" 1 --check "$missing_manifest_project"
 assert_omits copied-no-manifest "$RUN_OUTPUT" "incoherent vendoring state"
