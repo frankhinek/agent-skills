@@ -1043,3 +1043,13 @@ Do not close this checklist until all applicable items above are `[x]` or `[N/A]
 - [x] Prove a labeled collision leaves the existing summary unchanged.
 
 **Completion record:** commit `fix(evals): isolate result directories` after checklist closure · validation red proof: two sequential unlabeled invalid-selection runs both resolved to `results/2026-08-11-claude/summary.md`, and the second overwrote the first; a slash-bearing label could also route evidence through a prepared nested path · green proof: `evals/tests/check-result-isolation.sh` proves concurrent automatic-path separation, single-component label containment, and fail-closed labeled collisions; the complete eval regression suite, repository contract suite, Bash syntax, ShellCheck 0.11.0, and `git diff --check` pass · notes unlabeled paths use a UTC timestamp plus process ID and atomic directory creation; `EVAL_LABEL` keeps a predictable path but is now validated and single-use per date and harness
+
+### Post-Closure Eval Summary Write Integrity
+
+- [x] Check summary creation and every append operation.
+- [x] Emit a distinct diagnostic and exit nonzero on a summary write failure.
+- [x] Do not print a scenario `PASS` after its result could not be recorded.
+- [x] Prove a fully successful scenario cannot score green when its final
+  summary append fails.
+
+**Completion record:** working-tree fix after `fix(evals): isolate result directories` · validation red proof: a generated fault-injection runner completed a compliant agent response and passing checker, failed its final scenario-summary append, then printed `PASS: gate-conflict` and exited 0; green proof: `evals/tests/run-failure-gates.sh` forces the same late append failure and requires a nonzero exit, the `result summary write failed` diagnostic, and no scenario PASS; the runner now checks its frontmatter creation plus scenario-selection, run-metadata, invalid-result, and scored-result appends · notes a failed write may leave a partial result directory for diagnosis, but that directory is explicitly unscored

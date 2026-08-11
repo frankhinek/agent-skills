@@ -307,6 +307,22 @@ SHIM
   chmod +x "$dir/codex"
 }
 
+make_late_summary_failure_runner() {
+  local output="$1"
+
+  awk '
+    /^EVALS=/ {
+      print "EVALS=\"${EVAL_TEST_SOURCE_ROOT:?missing source root}\""
+      next
+    }
+    { print }
+    /^  scenario_status=PASS$/ {
+      print "  summary=\"$OUT\""
+    }
+  ' "$RUNNER" >"$output"
+  chmod +x "$output"
+}
+
 run_case() {
   local name="$1"
   local harness="$2"
@@ -409,6 +425,20 @@ assert_contains "$LAST_OUT/summary.md" "PASS: response signal"
 assert_contains "$LAST_OUT/summary.md" "PASS: postconditions"
 [ -e "$version_marker" ] || fail "version marker never fired; selection checks could be vacuous"
 [ -e "$fixture_marker" ] || fail "fixture marker never fired; selection checks could be vacuous"
+
+production_runner="$RUNNER"
+late_failure_runner="$TEST_ROOT/run-late-summary-failure.sh"
+make_late_summary_failure_runner "$late_failure_runner"
+RUNNER="$late_failure_runner"
+export EVAL_TEST_SOURCE_ROOT="$EVALS"
+run_case late-summary-failure claude compliant gate-conflict
+late_summary_rc=$LAST_RC
+late_summary_console=$LAST_CONSOLE
+unset EVAL_TEST_SOURCE_ROOT
+RUNNER="$production_runner"
+[ "$late_summary_rc" -ne 0 ] || fail "late summary-write failure returned success"
+assert_contains "$late_summary_console" 'result summary write failed:'
+assert_not_contains "$late_summary_console" '^PASS: gate-conflict$'
 
 run_case codex-pass codex compliant gate-conflict
 [ "$LAST_RC" -eq 0 ] || fail "Codex positive control failed"

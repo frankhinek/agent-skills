@@ -161,10 +161,12 @@ instead of merging or overwriting evidence. Labels must start with an ASCII
 letter or digit and may otherwise contain ASCII letters, digits, dots,
 underscores, and hyphens. Each directory contains a committed `summary.md`;
 final responses (`*.response.txt`) and console diagnostics (`*.log`) under
-`logs/` are gitignored. Re-run on model upgrades or substantive skill edits;
-results are point-in-time, and cheap re-runs matter more than exhaustive
-coverage. Each headless run costs real tokens (8 scenarios ≈ 8 agent sessions
-per harness).
+`logs/` are gitignored. Any summary creation or append failure terminates the
+run nonzero before a scenario can be reported as `PASS`; treat the incomplete
+directory as diagnostic evidence, not a scored result. Re-run on model upgrades
+or substantive skill edits; results are point-in-time, and cheap re-runs matter
+more than exhaustive coverage. Each headless run costs real tokens (8 scenarios
+≈ 8 agent sessions per harness).
 
 The local regression suites spend no agent tokens; the runner failure suite
 uses fake Claude and Codex adapters:

@@ -106,8 +106,13 @@ if ! mkdir -- "$OUT" 2>/dev/null; then
   exit 2
 fi
 
+summary_write_failed() {
+  echo "result summary write failed: $summary" >&2
+  exit 1
+}
+
 write_summary_header() {
-  printf '%s\n' \
+  if printf '%s\n' \
     '---' \
     "summary: \"Records the $HARNESS_NAME linked-records behavioral eval run from $DATE.\"" \
     'read_when:' \
@@ -115,12 +120,16 @@ write_summary_header() {
     "  - Investigating this eval run's mechanical and escalation results" \
     "title: \"$HARNESS_NAME Eval Run — $DATE\"" \
     '---' \
-    >"$summary"
+    >"$summary"; then
+    :
+  else
+    summary_write_failed
+  fi
 }
 
 if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ] || [ "${#SCENARIOS[@]}" -eq 0 ]; then
   write_summary_header
-  {
+  if {
     echo
     echo "# Eval run: $HARNESS, $DATE"
     echo
@@ -139,7 +148,11 @@ if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ] || [ "${#SCENARIOS[@]}" -eq 0 ]; then
     else
       echo "- detail: no scenarios discovered"
     fi
-  } >>"$summary"
+  } >>"$summary"; then
+    :
+  else
+    summary_write_failed
+  fi
 
   if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ]; then
     for unknown in "${UNKNOWN_SCENARIOS[@]}"; do
@@ -168,7 +181,7 @@ if ! sandbox_version="$("$SANDBOX" --backend-version 2>/dev/null)" || [ -z "$san
   sandbox_version="unavailable"
 fi
 
-{
+if {
   echo
   echo "# Eval run: $HARNESS, $DATE"
   echo
@@ -188,14 +201,18 @@ fi
   echo "- safety checks: .agents write and .git/sibling denial before subject; sibling escape canaries after subject and postconditions"
   echo "- final responses and diagnostics: logs/"
   echo "- mechanical checks below; judge escalation quality from final responses"
-} >>"$summary"
+} >>"$summary"; then
+  :
+else
+  summary_write_failed
+fi
 
 record_invalid() {
   local scenario="$1"
   local reason="$2"
   local detail="$3"
   local duration="$4"
-  {
+  if {
     echo
     echo "## $scenario"
     echo
@@ -203,7 +220,11 @@ record_invalid() {
     echo "- detail: $detail"
     echo "- duration: ${duration}s"
     echo "- diagnostics: logs/$scenario.log"
-  } >>"$summary"
+  } >>"$summary"; then
+    :
+  else
+    summary_write_failed
+  fi
   echo "INVALID: $reason — $detail"
   echo
 }
@@ -480,7 +501,7 @@ for s in "${SCENARIOS[@]}"; do
     overall=1
   fi
 
-  {
+  if {
     echo
     echo "## $s"
     echo
@@ -504,7 +525,11 @@ for s in "${SCENARIOS[@]}"; do
     echo '```'
     echo "$check"
     echo '```'
-  } >>"$summary"
+  } >>"$summary"; then
+    :
+  else
+    summary_write_failed
+  fi
   echo "$scenario_status: $s"
   echo "PASS: safety boundary"
   if [ "$signal_rc" -eq 0 ]; then
