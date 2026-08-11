@@ -1,5 +1,5 @@
 ---
-summary: "Tracks every unresolved review finding with its context, proof, recommended remediation, and completion gate."
+summary: "Tracks repository review findings, remediation evidence, and final completion gates."
 read_when:
   - Working through the linked-records hardening findings one by one
   - Verifying a fix before marking its checklist item complete
@@ -8,7 +8,7 @@ title: "Linked Records Review Checklist"
 
 # Linked Records Review Checklist
 
-> Temporary, uncommitted working artifact. Keep this file until every item is either complete or explicitly closed with a written rationale. Do not treat the current eval or lint results as proof of correctness until F01–F04 are complete.
+> Temporary, tracked completion artifact. Keep this file until every item is either complete or explicitly closed with a written rationale.
 
 ## Objective
 
@@ -42,7 +42,7 @@ For every item:
 - [ ] Review the final diff for collateral behavior changes.
 - [ ] Fill in the completion record, then mark the item complete.
 
-## Original Seven-Fix Verdict
+## Original Seven-Fix Verdict at the Review Baseline
 
 | Original fix | Review verdict | Remaining work |
 |---|---|---|
@@ -62,7 +62,7 @@ For every item:
 4. Groom authority: F13 and R08.
 5. Installer and documentation: R01 and F07.
 6. Cross-cutting regression suite and harness parity: R06, R07, R09.
-7. Licensing decision: D01 only after written permission is available.
+7. Licensing decision: D01 after compatible public licenses or written permission are available.
 
 The order is load-bearing. A green eval or lint result is weak evidence until its false-green paths are closed.
 
@@ -905,7 +905,7 @@ Create a portable shell regression suite with isolated temporary repositories an
 
 **Completion record:** commit `ci: run contract regressions across platforms` · validation red proof: no aggregate regression command or CI workflow existed, direct leaf execution from a dirty skill source failed before reaching its assertions, and focused probes demonstrated missing, unregistered, and failing child suites; green proof: `tests/check-regressions.sh` passed all six vendor suites, the installer suite, and the 37-case linter matrix on macOS, including from a dirty contract tree and with hostile inherited Git variables; missing and unregistered-suite probes exited 1, an injected child failure preserved exit 73, `/bin/bash -n` passed for every shell script, the workflow YAML parsed successfully, and `git diff --check` passed · notes the runner commits current contract files only inside an isolated temporary fixture, preserves each leaf suite's `/bin/bash` portability checks, detects both missing registered suites and matching unregistered suites, and is wired unchanged to `macos-latest` and `ubuntu-latest`; the hosted matrix will first execute after a push, which is outside this commit-only request
 
-### [ ] R10 — `cksum` Is an Accidental-Edit Detector, Not a Tamper Seal
+### [x] R10 — `cksum` Is an Accidental-Edit Detector, Not a Tamper Seal
 
 **Location:** `.agents/skills/.vendored-manifest` contract and `vendor.sh`
 
@@ -917,56 +917,57 @@ POSIX `cksum` is portable and appropriate for accidental change detection, but C
 
 Choose and document the threat model. If the goal is only preventing accidental overwrite, keep `cksum` and say so. If untrusted-tamper detection is required, use a stronger available digest with a specified portability fallback or a signed release/manifest design.
 
-- [ ] Record the threat-model decision in README and script comments.
-- [ ] Remove any language that implies cryptographic authenticity unless implemented.
-- [ ] If upgraded, test algorithm/version negotiation across supported platforms.
+- [x] Record the threat-model decision in README and script comments.
+- [x] Remove any language that implies cryptographic authenticity unless implemented.
+- [N/A] If upgraded, test algorithm/version negotiation across supported platforms. The checksum algorithm and manifest format are unchanged.
 
-**Completion record:** decision ___ · validation ___ · notes ___
+**Completion record:** decision retain POSIX `cksum` as a portable overwrite-safety aid for accidental changes in a trusted, non-adversarial local workspace; do not claim cryptographic integrity, source authenticity, or malicious-tamper detection · validation two distinct 16-byte inputs produced the same `/usr/bin/cksum` record (`2752266698 16`), `tests/check-regressions.sh` passed all eight contract suites, `/bin/bash -n` passed for every shell script, and the retired authenticity-adjacent wording was absent · notes documentation and comments only; runtime behavior and manifest format are unchanged, and environments requiring adversarial integrity need a trusted signed release or manifest
 
 ---
 
 ## Human Decision Gate
 
-### [ ] D01 — Licensing and Upstream Permission
+### [x] D01 — Licensing and Upstream Permission
 
-**Current state:** intentionally unresolved; no root `LICENSE` file
-**Location:** `README.md:109–121`
+**Current state:** resolved through compatible public upstream licenses; root MIT `LICENSE` added
+**Location:** `LICENSE` and README `Provenance & license`
 
 **Context and background**
 
-The linked-records material is described as a synthesis derived from dpc’s Linked Specs and maan2003’s agentic-claims work. The scripts, linter, and eval suite are original. The public maan2003 repository exposes no license file, and the available dpc source was not verifiable during review. An unlicensed source does not provide a clear basis for applying MIT terms to derivative material. Private permission cannot be inferred from repository content.
+The linked-records material is a synthesis derived from dpc’s Linked Specs and maan2003’s agentic-claims work. The scripts, linter, and eval suite are original. At the review baseline, neither upstream license had been verified, so applying outbound terms to the derived material would have relied on unsupported assumptions.
 
-The previous root MIT license was removed at the reviewed HEAD. README now says permission is pending and no reuse rights are granted beyond platform terms. That is the safer present state.
+Both authors subsequently published compatible terms. dpc dedicated the complete `dpc-public-skills` repository to CC0 1.0 Universal. maan2003 licensed non-code content—including skill instructions and documentation—under CC0, while licensing code and executable files under MIT. The incorporated upstream material is instructional, and no file-specific override appears in `agentic-claims/SKILL.md`.
 
 **Proof and unknowns**
 
-- No root `LICENSE` exists at baseline `5116497`.
-- README records both upstream lineages and the pending-permission state.
-- The public `maan2003/public-skills` repository had no license when checked.
-- No written permission or sublicensing terms are present in this repository.
+- No root `LICENSE` existed at baseline `5116497`.
+- Initial commit `0005661` records the synthesis from dpc’s Linked Specs, maan2003’s agentic-claims, and ADR practice.
+- Canonical dpc revision `564df51f29eaef6c6084859d6368e450a6728ddb` contains a root CC0 license introduced by `401ecddb4e9d0e27c34a2aa7aa9cbf38ee3f9677`.
+- Canonical maan2003 revision `4bb7c110cdf712f7893ea19b0ceb7a6c253efe24` contains `LICENSE.md`; commit `4c916001aa33fc71f82ec118c331948d5d98307d` added CC0 coverage for skill instructions and MIT coverage for code.
+- README maps each local skill to its incorporated upstream concepts and preserves both pinned license sources.
 - This checklist is an engineering record, not legal advice.
 
 **Recommended resolution**
 
-Keep the current no-license notice until Frank has written permission that clearly covers copying, adaptation, redistribution, and relicensing of the derived material. Preserve the permission evidence outside the public repository if it contains private correspondence; summarize the resulting grant accurately in README. Then add the agreed license, which may or may not be MIT depending on the permission received.
+Rely on the upstream CC0 grants for the incorporated instruction material rather than private correspondence. Preserve the underlying material’s CC0 status and provenance. Apply MIT to Frank’s copyrightable contributions: the original code, adaptations, selection, and arrangement.
 
 **Decision checklist**
 
-- [ ] Identify every upstream portion incorporated into each skill.
-- [ ] Obtain written permission or a compatible upstream license for each derived portion.
-- [ ] Confirm the permission covers redistribution and the intended outbound license.
-- [ ] Record the decision and scope without publishing private correspondence.
-- [ ] Add the root license only after the permission scope is clear.
-- [ ] Update README provenance and licensing language to match the final grant.
-- [ ] If permission is not obtained, decide whether to rewrite the derived portions independently or retain the no-license state.
+- [x] Identify every upstream portion incorporated into each skill.
+- [x] Obtain written permission or a compatible upstream license for each derived portion.
+- [x] Confirm the permission covers redistribution and the intended outbound license.
+- [x] Record the decision and scope without publishing private correspondence.
+- [x] Add the root license only after the permission scope is clear.
+- [x] Update README provenance and licensing language to match the final grant.
+- [N/A] If permission is not obtained, decide whether to rewrite the derived portions independently or retain the no-license state. Compatible public licenses are now available.
 
 **Acceptance gate**
 
-- [ ] Repository license terms are supported by documented rights for every included component.
-- [ ] README lineage remains accurate.
-- [ ] No badge or metadata claims a license before the root license decision is complete.
+- [x] Repository license terms are supported by documented rights for every included component.
+- [x] README lineage remains accurate.
+- [x] No badge or metadata claims a license before the root license decision is complete.
 
-**Completion record:** decision ___ · evidence location ___ · commit ___ · notes ___
+**Completion record:** decision rely on the two public CC0 grants for incorporated instruction material and license Frank’s copyrightable contributions under MIT · evidence location pinned upstream revisions and license files in README `Provenance & license` · commit `docs: document licensing and checksum trust boundaries` · notes no private correspondence is required or published; upstream material remains available under CC0, and the root MIT license covers Frank’s original code and copyrightable adaptations, selection, and arrangement
 
 ---
 
@@ -987,7 +988,7 @@ Do not close this checklist until all applicable items above are `[x]` or `[N/A]
 - [ ] `git diff --check` passes.
 - [ ] ShellCheck runs clean if adopted/available, or its absence remains explicitly documented.
 - [ ] README accurately describes actual behavior and limitations.
-- [ ] Licensing state matches verified upstream rights.
+- [x] Licensing state matches verified upstream rights.
 - [ ] Final review finds no unresolved P1/P2 correctness, safety, or false-green issue.
 
 ## Final Completion Record

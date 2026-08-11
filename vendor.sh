@@ -324,7 +324,9 @@ if { [ -n "$current" ] || [ -f "$MANIFEST" ]; } && [ "$FORCE" = "no" ]; then
   fi
 fi
 
-# Copy mode distributes committed content only, so the stamp is truthful.
+# Copy mode distributes committed content only. Under the documented
+# non-adversarial inventory threat model, preflight rejects ordinary source
+# divergence before stamping committed provenance and payload identity.
 # Destination safety is established first; both checks precede mutation.
 if [ "$MODE" = "copy" ] && git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
   REV="$(git -C "$REPO" rev-parse HEAD)"

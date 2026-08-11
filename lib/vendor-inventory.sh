@@ -6,6 +6,8 @@
 #   F <hex path> <executable:0|1> <POSIX cksum> <byte count>
 #   L <hex path> <hex link target>
 # Hex fields keep path and target parsing independent of whitespace and locale.
+# POSIX cksum provides portable accidental-change detection. CRC collisions are
+# possible, so this inventory is not an authenticity proof or tamper seal.
 
 INVENTORY_STAT_STYLE=unavailable
 if inventory_stat_probe="$(stat -f '%Lp' "$REPO/vendor.sh" 2>/dev/null)"; then

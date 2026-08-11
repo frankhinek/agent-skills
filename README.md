@@ -81,12 +81,12 @@ repo. Use `--link` for throwaway local experiments (don't commit the links).
 Re-runs are guarded by a versioned filesystem manifest written at vendor
 time. It records directories, regular-file contents and executable state,
 and symlinks with their exact targets. A payload-stale but locally pristine
-copy refreshes freely, but a supported local change is never silently overwritten —
-vendor.sh refuses and identifies content, executable state, type, target,
-addition, and removal differences. Merge those edits into this repo (they're
-usually convention improvements worth keeping), then re-run with `--force`.
-Unsupported entries such as FIFOs, sockets, and devices fail closed even
-with `--force`; preserve or remove them explicitly first.
+copy refreshes freely, while ordinary supported local changes are detected
+before overwrite. `vendor.sh` refuses and identifies content, executable
+state, type, target, addition, and removal differences. Merge those edits into
+this repo (they're usually convention improvements worth keeping), then re-run
+with `--force`. Unsupported entries such as FIFOs, sockets, and devices fail
+closed even with `--force`; preserve or remove them explicitly first.
 
 An older unversioned manifest cannot prove that executable state, links, or
 directories are pristine. `--check` therefore reports its local state as
@@ -95,6 +95,14 @@ work, then use one explicit `--force` refresh to replace the copy and write
 the current manifest format.
 
 Full non-executable permission bits are intentionally not tracked.
+
+The manifest is an overwrite-safety aid for non-adversarial local changes.
+Regular-file records use POSIX `cksum` (CRC plus byte count) for portability.
+CRC collisions are possible, so the manifest is not a cryptographic integrity
+check, authenticity proof, or tamper seal. It cannot establish that vendored
+files came from the recorded source. Environments that require malicious-tamper
+detection need a trusted signed release or manifest; this repository does not
+provide one.
 
 Copy refreshes are transactional. `vendor.sh` first copies and verifies all
 three managed skills in a hidden staging directory on the destination
@@ -154,9 +162,9 @@ mutates or touches the network outside `--check`. Copy mode vendors committed
 content only (use `--link` while iterating on skills locally). Before copying,
 it compares the physical managed-skill inventory with the raw committed Git
 trees, including content, entry type, executable state, links, and directories.
-That rejects ordinary changes plus ignored files, empty directories,
-index-hidden paths, checkout-filter differences, and embedded repositories so
-the payload stamp remains truthful.
+That rejects ordinary source divergence, including content changes, ignored
+files, empty directories, index-hidden paths, checkout-filter differences, and
+embedded repositories, before the payload ID is stamped.
 
 Before checking provenance, `--check` inventories all three expected skill
 destinations and their regular `SKILL.md` markers. A coherent install whose
@@ -210,19 +218,31 @@ commit, push — every tool sees the change immediately.
   first." For a tool that reads a different hints file (e.g. Goose's
   `.goosehints`), a one-line "Read AGENTS.md" suffices.
 
-## Provenance & licensing status
+## Provenance & license
 
-The linked-records skills are a synthesis derived from
-[dpc](https://radicle.network/nodes/radicle.dpc.pw/rad%3Az2HR882B4c4mTdAgdt4SozpdeTuMf)'s
-Linked Specs convention (`dpc-public-skills` on his Radicle node) and
-[maan2003](https://github.com/maan2003/public-skills)'s agentic-claims
-skill, with ADR practice as the historical backdrop. The scripts, linter,
-and eval suite are original to this repo.
+The linked-records skill family is a personal synthesis with this lineage:
 
-**No license yet.** Both upstreams are unlicensed personal repos, and
-relicensing the derived material here is pending their authors'
-permission. Until that lands, no reuse rights are granted beyond viewing
-and forking under GitHub's terms.
+| Local material | Upstream lineage |
+|---|---|
+| `linked-records` | dpc's Linked Specs record model, with maan2003's claim concept incorporated as the `CLAIM` record type |
+| `linked-records-claims` | maan2003's agentic-claims proof and verification practice, adapted to the Linked Specs authority model |
+| `linked-records-upkeep` | dpc's Linked Specs bootstrapping and grooming practices, with claim boundaries from the combined model |
+| Scripts, linter, and eval suite | Original to this repository |
+
+ADR practice is the historical backdrop. The relevant upstream instruction
+material is available under CC0 1.0 Universal:
+
+- [dpc's `dpc-public-skills` at `564df51f`](https://radicle.network/nodes/radicle.dpc.pw/rad%3Az2HR882B4c4mTdAgdt4SozpdeTuMf) dedicates the repository, including its
+  Linked Specs skills, to [CC0](https://radicle.dpc.pw/raw/rad%3Az2HR882B4c4mTdAgdt4SozpdeTuMf/564df51f29eaef6c6084859d6368e450a6728ddb/LICENSE).
+- [maan2003's `public-skills` at `4bb7c110`](https://github.com/maan2003/public-skills/tree/4bb7c110cdf712f7893ea19b0ceb7a6c253efe24) licenses non-code content,
+  including skill instructions and documentation, under
+  [CC0](https://github.com/maan2003/public-skills/blob/4bb7c110cdf712f7893ea19b0ceb7a6c253efe24/LICENSE.md).
+
+Those public grants permit the incorporation and adaptation used here; no
+private permission is relied upon. The upstream material remains available
+under CC0. Frank's copyrightable contributions—including the original code,
+skill adaptations, selection, and arrangement—are licensed under the
+[MIT License](LICENSE).
 
 ## Conventions for skills in this repo
 
