@@ -1,18 +1,18 @@
 ---
-summary: "Tracks repository review findings, remediation evidence, and final completion gates."
+summary: "Records the completed repository review, remediation evidence, and closure gates."
 read_when:
-  - Working through the linked-records hardening findings one by one
-  - Verifying a fix before marking its checklist item complete
+  - Auditing the linked-records hardening decisions and their evidence
+  - Investigating why a reviewed behavior or limitation was chosen
 title: "Linked Records Review Checklist"
 ---
 
 # Linked Records Review Checklist
 
-> Temporary, tracked completion artifact. Keep this file until every item is either complete or explicitly closed with a written rationale.
+> Completed, tracked review artifact. All findings and final gates closed on 2026-08-10; retain this file as remediation evidence.
 
 ## Objective
 
-Finish the seven original fixes without losing the review context that showed where each fix remains incomplete. Work one item at a time. Preserve the distinction between a code defect, a missing regression test, a documented limitation, and a human decision gate.
+Preserve the review context and completion evidence for the seven original fixes. The record distinguishes code defects, regression coverage, documented limitations, and human decision gates.
 
 ## Review Baseline
 
@@ -32,15 +32,15 @@ Finish the seven original fixes without losing the review context that showed wh
 - `[x]` complete, with the completion record filled in.
 - `[N/A]` intentionally closed without implementation; record the decision and rationale.
 
-For every item:
+The completed work followed this per-item protocol:
 
-- [ ] Reproduce or preserve the original failure before changing behavior.
-- [ ] Implement the smallest complete fix.
-- [ ] Add a regression test that fails on the old behavior and passes on the new behavior.
-- [ ] Update user-facing or contributor documentation when the contract changes.
-- [ ] Run the item-specific acceptance checks.
-- [ ] Review the final diff for collateral behavior changes.
-- [ ] Fill in the completion record, then mark the item complete.
+- Reproduce or preserve the original failure before changing behavior.
+- Implement the smallest complete fix.
+- Add a regression test that fails on the old behavior and passes on the new behavior when applicable.
+- Update user-facing or contributor documentation when the contract changes.
+- Run the item-specific acceptance checks.
+- Review the final diff for collateral behavior changes.
+- Fill in the completion record, then mark the item complete.
 
 ## Original Seven-Fix Verdict at the Review Baseline
 
@@ -903,7 +903,7 @@ Create a portable shell regression suite with isolated temporary repositories an
 - [x] Add a single documented command for local and CI execution.
 - [x] Avoid new dependencies unless their portability and maintenance justify them.
 
-**Completion record:** commit `ci: run contract regressions across platforms` · validation red proof: no aggregate regression command or CI workflow existed, direct leaf execution from a dirty skill source failed before reaching its assertions, and focused probes demonstrated missing, unregistered, and failing child suites; green proof: `tests/check-regressions.sh` passed all six vendor suites, the installer suite, and the 37-case linter matrix on macOS, including from a dirty contract tree and with hostile inherited Git variables; missing and unregistered-suite probes exited 1, an injected child failure preserved exit 73, `/bin/bash -n` passed for every shell script, the workflow YAML parsed successfully, and `git diff --check` passed · notes the runner commits current contract files only inside an isolated temporary fixture, preserves each leaf suite's `/bin/bash` portability checks, detects both missing registered suites and matching unregistered suites, and is wired unchanged to `macos-latest` and `ubuntu-latest`; the hosted matrix will first execute after a push, which is outside this commit-only request
+**Completion record:** commit `ci: run contract regressions across platforms` · validation red proof: no aggregate regression command or CI workflow existed, direct leaf execution from a dirty skill source failed before reaching its assertions, and focused probes demonstrated missing, unregistered, and failing child suites; green proof: `tests/check-regressions.sh` passed all six vendor suites, the installer suite, and the 37-case linter matrix on macOS, including from a dirty contract tree and with hostile inherited Git variables; missing and unregistered-suite probes exited 1, an injected child failure preserved exit 73, `/bin/bash -n` passed for every shell script, the workflow YAML parsed successfully, and `git diff --check` passed; GitHub Actions run `31447454183` then passed the unchanged aggregate suite on `macos-latest` and `ubuntu-latest` · notes the runner commits current contract files only inside an isolated temporary fixture, preserves each leaf suite's `/bin/bash` portability checks, detects both missing registered suites and matching unregistered suites, and is wired unchanged to both supported hosted platforms
 
 ### [x] R10 — `cksum` Is an Accidental-Edit Detector, Not a Tamper Seal
 
@@ -975,27 +975,27 @@ Rely on the upstream CC0 grants for the incorporated instruction material rather
 
 Do not close this checklist until all applicable items above are `[x]` or `[N/A]` with rationale.
 
-- [ ] P1 eval false greens are closed before new eval output is cited as evidence.
-- [ ] Linter good/bad fixtures prove every mechanical rule it claims to enforce.
-- [ ] Vendor and installer state matrices pass on supported macOS and Linux shells.
-- [ ] Read-only commands are proven non-mutating across argument permutations and malformed state.
-- [ ] Filesystem replacement and cleanup paths are failure-safe.
-- [ ] Provenance inputs are sanitized and cannot select an unsafe Git transport.
-- [ ] Grooming cannot sample or mutate claims or claim evidence.
-- [ ] Behavioral scenarios cover gates, thresholds, claim immutability/staleness, bare activation, and grooming.
-- [ ] Authored and generated Markdown complies with repository frontmatter rules.
-- [ ] Bash syntax checks pass for every shell script.
-- [ ] `git diff --check` passes.
-- [ ] ShellCheck runs clean if adopted/available, or its absence remains explicitly documented.
-- [ ] README accurately describes actual behavior and limitations.
+- [x] P1 eval false greens are closed before new eval output is cited as evidence.
+- [x] Linter good/bad fixtures prove every mechanical rule it claims to enforce.
+- [x] Vendor and installer state matrices pass on supported macOS and Linux shells.
+- [x] Read-only commands are proven non-mutating across argument permutations and malformed state.
+- [x] Filesystem replacement and cleanup paths are failure-safe.
+- [x] Provenance inputs are sanitized and cannot select an unsafe Git transport.
+- [x] Grooming cannot sample or mutate claims or claim evidence.
+- [x] Behavioral scenarios cover gates, thresholds, claim immutability/staleness, bare activation, and grooming.
+- [x] Authored and generated Markdown complies with repository frontmatter rules.
+- [x] Bash syntax checks pass for every shell script.
+- [x] `git diff --check` passes.
+- [x] ShellCheck is not adopted or installed; its absence remains documented under Review Baseline, while Bash syntax and the hosted contract suites pass.
+- [x] README accurately describes actual behavior and limitations.
 - [x] Licensing state matches verified upstream rights.
-- [ ] Final review finds no unresolved P1/P2 correctness, safety, or false-green issue.
+- [x] Final review finds no unresolved P1/P2 correctness, safety, or false-green issue.
 
 ## Final Completion Record
 
-- Final commit or PR: ___
-- Validation environments: ___
-- Validation commands/results: ___
-- Explicitly deferred items and owners: ___
-- Remaining risks accepted by: ___
-- Checklist closed on: ___
+- Final commit or PR: `docs: close linked-records review checklist` on `main`; final-audit corrections `68b492b` and `32616de`
+- Validation environments: local macOS 15.7.7; GitHub Actions run `31447454183` on `macos-latest` and `ubuntu-latest`
+- Validation commands/results: `tests/check-regressions.sh` passed all eight contract suites and 37 linter cases; all six `evals/tests/` suites passed; `/bin/bash -n` passed for every shell script; `git diff --check` passed; independent standards, specification, and correctness/safety reviews found zero remaining P1/P2 blockers
+- Explicitly deferred items and owners: Frank/repository maintainer — P3-only split of `tests/check-vendor-transaction.sh`, shared vendor-test helpers, and eventual archive/removal of this deliberately monolithic historical artifact; ShellCheck remains unadopted
+- Remaining risks accepted by: Frank Hinek through the approved per-finding decisions and this closure request; documented limits include non-adversarial `cksum`, remote eval side effects, and untrappable `SIGKILL` cleanup windows
+- Checklist closed on: 2026-08-10
