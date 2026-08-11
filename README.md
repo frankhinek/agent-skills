@@ -129,6 +129,12 @@ Options may appear before or after the project directory. Copy mode is the
 default; conflicting modes, unknown options, extra directories, and
 `--check --force` are rejected before the project is touched.
 
+Destination paths fail closed before recovery, Git, network access, or any
+filesystem mutation. `.agents` and `.agents/skills` must be absent or real
+directories, and `AGENTS.md` must be absent or a regular file. Container and
+pointer symlinks are refused rather than followed, so project-scoped setup
+cannot write through them to another location.
+
 The manifest records two different identities: the full source commit for
 provenance, and a deterministic payload ID covering exactly the three managed
 skill trees. Remote provenance is stored only as

@@ -33,6 +33,9 @@ presented as healthy.
 - `lib/vendor-transaction.sh` stages and verifies a complete replacement on
   the destination filesystem before activation, with durable recovery state
   outside the managed payload.
+- Destination containers and the `AGENTS.md` pointer must be real local
+  filesystem entries, not symlinks that can redirect writes outside the
+  selected project.
 - `vendor.sh --check` remains read-only. Mutating modes validate destination
   safety and committed source state before starting a transaction.
 

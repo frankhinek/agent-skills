@@ -12,6 +12,7 @@ TEST_ROOT="$($REAL_MKTEMP -d "$TEST_PARENT/linked-records-regressions.XXXXXX")"
 SNAPSHOT="$TEST_ROOT/repo"
 SUITES=(
   tests/check-vendor-arguments.sh
+  tests/check-vendor-destination.sh
   tests/check-vendor-inventory.sh
   tests/check-vendor-provenance.sh
   tests/check-vendor-staleness.sh

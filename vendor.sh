@@ -61,6 +61,29 @@ fi
 
 cd "$PROJECT_DIR"
 
+validate_destination_paths() {
+  if [ -L .agents ] || { [ -e .agents ] && [ ! -d .agents ]; }; then
+    echo "error: unsafe vendor destination: .agents must be absent or a real directory." >&2
+    return 1
+  fi
+  if [ -L .agents/skills ] ||
+    { [ -e .agents/skills ] && [ ! -d .agents/skills ]; }; then
+    echo "error: unsafe vendor destination: .agents/skills must be absent or a real directory." >&2
+    return 1
+  fi
+  if [ -L AGENTS.md ] || { [ -e AGENTS.md ] && [ ! -f AGENTS.md ]; }; then
+    echo "error: unsafe vendor destination: AGENTS.md must be absent or a regular file." >&2
+    return 1
+  fi
+}
+
+# Validate every path the command may mutate before recovery, source
+# inspection, provenance/network work, or mode-specific filesystem changes.
+# Parent-container symlinks must never redirect project-scoped writes.
+if ! validate_destination_paths; then
+  exit 1
+fi
+
 source "$REPO/lib/vendor-inventory.sh"
 source "$REPO/lib/vendor-provenance.sh"
 source "$REPO/lib/vendor-transaction.sh"
