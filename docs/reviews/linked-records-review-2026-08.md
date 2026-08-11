@@ -996,7 +996,7 @@ Do not close this checklist until all applicable items above are `[x]` or `[N/A]
 - Final commit or PR: `docs: close linked-records review checklist` on `main`; final-audit corrections `68b492b` and `32616de`
 - Validation environments: local macOS 15.7.7; GitHub Actions run `31447454183` on `macos-latest` and `ubuntu-latest`
 - Validation commands/results: `tests/check-regressions.sh` passed all eight contract suites and 37 linter cases; all six `evals/tests/` suites passed; `/bin/bash -n` passed for every shell script; `git diff --check` passed; independent standards, specification, and correctness/safety reviews found zero remaining P1/P2 blockers
-- Explicitly deferred items and owners: Frank/repository maintainer — P3-only split of `tests/check-vendor-transaction.sh`, shared vendor-test helpers, and eventual archive/removal of this deliberately monolithic historical artifact
+- Explicitly deferred items and owners: Frank/repository maintainer — P3-only split of `tests/check-vendor-transaction.sh` and shared vendor-test helpers
 - Remaining risks accepted by: Frank Hinek through the approved per-finding decisions and this closure request; documented limits include non-adversarial `cksum`, remote eval side effects, and untrappable `SIGKILL` cleanup windows
 - Checklist closed on: 2026-08-10
 
