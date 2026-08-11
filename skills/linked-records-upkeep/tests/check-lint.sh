@@ -2,7 +2,7 @@
 # Regression matrix for the linked-records mechanical linter contract.
 set -uo pipefail
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 LINTER="$SCRIPT_DIR/../lint.sh"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-lint.XXXXXX")" || exit 2
 trap 'rm -rf "$TMP_ROOT"' EXIT
@@ -23,7 +23,8 @@ install_rm_probe() {
   put "$root/.test-bin/rm" \
     '#!/bin/sh' \
     'printf '\''%s\n'\'' "$*" >"${TMPDIR%/}/rm-called"' \
-    'tmp_parent="$(CDPATH= cd -- "${TMPDIR%/}" && pwd -P)" || exit 98' \
+    'unset CDPATH' \
+    'tmp_parent="$(cd -- "${TMPDIR%/}" && pwd -P)" || exit 98' \
     'case "$*" in' \
     '"-rf -- $tmp_parent/linked-records-lint.INIT00") command -p rm "$@" ;;' \
     '*) exit 99 ;;' \
@@ -67,7 +68,7 @@ verify_case() {
     ;;
   scratch-initialization-failure)
     local canonical_root
-    canonical_root="$(CDPATH= cd -- "$root" && pwd -P)" || return 1
+    canonical_root="$(CDPATH='' cd -- "$root" && pwd -P)" || return 1
     [ ! -e "$root/linked-records-lint.INIT00" ] || return 1
     grep -Fqx -e "-rf -- $canonical_root/linked-records-lint.INIT00" "$root/rm-called" || return 1
     ;;
@@ -451,7 +452,7 @@ while IFS='|' read -r name expected_rc expected_text setup; do
     wait "$fifo_writer" 2>/dev/null || true
   fi
   executed=$((executed + 1))
-  canonical_root="$(CDPATH= cd -- "$root" && pwd -P)"
+  canonical_root="$(CDPATH='' cd -- "$root" && pwd -P)"
   expected_text="${expected_text//@ROOT@/$canonical_root}"
 
   if [ "$rc" -ne "$expected_rc" ]; then

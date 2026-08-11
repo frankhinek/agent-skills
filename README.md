@@ -45,6 +45,13 @@ tests/check-regressions.sh
 The runner snapshots the current contract files into a temporary committed Git
 fixture, so it tests uncommitted changes without weakening `vendor.sh`'s
 committed-source requirement. The same command runs in CI on macOS and Linux.
+CI also downloads the checksum-verified official ShellCheck 0.11.0 binary for
+each platform and rejects warning-or-higher findings across every tracked shell
+script. Run the same static check locally with:
+
+```sh
+git ls-files -z -- '*.sh' | xargs -0 shellcheck --severity=warning
+```
 
 ## Install (per machine)
 

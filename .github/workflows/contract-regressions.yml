@@ -12,6 +12,8 @@ jobs:
   contracts:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    env:
+      SHELLCHECK_VERSION: "0.11.0"
     strategy:
       fail-fast: false
       matrix:
@@ -20,5 +22,53 @@ jobs:
           - ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Install ShellCheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Official v0.11.0 release asset digests:
+          # https://github.com/koalaman/shellcheck/releases/tag/v0.11.0
+          case "$(uname -s):$(uname -m)" in
+            Darwin:arm64)
+              platform=darwin.aarch64
+              checksum=339b930feb1ea764467013cc1f72d09cd6b869ebf1013296ba9055ab2ffbd26f
+              ;;
+            Darwin:x86_64)
+              platform=darwin.x86_64
+              checksum=c2c15e08df0e8fbc374c335b230a7ee958c313fa5714817a59aa59f1aa594f51
+              ;;
+            Linux:aarch64)
+              platform=linux.aarch64
+              checksum=68a8133197a50beb8803f8d42f9908d1af1c5540d4bb05fdfca8c1fa47decefc
+              ;;
+            Linux:x86_64)
+              platform=linux.x86_64
+              checksum=b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6
+              ;;
+            *)
+              echo "unsupported ShellCheck platform: $(uname -s):$(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+
+          archive="shellcheck-v${SHELLCHECK_VERSION}.${platform}.tar.gz"
+          archive_path="${RUNNER_TEMP}/${archive}"
+          curl -fsSL --retry 3 \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/${archive}" \
+            -o "$archive_path"
+          actual_checksum="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+          if [ "$actual_checksum" != "$checksum" ]; then
+            echo "ShellCheck checksum mismatch for $archive" >&2
+            exit 1
+          fi
+          tar -xzf "$archive_path" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-v${SHELLCHECK_VERSION}" >>"$GITHUB_PATH"
+      - name: Run ShellCheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          shellcheck --version
+          git ls-files -z -- '*.sh' |
+            xargs -0 shellcheck --severity=warning
       - name: Run contract regressions
         run: tests/check-regressions.sh

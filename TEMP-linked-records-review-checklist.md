@@ -986,7 +986,7 @@ Do not close this checklist until all applicable items above are `[x]` or `[N/A]
 - [x] Authored and generated Markdown complies with repository frontmatter rules.
 - [x] Bash syntax checks pass for every shell script.
 - [x] `git diff --check` passes.
-- [x] ShellCheck is not adopted or installed; its absence remains documented under Review Baseline, while Bash syntax and the hosted contract suites pass.
+- [x] At closure, ShellCheck was not adopted; the post-closure correction below now pins and enforces it in CI.
 - [x] README accurately describes actual behavior and limitations.
 - [x] Licensing state matches verified upstream rights.
 - [x] Final review finds no unresolved P1/P2 correctness, safety, or false-green issue.
@@ -996,7 +996,7 @@ Do not close this checklist until all applicable items above are `[x]` or `[N/A]
 - Final commit or PR: `docs: close linked-records review checklist` on `main`; final-audit corrections `68b492b` and `32616de`
 - Validation environments: local macOS 15.7.7; GitHub Actions run `31447454183` on `macos-latest` and `ubuntu-latest`
 - Validation commands/results: `tests/check-regressions.sh` passed all eight contract suites and 37 linter cases; all six `evals/tests/` suites passed; `/bin/bash -n` passed for every shell script; `git diff --check` passed; independent standards, specification, and correctness/safety reviews found zero remaining P1/P2 blockers
-- Explicitly deferred items and owners: Frank/repository maintainer — P3-only split of `tests/check-vendor-transaction.sh`, shared vendor-test helpers, and eventual archive/removal of this deliberately monolithic historical artifact; ShellCheck remains unadopted
+- Explicitly deferred items and owners: Frank/repository maintainer — P3-only split of `tests/check-vendor-transaction.sh`, shared vendor-test helpers, and eventual archive/removal of this deliberately monolithic historical artifact
 - Remaining risks accepted by: Frank Hinek through the approved per-finding decisions and this closure request; documented limits include non-adversarial `cksum`, remote eval side effects, and untrappable `SIGKILL` cleanup windows
 - Checklist closed on: 2026-08-10
 
@@ -1013,3 +1013,14 @@ Do not close this checklist until all applicable items above are `[x]` or `[N/A]
   external sentinels across every rejected symlink boundary.
 
 **Completion record:** commit `fix(vendor): contain project destination writes` after checklist closure · validation red proof: `tests/check-vendor-destination.sh` returned `agents-symlink-copy returned 0 instead of 1` after the payload was written outside the project; green proof: the same focused suite passed 18 copy, link, check, and forced-mode boundary cases with unchanged project/external snapshots, preserved same-named managed sentinels, and zero Git calls on macOS and Linux Bash 3.2; `tests/check-regressions.sh` passed all nine contract suites and 37 linter cases on macOS and Ubuntu 24.04; all six `evals/tests/` suites passed; `/bin/bash -n` passed for every shell script; and `git diff --check` passed · notes validation now occurs before transaction recovery and all mode-specific work; symlinked or wrong-type `.agents`, `.agents/skills`, and `AGENTS.md` paths fail closed without exposing their targets
+
+### Post-Closure ShellCheck CI Addition
+
+- [x] Pin the official ShellCheck 0.11.0 release binary and published SHA-256
+  digest for supported macOS and Linux runner architectures.
+- [x] Reject warning-or-higher findings across every tracked shell script.
+- [x] Remove the unused test variable, make empty `CDPATH` assignments
+  explicit, and document the sourced-helper global suppression.
+- [x] Preserve the behavioral contract suite on macOS and Linux.
+
+**Completion record:** commit `ci: enforce ShellCheck static analysis` after checklist closure · validation red proof: official ShellCheck 0.11.0 exited 1 with seven warning-level findings; green proof: the checksum-verified Darwin ARM64 and Linux x86_64 binaries both reported version 0.11.0 and returned 0 across every tracked shell script with `--severity=warning`; `tests/check-regressions.sh` passed all nine contract suites and 37 linter cases on macOS and Ubuntu 24.04 x86_64; the linter matrix also passed with a hostile ambient `CDPATH`; Bash syntax, workflow YAML parsing, and `git diff --check` passed · notes CI downloads only official release assets, verifies the pinned architecture-specific digest before extraction, and runs the static gate on both existing matrix platforms

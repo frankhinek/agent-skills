@@ -18,14 +18,14 @@ setup_error() {
 
 ROOT="$(pwd -P)" || setup_error "unable to resolve project root"
 TMP_PARENT="${TMPDIR:-/tmp}"
-TMP_PARENT="$(CDPATH= cd -- "$TMP_PARENT" 2>/dev/null && pwd -P)" ||
+TMP_PARENT="$(CDPATH='' cd -- "$TMP_PARENT" 2>/dev/null && pwd -P)" ||
   setup_error "unable to resolve temporary directory: ${TMPDIR:-/tmp}"
 TMP_PREFIX="${TMP_PARENT%/}/linked-records-lint."
 
 if ! TMP_RAW="$(mktemp -d "${TMP_PREFIX}XXXXXX")" || [ -z "$TMP_RAW" ]; then
   setup_error "unable to create scratch directory"
 fi
-if ! TMP="$(CDPATH= cd -- "$TMP_RAW" 2>/dev/null && pwd -P)"; then
+if ! TMP="$(CDPATH='' cd -- "$TMP_RAW" 2>/dev/null && pwd -P)"; then
   setup_error "unsafe scratch directory returned by mktemp: $TMP_RAW"
 fi
 

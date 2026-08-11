@@ -337,6 +337,8 @@ for s in "${SCENARIOS[@]}"; do
         "$SANDBOX" "$fx" -- "$HARNESS_BIN" exec ${EVAL_CODEX_ARGS:-} \
         --dangerously-bypass-approvals-and-sandbox --ephemeral -C "$fx" \
         -o "$runtime_response" "$prompt" </dev/null >>"$log" 2>&1 &
+      # Consumed by eval_fixture_wait_for_child in the sourced lifecycle helper.
+      # shellcheck disable=SC2034
       EVAL_FIXTURE_CHILD_PID=$!
       ;;
     esac
