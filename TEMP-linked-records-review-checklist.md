@@ -1024,3 +1024,12 @@ Do not close this checklist until all applicable items above are `[x]` or `[N/A]
 - [x] Preserve the behavioral contract suite on macOS and Linux.
 
 **Completion record:** commit `ci: enforce ShellCheck static analysis` after checklist closure · validation red proof: official ShellCheck 0.11.0 exited 1 with seven warning-level findings; green proof: the checksum-verified Darwin ARM64 and Linux x86_64 binaries both reported version 0.11.0 and returned 0 across every tracked shell script with `--severity=warning`; `tests/check-regressions.sh` passed all nine contract suites and 37 linter cases on macOS and Ubuntu 24.04 x86_64; the linter matrix also passed with a hostile ambient `CDPATH`; Bash syntax, workflow YAML parsing, and `git diff --check` passed · notes CI downloads only official release assets, verifies the pinned architecture-specific digest before extraction, and runs the static gate on both existing matrix platforms
+
+### Post-Closure Official Skill-Format Validation
+
+- [x] Pin the official `skills-ref` validator to an immutable upstream commit.
+- [x] Discover all skill manifests and require the expected three-skill set.
+- [x] Configure the format gate on both supported CI platforms.
+- [x] Preserve the existing static and behavioral contract gates.
+
+**Completion record:** commit `ci: validate official Agent Skills format` after checklist closure · validation: the official validator at commit `69ef37e9424c0a7ea9dd2293b559e43ec8176379` rejected a malformed skill and accepted `skills/linked-records`, `skills/linked-records-claims`, and `skills/linked-records-upkeep` under Python 3.13 on Linux; workflow YAML parsing, the full contract suite, Bash syntax, and `git diff --check` passed · notes the validator itself is commit-pinned while its upstream-declared Python dependencies remain resolved by pip; the first hosted macOS/Linux matrix run remains pending until this commit is pushed
