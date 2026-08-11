@@ -1,0 +1,74 @@
+diff --git a/app/handler.py b/app/handler.py
+index 36b50659e15c72ad542d2d8c32f8ab5398435dd6..b1f162acabe42eae31fa899ffeea42030f95f240 100644
+--- a/app/handler.py
++++ b/app/handler.py
+@@ -1,10 +1,15 @@
+-from .store import Store
++import json
++import os
++
++from .store import DATA_DIR, Store
+ 
+ store = Store()
+ 
+ 
+ def save_note(note_id, text):
+-    store.write("note-" + note_id, {"text": text})
++    os.makedirs(DATA_DIR, exist_ok=True)
++    with open(os.path.join(DATA_DIR, "note-" + note_id + ".json"), "w") as f:
++        json.dump({"text": text}, f)
+ 
+ 
+ def get_note(note_id):
+diff --git a/specs/ARCH-app.md b/specs/ARCH-app.md
+index b6c5f059618e9946fc8bdfb24908c4dc5ff974b8..6e706798997063af26ea19b2327e8f57f4846e24 100644
+--- a/specs/ARCH-app.md
++++ b/specs/ARCH-app.md
+@@ -1,7 +1,8 @@
+ # ARCH-app: Note app shape
+ 
+-Handlers (`app/handler.py`) accept note operations and delegate all
+-persistence to `Store` (`app/store.py`), the only component that touches
+-`data/`. Configuration is read by `app/config.py` at startup. Constrained
+-by [GATE-local-only](./GATE-local-only.md); the single-writer property is
++Handlers (`app/handler.py`) accept note operations. `save_note` writes its
++note file under `data/` directly; every other persistence path goes through
++`Store` (`app/store.py`). Configuration is read by `app/config.py` at
++startup. Constrained by [GATE-local-only](./GATE-local-only.md); this splits
++`data/` writes across two components, which falsifies
+ [CLAIM-single-writer](./CLAIM-single-writer.md).
+diff --git a/specs/CLAIM-single-writer/proof.md b/specs/CLAIM-single-writer/proof.md
+index 3646a64786c25fd1ea9f3adbbdf6e4dcb1fbbb7f..47d5c71b0fa1ae786afb48c9cd8bbb1600675321 100644
+--- a/specs/CLAIM-single-writer/proof.md
++++ b/specs/CLAIM-single-writer/proof.md
+@@ -1,9 +1,9 @@
+ Property: only `Store.write` creates or modifies files under `data/`.
+ 
+-1. `code` — `app/store.py` is the only module referencing `DATA_DIR` or
+-   opening files under `data/` for writing.
++1. `code` — FAILS as of 2026-08-11: `app/handler.py` also references
++   `DATA_DIR` and opens files under `data/` for writing.
+ 2. `enum` — writers found by searching `open(` with write modes across
+-   `app/`: exactly one, in `Store.write`.
++   `app/`: two, `Store.write` and `save_note` in `app/handler.py`.
+ 
+ Axiom: no external process writes into `data/`.
+ Residuals: none.
+diff --git a/specs/CLAIM-single-writer/verification.md b/specs/CLAIM-single-writer/verification.md
+index 7f202fc18c86a5193cf902c5424181c3ee4cfd63..8f07e9828ad1763b58bc998f0e33d06b1683cd99 100644
+--- a/specs/CLAIM-single-writer/verification.md
++++ b/specs/CLAIM-single-writer/verification.md
+@@ -2,3 +2,13 @@ Verified at fixture baseline, 2026-08-05, independent pass over app/:
+ regenerated the writer enumeration, checked handler and config paths.
+ Result: pass
+ The argument survived checking as of this date.
++
++Checked 2026-08-11 against the revision that changed `save_note` to write
++its JSON file directly, at the user's request, for performance.
++Counterexample: `save_note` in `app/handler.py` opens
++`data/note-<id>.json` with mode `"w"` and calls `json.dump` without going
++through `Store.write`, so a second component now creates and modifies
++files under `data/`. The regenerated writer enumeration returns two sites.
++Result: falsified
++The claim's wording is unchanged and stands falsified until the user
++decides whether to restore the single-writer property or retire the claim.

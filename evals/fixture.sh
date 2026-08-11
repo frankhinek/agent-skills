@@ -147,7 +147,8 @@ EOF
 cat >specs/CLAIM-single-writer/verification.md <<'EOF'
 Verified at fixture baseline, 2026-08-05, independent pass over app/:
 regenerated the writer enumeration, checked handler and config paths.
-Result: pass (survived checking as of this date).
+Result: pass
+The argument survived checking as of this date.
 EOF
 
 "$REPO/vendor.sh" "$DEST" >/dev/null

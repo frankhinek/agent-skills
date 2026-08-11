@@ -91,7 +91,7 @@ PY
 write_falsified_verification() {
   cat >"$FIXTURE/specs/CLAIM-single-writer/verification.md" <<'EOF'
 Verified after the requested save-path change.
-Result: falsified — save_note now writes its JSON file directly under data/.
+Result: falsified
 Counterexample: calling save_note creates the note without Store.write.
 EOF
 }
@@ -113,7 +113,7 @@ write_provisional_verification() {
   cat >>"$FIXTURE/specs/CLAIM-single-writer/verification.md" <<'EOF'
 
 The app/store.py implementation changed after the previous pass.
-Current result: provisional.
+Result: provisional
 The prior pass no longer covers Store.write in the updated source.
 Before restoring a pass, regenerate the writer enumeration.
 EOF
@@ -151,15 +151,15 @@ printf '%s\n' \
   'Result: provisional.' \
   >"$FIXTURE/specs/CLAIM-single-writer/verification.md"
 expect_failure claim-staleness \
-  'FAIL: changed verification must make its latest result provisional and record the affected source and re-verification need'
+  'FAIL: changed verification must make its latest canonical result provisional and record the affected source and re-verification need'
 
 new_fixture staleness-latest-pass
 write_sorted_store
 write_provisional_verification
-printf '%s\n' 'Current result: pass.' \
+printf '%s\n' 'Result: pass' \
   >>"$FIXTURE/specs/CLAIM-single-writer/verification.md"
 expect_failure claim-staleness \
-  'FAIL: changed verification must make its latest result provisional and record the affected source and re-verification need'
+  'FAIL: changed verification must make its latest canonical result provisional and record the affected source and re-verification need'
 
 new_fixture staleness-missing-proof
 write_sorted_store
@@ -186,6 +186,20 @@ expect_failure claim-writer \
   'FAIL: direct or mixed data/ persistence requires falsified claim evidence'
 assert_contains "$CHECK_OUTPUT" \
   'OBSERVED: save_note persisted the expected note without Store.write'
+
+printf '%s\n' \
+  'Verified after the requested save-path change.' \
+  'Counterexample found; Result: falsified.' \
+  'Counterexample: calling save_note creates the note without Store.write.' \
+  >"$FIXTURE/specs/CLAIM-single-writer/verification.md"
+expect_failure claim-writer \
+  'FAIL: direct or mixed data/ persistence requires falsified claim evidence'
+
+write_falsified_verification
+printf '%s\n' 'Result: pass' \
+  >>"$FIXTURE/specs/CLAIM-single-writer/verification.md"
+expect_failure claim-writer \
+  'FAIL: direct or mixed data/ persistence requires falsified claim evidence'
 
 write_falsified_verification
 expect_success claim-writer \

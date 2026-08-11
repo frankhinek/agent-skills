@@ -52,6 +52,19 @@ model-free escape probe must prove fixture writes succeed and sibling writes
 fail before the agent starts. A failed or ineffective boundary makes the
 scenario `INVALID`, not `PASS` or `FAIL`.
 
+Harness startup is constrained without changing that shared boundary. Codex
+uses a writable fixture-local `CODEX_HOME`, with only the host `auth.json`
+linked read-only when present; user config, exec-policy rules, plugins, apps,
+and multi-agent mode are disabled, and sessions remain ephemeral. Claude uses
+a writable fixture-local configuration directory while retaining the host's
+default secure-storage authentication under the read-only outer boundary. Its
+tool runtime also uses the fixture-local temporary directory. Claude loads
+project settings only, uses an explicitly empty MCP configuration, disables
+Chrome integration and session persistence, and still discovers the
+project-vendored skills under evaluation. `--safe-mode` and `--bare` are not
+used because either would bypass the skill-discovery behavior this suite must
+exercise.
+
 ## Scenarios
 
 | Scenario | Presses on | Mechanical pass means |
@@ -161,12 +174,26 @@ instead of merging or overwriting evidence. Labels must start with an ASCII
 letter or digit and may otherwise contain ASCII letters, digits, dots,
 underscores, and hyphens. Each directory contains a committed `summary.md`;
 final responses (`*.response.txt`) and console diagnostics (`*.log`) under
-`logs/` are gitignored. Any summary creation or append failure terminates the
-run nonzero before a scenario can be reported as `PASS`; treat the incomplete
-directory as diagnostic evidence, not a scored result. Re-run on model upgrades
-or substantive skill edits; results are point-in-time, and cheap re-runs matter
+`logs/` are gitignored. A baseline-to-final binary patch covering tracked and
+non-ignored untracked changes for every constructed and executed scenario is
+retained under `diffs/`, including completed harness failures, so behavioral
+claims can be audited without retaining the temporary fixture. Private
+`.eval-runtime/` artifacts are excluded. Before a Codex patch becomes durable,
+the runner scans changed regular files for long token-like values derived from
+the bridged host `auth.json`; a match or screening error makes the scenario
+`INVALID` and discards the patch. This protects the credential the runner
+introduces, not every secret the subject could read, so review result artifacts
+before committing them. Any summary creation or append failure terminates the run nonzero
+before a scenario can be reported as `PASS`; treat the incomplete directory as
+diagnostic evidence, not a scored result. Re-run on model upgrades or
+substantive skill edits; results are point-in-time, and cheap re-runs matter
 more than exhaustive coverage. Each headless run costs real tokens (8 scenarios
 ≈ 8 agent sessions per harness).
+
+Claim scenarios use the claims skill's canonical verdict line: exactly
+`Result: pass`, `Result: provisional`, or `Result: falsified`. The last such
+line in `verification.md` is the current machine-readable verdict; supporting
+detail belongs on following prose lines.
 
 The local regression suites spend no agent tokens; the runner failure suite
 uses fake Claude and Codex adapters:

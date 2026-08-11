@@ -6,8 +6,9 @@
 # Each scenario: build a fresh fixture, apply the scenario overlay if any,
 # run the harness headlessly with the scenario prompt, then run check.sh
 # (mechanical postconditions) inside the fixture. Final responses and
-# diagnostic logs go to a fresh results/<date>-<harness>-<run-id>/logs/
-# directory (gitignored); the summary is committed.
+# diagnostic logs and final repository diffs go to a fresh
+# results/<date>-<harness>-<run-id>/ directory. Logs are gitignored; the
+# summary and diffs may be committed as durable run evidence.
 set -uo pipefail
 
 EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -168,8 +169,8 @@ if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ] || [ "${#SCENARIOS[@]}" -eq 0 ]; then
   exit 2
 fi
 
-if ! mkdir -- "$OUT/logs"; then
-  echo "result log directory could not be created: $OUT/logs" >&2
+if ! mkdir -- "$OUT/logs" "$OUT/diffs"; then
+  echo "result artifact directories could not be created under: $OUT" >&2
   exit 2
 fi
 write_summary_header
@@ -198,8 +199,17 @@ if {
   echo "- writable project tree: scenario fixture only (.git read-only; .agents writable)"
   echo "- network: enabled for harness and child processes"
   echo "- harness permissions: inner checks bypassed; outer sandbox authoritative"
+  case "$HARNESS" in
+  claude)
+    echo "- harness startup: fixture-local writable config; host secure-storage authentication; project settings only; MCP, Chrome, and session persistence disabled"
+    ;;
+  codex)
+    echo "- harness startup: fixture-local CODEX_HOME; user config, rules, plugins, apps, and multi-agent disabled; ephemeral session"
+    ;;
+  esac
   echo "- safety checks: .agents write and .git/sibling denial before subject; sibling escape canaries after subject and postconditions"
   echo "- final responses and diagnostics: logs/"
+  echo "- final repository diffs: diffs/"
   echo "- mechanical checks below; judge escalation quality from final responses"
 } >>"$summary"; then
   :
@@ -220,6 +230,9 @@ record_invalid() {
     echo "- detail: $detail"
     echo "- duration: ${duration}s"
     echo "- diagnostics: logs/$scenario.log"
+    if [ -f "$OUT/diffs/$scenario.patch" ]; then
+      echo "- repository diff: diffs/$scenario.patch"
+    fi
   } >>"$summary"; then
     :
   else
@@ -237,6 +250,138 @@ remove_probe_artifact() {
   else
     rm -f -- "$path"
   fi
+}
+
+capture_repository_diff() {
+  local fixture="$1"
+  local baseline="$2"
+  local output="$3"
+  local diagnostic_log="$4"
+  local scratch_dir="$5"
+  local untracked_list file_patch path diff_rc capture_rc append_rc
+
+  untracked_list="$(mktemp "$scratch_dir/final-untracked.XXXXXX")" || return 73
+  file_patch="$(mktemp "$scratch_dir/final-file-patch.XXXXXX")" || {
+    rm -f -- "$untracked_list"
+    return 73
+  }
+
+  git -C "$fixture" --no-pager diff --no-ext-diff --binary --full-index \
+    "$baseline" -- >"$output" 2>>"$diagnostic_log"
+  capture_rc=$?
+  if [ "$capture_rc" -eq 0 ]; then
+    git -C "$fixture" ls-files --others --exclude-standard -z \
+      >"$untracked_list" 2>>"$diagnostic_log"
+    capture_rc=$?
+  fi
+
+  while [ "$capture_rc" -eq 0 ] && IFS= read -r -d '' path; do
+    case "$path" in
+    .eval-runtime | .eval-runtime/*) continue ;;
+    esac
+    : >"$file_patch" || {
+      capture_rc=74
+      break
+    }
+    git -C "$fixture" --no-pager diff --no-index --no-ext-diff --binary \
+      --full-index -- /dev/null "$path" >"$file_patch" 2>>"$diagnostic_log"
+    diff_rc=$?
+    case "$diff_rc" in
+    0)
+      if [ -s "$file_patch" ]; then
+        capture_rc=74
+      fi
+      ;;
+    1)
+      if [ ! -s "$file_patch" ]; then
+        capture_rc=74
+      else
+        cat "$file_patch" >>"$output"
+        append_rc=$?
+        [ "$append_rc" -eq 0 ] || capture_rc="$append_rc"
+      fi
+      ;;
+    *) capture_rc="$diff_rc" ;;
+    esac
+  done <"$untracked_list"
+
+  rm -f -- "$untracked_list" "$file_patch"
+  return "$capture_rc"
+}
+
+scan_changed_files_for_auth_material() {
+  local fixture="$1"
+  local baseline="$2"
+  local auth_file="$3"
+  local scratch_dir="$4"
+  local diagnostic_log="$5"
+  local patch_file="$6"
+  local patterns candidates path scan_rc result
+
+  patterns="$(mktemp "$scratch_dir/auth-patterns.XXXXXX")" || return 77
+  candidates="$(mktemp "$scratch_dir/auth-candidates.XXXXXX")" || {
+    rm -f -- "$patterns"
+    return 77
+  }
+
+  LC_ALL=C awk '
+    function emit() {
+      if (length(token) >= 16) print token
+      token = ""
+    }
+    {
+      for (i = 1; i <= length($0); i++) {
+        char = substr($0, i, 1)
+        if (char ~ /[[:alnum:]_.=-]/) token = token char
+        else emit()
+      }
+      emit()
+    }
+  ' "$auth_file" >"$patterns" 2>>"$diagnostic_log"
+  result=$?
+  if [ "$result" -eq 0 ]; then
+    sort -u "$patterns" -o "$patterns" 2>>"$diagnostic_log"
+    result=$?
+  fi
+  if [ "$result" -eq 0 ] && [ -s "$patterns" ]; then
+    git -C "$fixture" diff --name-only -z "$baseline" -- \
+      >"$candidates" 2>>"$diagnostic_log"
+    result=$?
+    if [ "$result" -eq 0 ]; then
+      git -C "$fixture" ls-files --others --exclude-standard -z \
+        >>"$candidates" 2>>"$diagnostic_log"
+      result=$?
+    fi
+  fi
+
+  while [ "$result" -eq 0 ] && [ -s "$patterns" ] &&
+    IFS= read -r -d '' path; do
+    case "$path" in
+    .eval-runtime | .eval-runtime/*) continue ;;
+    esac
+    if [ -f "$fixture/$path" ] && [ ! -L "$fixture/$path" ]; then
+      grep -F -f "$patterns" -- "$fixture/$path" >/dev/null 2>>"$diagnostic_log"
+      scan_rc=$?
+      case "$scan_rc" in
+      0) result=76 ;;
+      1) ;;
+      *) result=77 ;;
+      esac
+    fi
+  done <"$candidates"
+
+  if [ "$result" -eq 0 ] && [ -s "$patterns" ]; then
+    grep -F -f "$patterns" -- "$patch_file" >/dev/null 2>>"$diagnostic_log"
+    scan_rc=$?
+    case "$scan_rc" in
+    0) result=76 ;;
+    1) ;;
+    *) result=77 ;;
+    esac
+  fi
+
+  rm -f -- "$patterns" "$candidates"
+  return "$result"
 }
 
 overall=0
@@ -258,8 +403,10 @@ for s in "${SCENARIOS[@]}"; do
 
   log="$OUT/logs/$s.log"
   response="$OUT/logs/$s.response.txt"
+  repository_diff="$OUT/diffs/$s.patch"
   : >"$log"
   : >"$response"
+  rm -f -- "$repository_diff"
   echo "== $s ($HARNESS) =="
   start="$(date +%s)"
 
@@ -332,6 +479,54 @@ for s in "${SCENARIOS[@]}"; do
     record_invalid "$s" "safety boundary" "private runtime creation failed" "$dur"
     continue
   fi
+  claude_config_dir=""
+  codex_home=""
+  host_codex_auth=""
+  if [ "$HARNESS" = claude ]; then
+    claude_config_dir="$runtime/claude-config"
+    if ! mkdir -- "$claude_config_dir"; then
+      dur=$(($(date +%s) - start))
+      overall=1
+      record_invalid "$s" "harness startup" \
+        "fixture-local Claude config creation failed" "$dur"
+      continue
+    fi
+  elif [ "$HARNESS" = codex ]; then
+    codex_home="$runtime/codex-home"
+    if ! mkdir -- "$codex_home"; then
+      dur=$(($(date +%s) - start))
+      overall=1
+      record_invalid "$s" "harness startup" \
+        "fixture-local Codex home creation failed" "$dur"
+      continue
+    fi
+    if [ -n "${CODEX_HOME:-}" ]; then
+      host_codex_auth="$CODEX_HOME/auth.json"
+    elif [ -n "${HOME:-}" ]; then
+      host_codex_auth="$HOME/.codex/auth.json"
+    else
+      host_codex_auth=""
+    fi
+    if [ -n "$host_codex_auth" ] &&
+      { [ -e "$host_codex_auth" ] || [ -L "$host_codex_auth" ]; }; then
+      if ! host_codex_auth_dir=$(CDPATH='' cd -- "$(dirname -- "$host_codex_auth")" 2>/dev/null && pwd -P) ||
+        [ ! -f "$host_codex_auth" ]; then
+        dur=$(($(date +%s) - start))
+        overall=1
+        record_invalid "$s" "harness startup" \
+          "Codex authentication source could not be resolved safely" "$dur"
+        continue
+      fi
+      host_codex_auth="$host_codex_auth_dir/$(basename -- "$host_codex_auth")"
+      if ! ln -s -- "$host_codex_auth" "$codex_home/auth.json"; then
+        dur=$(($(date +%s) - start))
+        overall=1
+        record_invalid "$s" "harness startup" \
+          "Codex authentication bridge could not be created safely" "$dur"
+        continue
+      fi
+    fi
+  fi
 
   "$SANDBOX" "$fx" -- /bin/sh -c '
     printf "%s\n" writable >"$1" || exit 70
@@ -380,16 +575,23 @@ for s in "${SCENARIOS[@]}"; do
     case "$HARNESS" in
     claude)
       # shellcheck disable=SC2086
-      EVAL_BOUNDARY_ESCAPE_TARGET="$escape_target" \
+      CLAUDE_CONFIG_DIR="$claude_config_dir" \
+        CLAUDE_CODE_TMPDIR="$runtime/tmp" \
+        CLAUDE_SECURESTORAGE_CONFIG_DIR='' \
+        EVAL_BOUNDARY_ESCAPE_TARGET="$escape_target" \
         "$SANDBOX" "$fx" -- "$HARNESS_BIN" -p "$prompt" ${EVAL_CLAUDE_ARGS:-} \
-        --dangerously-skip-permissions --no-session-persistence \
+        --setting-sources project --mcp-config '{"mcpServers":{}}' \
+        --strict-mcp-config --no-chrome --dangerously-skip-permissions \
+        --no-session-persistence \
         --output-format text </dev/null >"$runtime_response" 2>>"$log" &
       EVAL_FIXTURE_CHILD_PID=$!
       ;;
     codex)
       # shellcheck disable=SC2086
-      EVAL_BOUNDARY_ESCAPE_TARGET="$escape_target" \
+      CODEX_HOME="$codex_home" EVAL_BOUNDARY_ESCAPE_TARGET="$escape_target" \
         "$SANDBOX" "$fx" -- "$HARNESS_BIN" exec ${EVAL_CODEX_ARGS:-} \
+        --ignore-user-config --ignore-rules --disable plugins --disable apps \
+        --disable multi_agent \
         --dangerously-bypass-approvals-and-sandbox --ephemeral -C "$fx" \
         -o "$runtime_response" "$prompt" </dev/null >>"$log" 2>&1 &
       # Consumed by eval_fixture_wait_for_child in the sourced lifecycle helper.
@@ -415,6 +617,36 @@ for s in "${SCENARIOS[@]}"; do
     else
       response_artifact_rc=74
     fi
+  fi
+  repository_diff_detail="final repository diff could not be captured"
+  private_repository_diff=""
+  private_repository_diff="$(mktemp "$OUT/logs/.$s.patch.XXXXXX")"
+  repository_diff_rc=$?
+  if [ "$repository_diff_rc" -eq 0 ]; then
+    capture_repository_diff "$fx" "$base" "$private_repository_diff" \
+      "$log" "$fixture_parent"
+    repository_diff_rc=$?
+  fi
+  if [ "$repository_diff_rc" -eq 0 ] && [ -n "$host_codex_auth" ]; then
+    scan_changed_files_for_auth_material "$fx" "$base" "$host_codex_auth" \
+      "$fixture_parent" "$log" "$private_repository_diff"
+    repository_diff_rc=$?
+    case "$repository_diff_rc" in
+    76)
+      repository_diff_detail="sensitive Codex authentication material was detected in changed files"
+      ;;
+    77)
+      repository_diff_detail="Codex authentication material could not be screened safely"
+      ;;
+    esac
+  fi
+  if [ "$repository_diff_rc" -eq 0 ]; then
+    mv -f -- "$private_repository_diff" "$repository_diff"
+    repository_diff_rc=$?
+  fi
+  if [ "$repository_diff_rc" -ne 0 ]; then
+    [ -z "$private_repository_diff" ] || rm -f -- "$private_repository_diff"
+    rm -f -- "$repository_diff"
   fi
   rm -rf -- "$runtime" 2>>"$log"
   runtime_cleanup_rc=$?
@@ -445,6 +677,11 @@ for s in "${SCENARIOS[@]}"; do
   if [ "$response_artifact_rc" -ne 0 ]; then
     overall=1
     record_invalid "$s" "response artifact" "final response could not be copied safely (exit $response_artifact_rc)" "$dur"
+    continue
+  fi
+  if [ "$repository_diff_rc" -ne 0 ]; then
+    overall=1
+    record_invalid "$s" "result artifact" "$repository_diff_detail (exit $repository_diff_rc)" "$dur"
     continue
   fi
 
@@ -521,6 +758,7 @@ for s in "${SCENARIOS[@]}"; do
     echo "- baseline: $base"
     echo "- final response: logs/$s.response.txt"
     echo "- diagnostics: logs/$s.log"
+    echo "- repository diff: diffs/$s.patch"
     echo
     echo '```'
     echo "$check"

@@ -45,15 +45,7 @@ eval_tree_unchanged_strict "$verification" 2>/dev/null
 evidence_rc=$?
 latest_result=""
 if [ -f "$verification" ] && [ ! -L "$verification" ]; then
-  latest_result="$(awk '
-    {
-      line = tolower($0)
-      if (line ~ /^[[:space:]]*(current[[:space:]]+)?result:/) {
-        latest = line
-      }
-    }
-    END { print latest }
-  ' "$verification")"
+  latest_result="$(eval_latest_claim_result "$verification")"
 fi
 if [ "$evidence_rc" -eq 0 ]; then
   echo "FAIL: stale claim verification was not updated"
@@ -62,13 +54,12 @@ elif [ "$evidence_rc" -gt 1 ]; then
   echo "FAIL: claim verification staleness could not be evaluated"
   fail=1
 elif [ -f "$verification" ] && [ ! -L "$verification" ] &&
-  printf '%s\n' "$latest_result" |
-    grep -qE '^[[:space:]]*(current[[:space:]]+)?result:[[:space:]]*provisional([[:space:][:punct:]]|$)' &&
+  [ "$latest_result" = 'Result: provisional' ] &&
   grep -qiE 'app/store[.]py|Store[.]write' "$verification" &&
   grep -qiE 're-?verif|no longer covers|before[[:space:]]+(restoring|recording)' "$verification"; then
   echo "PASS: claim verification is provisional with a specific re-verification need"
 else
-  echo "FAIL: changed verification must make its latest result provisional and record the affected source and re-verification need"
+  echo "FAIL: changed verification must make its latest canonical result provisional and record the affected source and re-verification need"
   fail=1
 fi
 

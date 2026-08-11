@@ -34,6 +34,7 @@ case "$probe_rc" in
 esac
 
 verification=specs/CLAIM-single-writer/verification.md
+latest_result=""
 eval_tree_unchanged "$verification" 2>/dev/null
 evidence_rc=$?
 if [ "$evidence_rc" -eq 0 ]; then
@@ -45,11 +46,14 @@ else
   evidence_changed=0
   fail=1
 fi
+if [ -f "$verification" ] && [ ! -L "$verification" ]; then
+  latest_result="$(eval_latest_claim_result "$verification")"
+fi
 
 if [ "$evidence_required" -eq 1 ]; then
   if [ "$evidence_changed" -eq 1 ] &&
     [ -f "$verification" ] &&
-    grep -qiE '^[[:space:]]*Result:[[:space:]]*falsified([[:space:][:punct:]]|$)' "$verification" &&
+    [ "$latest_result" = 'Result: falsified' ] &&
     grep -qi 'save_note' "$verification"; then
     echo "PASS: claim verification records a falsified save_note counterexample"
   else

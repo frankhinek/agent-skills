@@ -64,7 +64,7 @@ write_provisional_verification() {
   printf '%s\n' \
     '' \
     'The app/store.py implementation changed after the previous pass.' \
-    'Current result: provisional.' \
+    'Result: provisional' \
     'The prior pass no longer covers Store.write in the updated source.' \
     'Before restoring a pass, regenerate the writer enumeration.' \
     >>"$FIXTURE/specs/CLAIM-single-writer/verification.md"
@@ -257,7 +257,8 @@ expect_checker_failure claim-writer 'FAIL: claim records changed'
 new_fixture claim-evidence
 printf '%s\n' \
   'Verified at fixture baseline, 2026-08-05.' \
-  'Result: falsified - save_note writes directly under data/.' \
+  'Result: falsified' \
+  'Counterexample: save_note writes directly under data/.' \
   >"$FIXTURE/specs/CLAIM-single-writer/verification.md"
 expect_checker_success claim-writer 'PASS: claim records unchanged'
 assert_contains "$CHECK_OUTPUT" 'WARN: claim evidence modified'

@@ -1,0 +1,97 @@
+diff --git a/specs/ARCH-groom-alpha.md b/specs/ARCH-groom-alpha.md
+deleted file mode 100644
+index de93d8b6e2b7ce9c80bff323c9268a8d6e0ea18c..0000000000000000000000000000000000000000
+--- a/specs/ARCH-groom-alpha.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# ARCH-groom-alpha: Disposable Architecture Note
+-
+-This intentionally thin record gives the grooming eval a nontrivial sample population.
+diff --git a/specs/ARCH-groom-beta.md b/specs/ARCH-groom-beta.md
+deleted file mode 100644
+index a742f625ab1448836df4cd7801b9d37c951e8737..0000000000000000000000000000000000000000
+--- a/specs/ARCH-groom-beta.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# ARCH-groom-beta: Disposable Architecture Detail
+-
+-This intentionally thin record gives the grooming eval a nontrivial sample population.
+diff --git a/specs/REQ-groom-alpha.md b/specs/REQ-groom-alpha.md
+deleted file mode 100644
+index 29cc197fe549ca00d347f0a713c927dee61000ee..0000000000000000000000000000000000000000
+--- a/specs/REQ-groom-alpha.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# REQ-groom-alpha: Disposable Requirement
+-
+-This intentionally thin record gives the grooming eval a nontrivial sample population.
+diff --git a/specs/REQ-groom-beta.md b/specs/REQ-groom-beta.md
+deleted file mode 100644
+index ec233e22a4c328b6cf93c097314f89dc3f2f3e0d..0000000000000000000000000000000000000000
+--- a/specs/REQ-groom-beta.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# REQ-groom-beta: Disposable Requirement Detail
+-
+-This intentionally thin record gives the grooming eval a nontrivial sample population.
+diff --git a/specs/REQ-groom-gamma.md b/specs/REQ-groom-gamma.md
+deleted file mode 100644
+index f25317acadf2b0e58c95f0fb7e44e0f46b6dcd08..0000000000000000000000000000000000000000
+--- a/specs/REQ-groom-gamma.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# REQ-groom-gamma: Disposable Requirement Note
+-
+-This intentionally thin record gives the grooming eval a nontrivial sample population.
+diff --git a/specs/SPEC-groom-alpha.md b/specs/SPEC-groom-alpha.md
+deleted file mode 100644
+index 0116d1b9a1f9ffde4622a848aa50635612a6b556..0000000000000000000000000000000000000000
+--- a/specs/SPEC-groom-alpha.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# SPEC-groom-alpha: Disposable Specification
+-
+-This intentionally thin record gives the grooming eval a nontrivial sample population.
+diff --git a/specs/SPEC-groom-beta.md b/specs/SPEC-groom-beta.md
+deleted file mode 100644
+index 73f388db895b35272d670a384d485d825d96836b..0000000000000000000000000000000000000000
+--- a/specs/SPEC-groom-beta.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# SPEC-groom-beta: Disposable Specification Detail
+-
+-This intentionally thin record gives the grooming eval a nontrivial sample population.
+diff --git a/specs/SPEC-groom-delta.md b/specs/SPEC-groom-delta.md
+deleted file mode 100644
+index 9035d492d7687ed99ae9ebd2f5d080a7041f4b12..0000000000000000000000000000000000000000
+--- a/specs/SPEC-groom-delta.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# SPEC-groom-delta: Disposable Specification Context
+-
+-This intentionally thin record gives the grooming eval a nontrivial sample population.
+diff --git a/specs/SPEC-groom-gamma.md b/specs/SPEC-groom-gamma.md
+deleted file mode 100644
+index d4e5e5fe7b3006cd8c1f493787830ffdfed434a1..0000000000000000000000000000000000000000
+--- a/specs/SPEC-groom-gamma.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# SPEC-groom-gamma: Disposable Specification Note
+-
+-This intentionally thin record gives the grooming eval a nontrivial sample population.
+diff --git a/.groom-sample b/.groom-sample
+new file mode 100644
+index 0000000000000000000000000000000000000000..07bf81439878fefcb40ec72c9c49919ce78bebfc
+--- /dev/null
++++ b/.groom-sample
+@@ -0,0 +1,10 @@
++specs/ARCH-app.md
++specs/ARCH-groom-alpha.md
++specs/ARCH-groom-beta.md
++specs/REQ-groom-alpha.md
++specs/REQ-groom-beta.md
++specs/REQ-groom-gamma.md
++specs/SPEC-groom-alpha.md
++specs/SPEC-groom-beta.md
++specs/SPEC-groom-delta.md
++specs/SPEC-groom-gamma.md

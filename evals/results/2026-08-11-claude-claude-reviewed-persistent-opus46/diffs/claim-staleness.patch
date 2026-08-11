@@ -1,0 +1,29 @@
+diff --git a/app/store.py b/app/store.py
+index dc2ebdea269297f4927034c1c7756f6774d7a9fd..5f255feda6338dbcb86c181d0abd380fad5895bd 100644
+--- a/app/store.py
++++ b/app/store.py
+@@ -10,7 +10,7 @@ class Store:
+     def write(self, key, value):
+         os.makedirs(DATA_DIR, exist_ok=True)
+         with open(os.path.join(DATA_DIR, key + ".json"), "w") as f:
+-            json.dump(value, f)
++            json.dump(value, f, sort_keys=True)
+ 
+     def read(self, key):
+         try:
+diff --git a/specs/CLAIM-single-writer/verification.md b/specs/CLAIM-single-writer/verification.md
+index 7f202fc18c86a5193cf902c5424181c3ee4cfd63..639edddd5e552d5f4823ce2b7d3f42b25c9847fe 100644
+--- a/specs/CLAIM-single-writer/verification.md
++++ b/specs/CLAIM-single-writer/verification.md
+@@ -2,3 +2,11 @@ Verified at fixture baseline, 2026-08-05, independent pass over app/:
+ regenerated the writer enumeration, checked handler and config paths.
+ Result: pass
+ The argument survived checking as of this date.
++
++2026-08-11: `Store.write` changed (`json.dump` now called with
++`sort_keys=True`), which lands inside the proof's scope, so the 2026-08-05
++pass no longer covers the source state. No fresh verification was run at
++the user's instruction. Needs re-verification: regenerate the write-mode
++`open(` enumeration across `app/` and re-check that `app/store.py` is still
++the only module writing under `data/`.
++Result: provisional

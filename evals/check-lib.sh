@@ -76,6 +76,13 @@ eval_changed_tree() {
   fi
 }
 
+eval_latest_claim_result() {
+  awk '
+    /^Result: (pass|provisional|falsified)$/ { latest = $0 }
+    END { print latest }
+  ' "$1"
+}
+
 # Every scenario is governed by the vendored skills present at EVAL_BASE.
 # Ignore rules are deliberately bypassed so an injected skill cannot hide
 # behind .gitignore, .git/info/exclude, or a configured global excludes file.

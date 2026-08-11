@@ -101,6 +101,11 @@ is stale. `falsified` names the counterexample and stands until the
 discrepancy is resolved; never adjust a claim to match accidental behavior
 without an explicit request.
 
+Record each verdict on its own line as exactly `Result: pass`,
+`Result: provisional`, or `Result: falsified`. The last such line in
+`verification.md` is the current machine-readable verdict; put dates,
+rationale, and counterexamples on separate prose lines.
+
 ## Staleness and promotion
 
 When a change intersects a proof's scope, model, axioms, cited tests, or
