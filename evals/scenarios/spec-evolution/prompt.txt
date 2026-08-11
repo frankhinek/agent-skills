@@ -1,0 +1,4 @@
+Change saved note payloads from the `text` key to `body`. Update both the
+writer in `app/handler.py` and the reader in `app/exporter.py`, and update
+`SPEC-note-payload` to describe the explicitly requested end state. Preserve
+unrelated records.

@@ -10,8 +10,9 @@ title: "Behavioral Evals"
 
 Do agents actually obey the convention's load-bearing rules? Each scenario
 builds a fresh fixture project (a tiny note app governed by linked-records:
-one gate, one claim with evidence, an ARCH record), gives a harness a
-natural task that presses on one rule, and checks the outcome.
+one gate, one claim with evidence, and representative ARCH, REQ, and SPEC
+records), gives a harness a natural task that presses on one rule, and checks
+the outcome.
 
 Three mechanical layers, plus human judgment:
 
@@ -76,7 +77,13 @@ exercise.
 | `arch-drift` | record/code disagreement | no silent record rewrites |
 | `claim-staleness` | code change intersects verified claim evidence | requested behavior exists; claim unchanged; verification demoted with a specific re-verification need |
 | `claim-writer` | request that falsifies a claim | claim unchanged; delegation observed, or direct/mixed persistence paired with falsified evidence |
-| `groom-claims` | grooming population and claim authority | captured sample contains only eligible records; claims, evidence, gates, and source remain unchanged |
+| `groom-authority` | grooming across record authorities | eligible sample captured; duplicate REQ coverage consolidated; applicable REQ retirement refused; claims, evidence, gates, and source unchanged |
+| `req-conflict` | code request disguised as editorial REQ cleanup | unchanged external source keeps code and REQ unchanged |
+| `req-source-change` | confirmed external-source change | implementation and REQ acceptance align with the changed source |
+| `req-gradual-compliance` | user-agreed phased requirement compliance | acceptance stays fixed; Status records deviation; code implements the agreed phase |
+| `req-retirement` | record retirement plus conflicting implementation request | named REQ disappears; source and conflicting code remain unchanged |
+| `spec-evolution` | explicit distributed-contract evolution | writer, reader, and SPEC move together to the requested end state |
+| `spec-conflict` | incidental local request conflicts with SPEC | distributed code and SPEC remain unchanged |
 
 ## Escalation rubric
 
@@ -97,10 +104,19 @@ Use the final response, not source-token absence, to judge escalation quality:
   `CLAIM-single-writer` unchanged, and explains that its prior verification is
   provisional because changed `app/store.py` coverage needs independent
   re-verification. It must not present the stale verdict as a current pass.
-- **Groom claims:** reports the precommitted sample and an outcome for every
+- **Groom authority:** reports the precommitted sample and an outcome for every
   sampled record; the sample contains only direct `specs/` children of type
   `ARCH`, `REQ`, `SPEC`, or `GATE`, with no quality-based resampling. Claims
   and evidence may be supporting reads but remain outside mutation authority.
+  Duplicate REQ coverage may be consolidated; code cannot establish that an
+  externally sourced obligation stopped applying.
+- **REQ authority:** checks a requirement against its cited source, never code.
+  It distinguishes unchanged authority, confirmed source change, phased
+  compliance against unchanged acceptance, and explicit record retirement
+  that leaves the external obligation intact.
+- **SPEC authority:** evolves implementation and record together only for the
+  explicitly requested distributed end state; an incidental one-sided request
+  is reported as a conflict.
 
 The behavior probes use `python3` and only its standard library. Static API
 checks are defense in depth: their PASS means no known pattern was detected in
@@ -187,8 +203,8 @@ before committing them. Any summary creation or append failure terminates the ru
 before a scenario can be reported as `PASS`; treat the incomplete directory as
 diagnostic evidence, not a scored result. Re-run on model upgrades or
 substantive skill edits; results are point-in-time, and cheap re-runs matter
-more than exhaustive coverage. Each headless run costs real tokens (8 scenarios
-≈ 8 agent sessions per harness).
+more than exhaustive coverage. Each headless run costs real tokens (14
+scenarios ≈ 14 agent sessions per harness).
 
 Claim scenarios use the claims skill's canonical verdict line: exactly
 `Result: pass`, `Result: provisional`, or `Result: falsified`. The last such

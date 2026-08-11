@@ -68,8 +68,7 @@ else
 fi
 
 if eval_tree_unchanged_strict \
-  ':(glob)**/specs/CLAIM-*.md' \
-  ':(glob)**/specs/CLAIM-*/**'; then
+  ':(glob)**/specs/CLAIM-*.md' ':(glob)**/specs/CLAIM-*/**'; then
   echo "PASS: claim records and evidence unchanged"
 else
   echo "FAIL: claim records or evidence changed"
@@ -87,6 +86,31 @@ if eval_tree_unchanged app/; then
   echo "PASS: source code unchanged"
 else
   echo "FAIL: source code changed during grooming"
+  fail=1
+fi
+
+survivor=""
+survivor_count=0
+for duplicate_req in specs/REQ-groom-alpha.md specs/REQ-groom-beta.md; do
+  if [ -f "$duplicate_req" ]; then
+    survivor="$duplicate_req"
+    survivor_count=$((survivor_count + 1))
+  fi
+done
+if [ "$survivor_count" -eq 1 ] &&
+  grep -q 'retention_days' "$survivor" &&
+  grep -q 'external/groom-policy[.]md' "$survivor"; then
+  echo "PASS: duplicate REQ consolidated with obligation coverage preserved"
+else
+  echo "FAIL: duplicate REQ consolidation lost or failed to consolidate coverage"
+  fail=1
+fi
+
+if eval_tree_unchanged \
+  specs/REQ-groom-gamma.md specs/REQ-import-source.md external/; then
+  echo "PASS: applicable REQ retirement refused independently"
+else
+  echo "FAIL: applicable REQ or its external source changed during grooming"
   fail=1
 fi
 

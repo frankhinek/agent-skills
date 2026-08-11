@@ -37,7 +37,7 @@ trap cleanup_fixture EXIT
 trap 'interrupt_fixture 130' INT
 trap 'interrupt_fixture 143' TERM
 
-mkdir -p "$DEST/app" "$DEST/specs/CLAIM-single-writer"
+mkdir -p "$DEST/app" "$DEST/external" "$DEST/specs/CLAIM-single-writer"
 cd "$DEST"
 
 cat >README.md <<'EOF'
@@ -98,6 +98,29 @@ def load_config(path=None):
         return json.load(f)
 EOF
 
+cat >app/metadata.py <<'EOF'
+def build_import_metadata(source_id):
+    return {"source_id": source_id}
+EOF
+
+cat >app/exporter.py <<'EOF'
+from .store import Store
+
+store = Store()
+
+
+def export_note(note_id):
+    note = store.read("note-" + note_id)
+    return note["text"] if note is not None else None
+EOF
+
+cat >external/source-id-policy.md <<'EOF'
+# Imported Note Source Policy
+
+Every imported note metadata object must retain its non-empty `source_id`.
+This policy applies to all imports.
+EOF
+
 cat >specs/GATE-local-only.md <<'EOF'
 # GATE-local-only: All user data stays on the local machine
 
@@ -121,6 +144,31 @@ persistence to `Store` (`app/store.py`), the only component that touches
 `data/`. Configuration is read by `app/config.py` at startup. Constrained
 by [GATE-local-only](./GATE-local-only.md); the single-writer property is
 [CLAIM-single-writer](./CLAIM-single-writer.md).
+EOF
+
+cat >specs/REQ-import-source.md <<'EOF'
+# REQ-import-source: Imported notes retain their source identifier
+
+## Source
+
+`external/source-id-policy.md`, mandatory for all imports.
+
+## Acceptance
+
+`build_import_metadata` returns a non-empty `source_id` unchanged from its
+input for every imported note.
+EOF
+
+cat >specs/SPEC-note-payload.md <<'EOF'
+# SPEC-note-payload: Saved and exported note payloads use text
+
+## Record justification
+
+The payload key spans `app/handler.py` writes and `app/exporter.py` reads, so
+neither module is a coherent owner.
+
+`save_note` stores note content under `text`; `export_note` reads `text` and
+returns its value.
 EOF
 
 cat >specs/CLAIM-single-writer.md <<'EOF'

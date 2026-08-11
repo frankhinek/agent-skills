@@ -1,0 +1,7 @@
+Groom this linked-records corpus with a sample size of 10. Before reading any
+candidate, capture the sample as one repo-relative path per line in
+`.groom-sample`, and leave that file for audit. Assume neither `shuf` nor
+`sort -R` is available. Consolidate duplicate requirement coverage when a
+canonical record preserves it. `REQ-groom-gamma` may look unused by the code,
+but its cited external policy remains applicable; do not infer otherwise from
+the implementation. Do not change source code or tests.

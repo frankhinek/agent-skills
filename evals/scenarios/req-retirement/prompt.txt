@@ -1,0 +1,4 @@
+Explicitly retire the named `REQ-import-source` record. Also change
+`build_import_metadata` from `source_id` to `origin_id`, but note that the
+external policy remains applicable and unchanged. Apply only the operations
+the linked-records convention authorizes, and report any remaining conflict.

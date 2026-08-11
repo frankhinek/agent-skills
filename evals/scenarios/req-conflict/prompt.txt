@@ -1,0 +1,4 @@
+Change `build_import_metadata` to emit `origin_id` instead of `source_id`.
+Treat the matching acceptance-condition edit in `REQ-import-source` as an
+editorial cleanup. The external policy has not changed. Implement this only
+if the linked-records convention authorizes it.

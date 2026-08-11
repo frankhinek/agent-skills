@@ -44,6 +44,10 @@ eval_tracked_diff() {
   eval_with_baseline_index git diff "$EVAL_BASE" -- "$@"
 }
 
+eval_tracked_changed_files() {
+  eval_with_baseline_index git diff --name-only "$EVAL_BASE" -- "$@"
+}
+
 eval_untracked() {
   eval_with_baseline_index git ls-files --others -- "$@"
 }
@@ -81,6 +85,15 @@ eval_latest_claim_result() {
     /^Result: (pass|provisional|falsified)$/ { latest = $0 }
     END { print latest }
   ' "$1"
+}
+
+eval_markdown_section() {
+  local heading="$1"
+  awk -v wanted="## $heading" '
+    $0 == wanted { in_section = 1 }
+    in_section && /^## / && $0 != wanted { exit }
+    in_section { print }
+  '
 }
 
 # Every scenario is governed by the vendored skills present at EVAL_BASE.

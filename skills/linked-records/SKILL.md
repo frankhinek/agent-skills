@@ -5,37 +5,33 @@ description: Personal convention for durable project knowledge kept as small, li
 
 # Linked Records
 
-Durable project knowledge lives at the strongest enforcement rung available:
-type > schema constraint > lint/CI check > test > record > nothing. A record
-is the fallback for knowledge that matters beyond the current change and that
-no mechanical artifact can own. Before writing one, ask whether a type, a
-constraint, a lint, or a test could own the knowledge instead; prefer
-strengthening enforcement over describing behavior.
+Keep durable project knowledge at the strongest enforcement rung available:
+type > schema constraint > lint/CI check > test > record > nothing. Records
+are the fallback only when knowledge matters beyond the current change and no
+mechanical artifact can own it. Prefer strengthening enforcement.
 
-The default outcome of ordinary work is no record change. A request to
-document something supplies intent, not qualification — each type below has
-its own threshold. Records are not a planning system, changelog, historical
-archive, or general documentation. Git history is the archive: superseded
-records are deleted, not tombstoned.
+Ordinary work changes no records by default. A request to document supplies
+intent, not qualification; apply the thresholds below. Records are not
+planning, changelog, archive, or general documentation. Delete superseded
+records; git preserves history.
 
 ## Records
 
-Records live in a `specs/` directory inside the project or package they
-govern, named `<TYPE>-<short-slug>.md`, beginning `# <TYPE>-<short-slug>:
-Title`. The filename stem is the record ID; keep it repository-unique. No
-index files — IDs are found by search (`rg`), links, and references from
-code. Cite record IDs from code and tests where the pointer adds rationale,
-never as ceremony. Prefer Markdown links with the target ID as link text and
-accurate relationship wording (`constrained by`, `refines`, `supersedes`).
+Records live in the governed project or package's `specs/` directory. Name
+them `<TYPE>-<short-slug>.md`; begin `# <TYPE>-<short-slug>: Title`; keep the
+stem repository-unique. No indexes: find IDs with `rg`, links, and code
+references. Code/test citations must add rationale. Prefer Markdown links
+whose text is the target ID and whose wording names the relationship
+(`constrained by`, `refines`, `supersedes`).
 
 Two kinds of record, split by direction of authority:
 
-**Descriptive** records (`ARCH`, `REQ`, `SPEC`, `CLAIM`) describe the current
-system and must agree with the code. When one disagrees with reality, do not
-silently rewrite either side: fix editorial errors freely (except in
-`CLAIM-*` records, whose wording is bound to their evidence), synchronize to
-an end state the user already explicitly requested, and surface anything
-else as a conflict before proceeding.
+**Descriptive** records (`ARCH`, `REQ`, `SPEC`, `CLAIM`) report facts governed
+elsewhere: implementation governs `ARCH-*`/`SPEC-*`; cited external source and
+applicability govern `REQ-*`; `CLAIM-*` wording stays fixed while evidence and
+verdict track support. Make only meaning-preserving editorial fixes.
+Synchronize record and implementation only when the user requested the end
+state and its authority permits it; otherwise surface the conflict.
 
 **Normative** records (`GATE`) bind future work. A gate never yields to code,
 convenience, or agent judgment; it changes only when the user explicitly
@@ -49,8 +45,12 @@ conflict and leave the gate unchanged.
   ownership, flows, trust boundaries, invariants. The default overview is
   `ARCH-<project-name>`. A map, not an implementation inventory.
 - `REQ-*` — an externally imposed obligation: its source, strength,
-  justification, and acceptance conditions concrete enough to check a new
-  surface or feature against.
+  justification, and checkable acceptance conditions. A requested code end
+  state never authorizes changing what is required or when it is satisfied;
+  never infer source or applicability changes from code. Retire a named
+  requirement record only on explicit user request. Retirement stops
+  tracking; it changes neither applicability nor conflicting code's
+  compliance.
 - `SPEC-*` — a non-local behavioral contract whose implementation is
   necessarily distributed, so no single code artifact can own it. Must carry
   a one-sentence `## Record justification` naming the distributed areas and
@@ -59,9 +59,10 @@ conflict and leave the gate unchanged.
   source excerpts. Use fenced blocks only for diagrams, with the exact
   lowercase label `text`, `mermaid`, `plantuml`, or `dot`.
 - `GATE-*` — a deliberate constraint protected from being helpfully undone:
-  `## Gate` states the constraint precisely; `## Justification` explains what
-  it protects (informative context, never an additional constraint —
-  escalate ambiguity instead of reading the justification normatively).
+  the record establishes the constraint. `## Gate` states it precisely;
+  `## Justification` explains what it protects (informative context, never an
+  additional constraint — escalate ambiguity instead of reading the
+  justification normatively).
 - `CLAIM-*` — one falsifiable, load-bearing property the code claims to
   hold, stated in a few sentences with its material qualifiers (protected
   state, boundary, concurrency, adversary). Proof and verification live in a
@@ -79,20 +80,19 @@ outside git history, and it must not become a decision-process narrative.
 
 ## Gradual change
 
-When an agreed end state cannot land atomically, a descriptive record takes
-a `## Status` section immediately after its heading: what currently
-deviates, which parts already apply, and the intended resolution. Status
-describes alignment, never blesses accidental drift, and never appears on a
-`GATE-*`.
+When an agreed end state cannot land atomically, put `## Status` immediately
+after a descriptive record's heading: current deviation, applied parts, and
+intended resolution. Status describes alignment, never blesses accidental
+drift, and never appears on `GATE-*`. A `REQ-*` Status records deviation
+against unchanged acceptance conditions.
 
 ## Conflicts
 
-When a record blocks the requested work, contradicts another record, or
-disagrees with code in a way the user has not already resolved: stop the
-affected work, state the conflict in a few sentences with the evidence, and
-let the user decide. Investigate only enough to explain the conflict — no
-research spirals, alternative exploration, or drafted rewrites unless
-explicitly asked afterward.
+When a record blocks work, contradicts another, or disagrees with its
+authority or current reality without prior user resolution: stop affected
+work, state the conflict and evidence briefly, and let the user decide.
+Investigate only enough to explain it; do not research alternatives or draft
+rewrites unless asked afterward.
 
 ## Maintenance
 

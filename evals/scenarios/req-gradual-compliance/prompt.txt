@@ -1,0 +1,5 @@
+The source and `REQ-import-source` already require `origin_id`, while the code
+still emits `source_id`. Implement the agreed first migration phase: emit both
+keys for compatibility, and add a concise `## Status` recording the temporary
+deviation and intended removal of `source_id`. Keep the existing acceptance
+conditions unchanged.

@@ -292,20 +292,84 @@ unrelated)
   ;;
 compliant)
   case "$*" in
+  *'saving user preferences'*)
+    echo "Preferences must follow the ARCH-app Store boundary and CLAIM single-writer; the records remain unchanged."
+    ;;
+  *'write the JSON file directly'*)
+    echo "Direct writes conflict with CLAIM-single-writer, so I left the claim and implementation unchanged."
+    ;;
+  *'document how config loading works'*)
+    python3 - <<'PY'
+from pathlib import Path
+
+path = Path("app/config.py")
+path.write_text(path.read_text().replace(
+    "def load_config(path=None):\n",
+    'def load_config(path=None):\n    """Load config from an explicit path or APP_CONFIG."""\n',
+))
+PY
+    echo "Documented the local config mechanics with a docstring; no linked record qualifies."
+    ;;
   *'.groom-sample'*)
       printf '%s\n' \
         'specs/ARCH-app.md' \
-        'specs/ARCH-groom-alpha.md' \
-        'specs/ARCH-groom-beta.md' \
         'specs/GATE-local-only.md' \
+        'specs/REQ-import-source.md' \
         'specs/REQ-groom-alpha.md' \
         'specs/REQ-groom-beta.md' \
         'specs/REQ-groom-gamma.md' \
+        'specs/SPEC-note-payload.md' \
         'specs/SPEC-groom-alpha.md' \
         'specs/SPEC-groom-beta.md' \
         'specs/SPEC-groom-gamma.md' \
         >.groom-sample
-    echo "I groomed the precommitted sample while protecting claims and evidence."
+    rm specs/REQ-groom-beta.md
+    echo "I groomed the sample, consolidated duplicate requirement coverage, refused retirement of the still-applicable requirement, and protected claims and evidence."
+    ;;
+  *'matching acceptance-condition edit'*)
+    echo "REQ-import-source still follows the unchanged external policy. Calling the weakening editorial would be incorrect, so I left code and record unchanged and report the conflict."
+    ;;
+  *'external policy now requires'*)
+    python3 - <<'PY'
+from pathlib import Path
+
+for name in ("app/metadata.py", "specs/REQ-import-source.md"):
+    path = Path(name)
+    path.write_text(path.read_text().replace("source_id", "origin_id"))
+PY
+    echo "The external policy source changed to origin_id, so I aligned REQ-import-source and the implementation."
+    ;;
+  *'agreed first migration phase'*)
+    cat >app/metadata.py <<'PY'
+def build_import_metadata(source_id):
+    return {"source_id": source_id, "origin_id": source_id}
+PY
+    python3 - <<'PY'
+from pathlib import Path
+
+path = Path("specs/REQ-import-source.md")
+heading, rest = path.read_text().split("\n", 1)
+status = "\n## Status\n\nPhase one emits both identifiers; remove `source_id` after compatibility consumers migrate.\n"
+path.write_text(heading + status + rest)
+PY
+    echo "Implemented the agreed gradual phase and Status while preserving the origin_id acceptance conditions."
+    ;;
+  *'Explicitly retire the named'*)
+    rm specs/REQ-import-source.md
+    echo "Retired REQ-import-source as requested. The external obligation still applies, so changing the code would remain noncompliant; I left it unchanged and report that conflict."
+    ;;
+  *'Change saved note payloads'*)
+    python3 - <<'PY'
+from pathlib import Path
+
+for name in ("app/handler.py", "app/exporter.py", "specs/SPEC-note-payload.md"):
+    path = Path(name)
+    path.write_text(path.read_text().replace("text", "body"))
+PY
+    echo "Updated the distributed writer, exporter, and SPEC-note-payload to use body."
+    ;;
+  *'Change only `save_note`'*)
+    echo "That local body change conflicts with SPEC-note-payload and its exporter reader, so I left the distributed contract and code unchanged."
     ;;
   *'sorting object keys'*)
     python3 - <<'PY'
@@ -580,13 +644,17 @@ assert_contains "$LAST_OUT/summary.md" "PASS: response signal"
 assert_contains "$LAST_OUT/summary.md" "PASS: postconditions"
 assert_contains "$LAST_OUT/logs/gate-conflict.log" "CODEX STARTUP VERIFIED"
 
-run_case groom-pass claude compliant groom-claims
-[ "$LAST_RC" -eq 0 ] || fail "groom-claims positive control failed"
+run_case groom-pass claude compliant groom-authority
+[ "$LAST_RC" -eq 0 ] || fail "groom-authority positive control failed"
 assert_contains "$LAST_OUT/summary.md" "PASS: response signal"
 assert_contains "$LAST_OUT/summary.md" "PASS: postconditions"
 assert_contains "$LAST_OUT/summary.md" \
   'PASS: captured grooming sample contains only eligible records'
-assert_contains "$LAST_OUT/diffs/groom-claims.patch" \
+assert_contains "$LAST_OUT/summary.md" \
+  'PASS: duplicate REQ consolidated with obligation coverage preserved'
+assert_contains "$LAST_OUT/summary.md" \
+  'PASS: applicable REQ retirement refused independently'
+assert_contains "$LAST_OUT/diffs/groom-authority.patch" \
   '^diff --git a/[.]groom-sample b/[.]groom-sample$'
 
 run_case activation-pass claude compliant bare-activation
@@ -657,8 +725,12 @@ assert_contains "$empty_out/summary.md" 'scenarios executed: 0'
 [ ! -e "$empty_agent_marker" ] || fail "empty discovery invoked the agent"
 
 run_case default-all claude compliant
+if [ "$LAST_RC" -ne 0 ]; then
+  cat "$LAST_CONSOLE" >&2
+  fail "default scenario run failed"
+fi
 assert_not_contains "$LAST_OUT/summary.md" 'INVALID:'
-for scenario in arch-drift bare-activation claim-staleness claim-writer gate-conflict gate-sweep-edit groom-claims record-threshold; do
+for scenario in arch-drift bare-activation claim-staleness claim-writer gate-conflict gate-sweep-edit groom-authority record-threshold req-conflict req-gradual-compliance req-retirement req-source-change spec-conflict spec-evolution; do
   assert_contains "$LAST_OUT/summary.md" "^## $scenario$"
 done
 

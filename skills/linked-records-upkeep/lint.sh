@@ -1,13 +1,36 @@
 #!/usr/bin/env bash
 # Mechanical conformance lint for linked-records specs/ corpora.
 #
-# Usage: lint.sh [project-root]     (default: current directory)
+# Usage: lint.sh [project-root] | lint.sh --list-checks
 # Output: <path>[:line]: [check] <message>, one finding per line.
-# Exit: 0 clean, 1 findings, 2 invocation/setup error.
+# Exit: 0 clean, 1 findings, 2 invocation/setup/internal error.
 #
 # Owns only the mechanical checks; judgment checks (code/record drift,
 # thresholds, placement) stay with the reviewing agent — see SKILL.md.
 set -uo pipefail
+
+CHECKS='unique-id	duplicate record IDs
+no-index	index-like files in specs directories
+type	record filename type and shape
+heading	canonical first heading
+link	broken relative inline links
+tombstone	explicit tombstone markers
+spec-shape	SPEC structure and fenced-block labels
+gate-shape	GATE structure
+claim-shape	CLAIM record boundaries
+orphan-evidence	CLAIM evidence directories without records
+evidence-shape	unexpected CLAIM evidence files
+stray-dir	unexpected directories in specs directories
+dangling-ref	references to nonexistent record IDs'
+
+if [ "${1:-}" = --list-checks ]; then
+  if [ "$#" -ne 1 ]; then
+    printf 'linked-records lint: [setup] --list-checks accepts no project root\n' >&2
+    exit 2
+  fi
+  printf '%s\n' "$CHECKS"
+  exit 0
+fi
 
 cd "${1:-.}" || exit 2
 
@@ -49,11 +72,19 @@ scratch_path_is_safe "$TMP" ||
 
 trap 'rm -rf -- "$TMP"' EXIT
 
-if ! : >"$TMP/findings"; then
+if ! : >"$TMP/findings" || ! : >"$TMP/internal-errors"; then
   setup_error "unable to initialize scratch directory"
 fi
 
 finding() { # finding <location> <check> <message>
+  case $'\n'"$CHECKS"$'\n' in
+  *$'\n'"$2"$'\t'*) ;;
+  *)
+    printf 'linked-records lint: [internal] unregistered check ID: %s (at %s)\n' \
+      "$2" "$1" >>"$TMP/internal-errors"
+    return 0
+    ;;
+  esac
   printf '%s: [%s] %s\n' "$1" "$2" "$3" >>"$TMP/findings"
 }
 
@@ -370,7 +401,11 @@ done <"$TMP/refs"
 if [ -s "$TMP/findings" ]; then
   sort -u "$TMP/findings"
   echo "linked-records lint: $(sort -u "$TMP/findings" | grep -c .) finding(s)"
-  exit 1
 fi
+if [ -s "$TMP/internal-errors" ]; then
+  sort -u "$TMP/internal-errors" >&2
+  exit 2
+fi
+[ -s "$TMP/findings" ] && exit 1
 echo "linked-records lint: clean ($(grep -c . "$TMP/records") records)"
 exit 0

@@ -158,6 +158,12 @@ setup_bad_heading() {
   put "$1/specs/ARCH-system.md" '# Wrong heading' '' 'System map.'
 }
 
+setup_unknown_check_probe() {
+  local root="$1"
+  put "$root/a/specs/ARCH-shared.md" '# Wrong heading' '' 'First map.'
+  put "$root/b/specs/ARCH-shared.md" '# ARCH-shared: Second' '' 'Second map.'
+}
+
 setup_broken_link() {
   put "$1/specs/ARCH-system.md" \
     '# ARCH-system: System map' '' 'See [missing detail](missing.md).'
@@ -423,6 +429,23 @@ declared="$(printf '%s\n' "$CASES" | awk 'NF { count++ } END { print count + 0 }
 executed=0
 failed=0
 
+catalog="$("$LINTER" --list-checks 2>&1)"
+catalog_rc=$?
+if [ "$catalog_rc" -ne 0 ] || [ -z "$catalog" ]; then
+  printf 'FAIL catalog: expected a non-empty catalog with exit 0\n%s\n' "$catalog"
+  failed=$((failed + 1))
+elif ! printf '%s\n' "$catalog" | awk -F '\t' '
+  NF != 2 || $1 !~ /^[a-z][a-z0-9-]*$/ || $2 == "" { exit 1 }
+  seen[$1]++ { exit 1 }
+'; then
+  printf 'FAIL catalog: expected unique <check-id><tab><description> rows\n%s\n' "$catalog"
+  failed=$((failed + 1))
+else
+  printf 'PASS catalog\n'
+fi
+
+: >"$TMP_ROOT/matrix-output"
+
 if [ "$declared" -eq 0 ]; then
   printf 'FAIL matrix: no cases declared\n'
   failed=$((failed + 1))
@@ -446,6 +469,8 @@ while IFS='|' read -r name expected_rc expected_text setup; do
     output="$("$LINTER" "$root" 2>&1)"
   fi
   rc=$?
+  printf '%s\n' "$output" |
+    grep -oE '\[[a-z][a-z0-9-]*\]' >>"$TMP_ROOT/matrix-output" || true
   elapsed=$(( $(date +%s) - started ))
   if [ -n "$fifo_writer" ]; then
     kill "$fifo_writer" 2>/dev/null || true
@@ -474,6 +499,35 @@ while IFS='|' read -r name expected_rc expected_text setup; do
 done <<EOF
 $CASES
 EOF
+
+if [ "$catalog_rc" -eq 0 ]; then
+  while IFS="$(printf '\t')" read -r check_id _description; do
+    [ -n "$check_id" ] || continue
+    if ! grep -Fq "[$check_id]" "$TMP_ROOT/matrix-output"; then
+      printf 'FAIL catalog: no negative fixture emits [%s]\n' "$check_id"
+      failed=$((failed + 1))
+    fi
+  done <<EOF
+$catalog
+EOF
+fi
+
+unknown_root="$TMP_ROOT/unknown-check"
+setup_unknown_check_probe "$unknown_root"
+mutated_linter="$TMP_ROOT/lint-unknown-check.sh"
+sed 's/finding "$f" heading /finding "$f" unregistered-heading /' "$LINTER" >"$mutated_linter"
+chmod +x "$mutated_linter"
+unknown_output="$("$mutated_linter" "$unknown_root" 2>&1)"
+unknown_rc=$?
+if [ "$unknown_rc" -eq 2 ] &&
+  printf '%s\n' "$unknown_output" | grep -Fq '[unique-id]' &&
+  printf '%s\n' "$unknown_output" | grep -Fq '[internal] unregistered check ID: unregistered-heading' &&
+  ! printf '%s\n' "$unknown_output" | grep -Fq '[unregistered-heading]'; then
+  printf 'PASS unknown-check-id\n'
+else
+  printf 'FAIL unknown-check-id: expected normal findings, internal error, and exit 2\n%s\n' "$unknown_output"
+  failed=$((failed + 1))
+fi
 
 if [ "$executed" -ne "$declared" ]; then
   printf 'FAIL matrix: declared %s cases, executed %s\n' "$declared" "$executed"

@@ -1,0 +1,4 @@
+Change only `save_note` to write the note under `body` instead of `text`.
+Leave `app/exporter.py` and `SPEC-note-payload` alone. Implement this local
+request only if it is compatible with the distributed contract; otherwise
+surface the conflict concisely.

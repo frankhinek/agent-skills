@@ -42,17 +42,10 @@ file. Run it against the project root:
     lint.sh [project-root]
 
 It prints `path: [check] message` findings. A completed scan exits 0 when
-clean or 1 when findings exist; invocation or scratch-setup failures exit
-2. The mechanical scan covers: record naming and defined types;
-filename/heading/ID
-agreement and repository uniqueness; resolvable relative links;
-references to nonexistent records; exactly one non-empty `SPEC-*`
-justification section and diagram fences labeled `text`, `mermaid`,
-`plantuml`, or `dot`; `GATE-*` section shape; `CLAIM-*` records without
-headings or recognizable `Proof:`/`Verdict:` labels; claim evidence-directory
-shape; explicit tombstone markers; index-like files and stray directories in
-`specs/`. Fix what it reports — these are the convention's mechanical floor,
-not judgment calls.
+clean or 1 when findings exist; invocation, scratch-setup, or internal
+failures exit 2. Run `lint.sh --list-checks` for the script-owned catalog of
+mechanical checks. Fix its findings — they are the convention's mechanical
+floor, not judgment calls.
 
 The link check supports single-line inline Markdown links, angle-bracket
 destinations, balanced or escaped parentheses, and optional quoted or
@@ -68,7 +61,7 @@ nonregular files are outside the scan.
 
 Then the checks that still need reading:
 
-- descriptive records agree with the code they describe
+- descriptive records agree with their governing authority
 - each record still meets its type's qualification threshold
 - each `SPEC-*` justification is one honest sentence naming the distributed
   areas and why none is a coherent owner
@@ -107,20 +100,21 @@ exist.
 2. For each sampled record ask: would deleting it lose durable knowledge
    that should constrain future work? Does it still meet its type's
    threshold? Does it restate what code, types, tests, or comments already
-   show? Does another record own the same subject? Is a code/record drift
-   visible against the current implementation?
+   show? Does another record own the same subject? Is drift visible against
+   the record's governing authority?
 3. Apply the smallest corpus-preserving outcome: delete, merge into a
    canonical record, trim low-value sections, or keep unchanged. Prefer
    deletion and consolidation over splitting. Update every reference when
    deleting or merging.
-4. Grooming authorizes removing redundant or non-qualifying documentation.
-   It never authorizes changing intended behavior, architecture, any gate,
-   or external requirements — escalate those. Do not modify source code or
-   tests; report follow-ups instead. Treat every `CLAIM-*` record and its
-   sibling evidence directory as read-only context. Creating, editing,
-   renaming, moving, deleting, merging into, retiring, or pruning either
-   belongs to the `linked-records-claims` workflow and requires an explicit
-   user request. If a groom outcome would require such a change, leave that
-   outcome unapplied and report it.
+4. Grooming authorizes removing redundant or non-qualifying documentation,
+   never changing intended behavior, architecture, gates, external
+   obligations, source code, or tests. Consolidate or delete a `REQ-*` only
+   when a canonical record or stronger owner retains every applicable
+   obligation; never infer applicability changes from code. Stopping tracking
+   of an applicable obligation is retirement and requires an explicit user
+   request naming the record; otherwise report it. Treat every `CLAIM-*` and
+   its sibling evidence directory as read-only context. Any change to either
+   belongs to `linked-records-claims`, requires explicit user request, and
+   remains unapplied during grooming.
 5. Report: sampled IDs, each outcome with a concise reason, drift findings
    and escalations, and the net record and word-count change.

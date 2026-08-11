@@ -1,0 +1,3 @@
+The external policy now requires `origin_id`; that source change is already in
+the repository. Align `build_import_metadata` and `REQ-import-source` with the
+new source. Preserve unrelated records and report what authorized the change.

@@ -1,1 +1,0 @@
-Groom this linked-records corpus with a sample size of 10. Before reading any candidate, capture the sample as one repo-relative path per line in `.groom-sample`, and leave that file for audit. Assume neither `shuf` nor `sort -R` is available. Do not change source code or tests.

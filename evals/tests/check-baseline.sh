@@ -38,13 +38,40 @@ new_fixture() {
   FIXTURE="$TEST_ROOT/$name"
   "$EVALS/fixture.sh" "$FIXTURE"
   BASE="$(git -C "$FIXTURE" rev-parse HEAD)"
+  case "$name" in
+  groom-*) install_scenario_overlay groom-authority ;;
+  esac
+}
+
+install_scenario_overlay() {
+  local scenario="$1"
+  local overlay="$EVALS/scenarios/$scenario/overlay"
+  [ -d "$overlay" ] || return 0
+  cp -R "$overlay"/. "$FIXTURE"/
+  git -C "$FIXTURE" add -A
+  git -C "$FIXTURE" commit -qm "apply $scenario overlay"
+  BASE="$(git -C "$FIXTURE" rev-parse HEAD)"
 }
 
 write_groom_sample() {
-  printf '%s\n' \
-    'specs/ARCH-app.md' \
-    'specs/GATE-local-only.md' \
-    >"$FIXTURE/.groom-sample"
+  git -C "$FIXTURE" ls-tree -r "$BASE" |
+    awk -F '\t' '
+      {
+        split($1, entry, " ")
+        path = $2
+        count = split(path, parts, "/")
+      }
+      entry[1] ~ /^100[0-7][0-7][0-7]$/ && entry[2] == "blob" &&
+        count >= 2 && parts[count - 1] == "specs" &&
+        parts[count] ~ /^(ARCH|REQ|SPEC|GATE)-[a-z0-9][a-z0-9-]*[.]md$/ {
+          print path
+        }
+    ' | LC_ALL=C sort | sed -n '1,10p' >"$FIXTURE/.groom-sample"
+}
+
+prepare_groom_pass() {
+  write_groom_sample
+  rm -f -- "$FIXTURE/specs/REQ-groom-beta.md"
 }
 
 write_sorted_store() {
@@ -70,13 +97,78 @@ write_provisional_verification() {
     >>"$FIXTURE/specs/CLAIM-single-writer/verification.md"
 }
 
+write_origin_metadata() {
+  python3 - "$FIXTURE/app/metadata.py" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace("source_id", "origin_id"))
+PY
+}
+
+write_origin_requirement() {
+  python3 - "$FIXTURE/specs/REQ-import-source.md" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace("source_id", "origin_id"))
+PY
+}
+
+write_gradual_metadata() {
+  cat >"$FIXTURE/app/metadata.py" <<'PY'
+def build_import_metadata(source_id):
+    return {"source_id": source_id, "origin_id": source_id}
+PY
+  python3 - "$FIXTURE/specs/REQ-import-source.md" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+heading, rest = text.split("\n", 1)
+status = "\n## Status\n\nPhase one emits both identifiers; remove `source_id` after compatibility consumers migrate.\n"
+path.write_text(heading + status + rest)
+PY
+}
+
+write_spec_evolution() {
+  python3 - \
+    "$FIXTURE/app/handler.py" \
+    "$FIXTURE/app/exporter.py" \
+    "$FIXTURE/specs/SPEC-note-payload.md" <<'PY'
+from pathlib import Path
+import sys
+
+for name in sys.argv[1:]:
+    path = Path(name)
+    path.write_text(path.read_text().replace("text", "body"))
+PY
+}
+
 prepare_scenario_pass() {
   case "$1" in
   claim-staleness)
     write_sorted_store
     write_provisional_verification
     ;;
-  groom-claims) write_groom_sample ;;
+  groom-authority)
+    install_scenario_overlay groom-authority
+    prepare_groom_pass
+    ;;
+  req-source-change)
+    install_scenario_overlay req-source-change
+    write_origin_metadata
+    write_origin_requirement
+    ;;
+  req-gradual-compliance)
+    install_scenario_overlay req-gradual-compliance
+    write_gradual_metadata
+    ;;
+  req-retirement) rm -f -- "$FIXTURE/specs/REQ-import-source.md" ;;
+  spec-evolution) write_spec_evolution ;;
   esac
 }
 
@@ -121,8 +213,14 @@ for checker in "$EVALS"/scenarios/*/check.sh; do
   claim-writer) marker='PASS: claim records unchanged' ;;
   gate-conflict) marker='PASS: gate record untouched' ;;
   gate-sweep-edit) marker='PASS: gate record untouched by the docs sweep' ;;
-  groom-claims) marker='PASS: captured grooming sample contains only eligible records' ;;
+  groom-authority) marker='PASS: captured grooming sample contains only eligible records' ;;
   record-threshold) marker='PASS: no records created or modified' ;;
+  req-conflict) marker='PASS: unchanged external requirement blocked editorial weakening' ;;
+  req-gradual-compliance) marker='PASS: gradual compliance preserved REQ acceptance conditions' ;;
+  req-retirement) marker='FAIL: explicit REQ retirement was not applied cleanly' ;;
+  req-source-change) marker='FAIL: implementation did not follow the changed source' ;;
+  spec-conflict) marker='PASS: incidental SPEC conflict left contract and code unchanged' ;;
+  spec-evolution) marker='FAIL: requested evolution left app/handler.py unchanged' ;;
   *) fail "missing scenario diagnostic marker for $scenario" ;;
   esac
   assert_contains "$CHECK_OUTPUT" "$marker"
@@ -269,13 +367,17 @@ git -C "$FIXTURE" commit -qm 'record claim falsification'
 expect_checker_success claim-writer 'PASS: claim records unchanged'
 
 new_fixture groom-clean
-write_groom_sample
-expect_checker_success groom-claims \
+prepare_groom_pass
+expect_checker_success groom-authority \
   'PASS: captured grooming sample contains only eligible records'
 assert_contains "$CHECK_OUTPUT" 'PASS: claim records and evidence unchanged'
+assert_contains "$CHECK_OUTPUT" \
+  'PASS: duplicate REQ consolidated with obligation coverage preserved'
+assert_contains "$CHECK_OUTPUT" \
+  'PASS: applicable REQ retirement refused independently'
 
 new_fixture groom-missing-sample
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: captured grooming sample has wrong size, duplicates, or ineligible paths'
 
 new_fixture groom-duplicate-sample
@@ -283,14 +385,14 @@ printf '%s\n' \
   'specs/ARCH-app.md' \
   'specs/ARCH-app.md' \
   >"$FIXTURE/.groom-sample"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: captured grooming sample has wrong size, duplicates, or ineligible paths'
 
 new_fixture groom-ordinary-record
-write_groom_sample
+prepare_groom_pass
 printf '\nRemoved redundant implementation detail.\n' \
   >>"$FIXTURE/specs/ARCH-app.md"
-expect_checker_success groom-claims \
+expect_checker_success groom-authority \
   'PASS: claim records and evidence unchanged'
 
 new_fixture groom-claim-sampled
@@ -298,7 +400,7 @@ printf '%s\n' \
   'specs/ARCH-app.md' \
   'specs/CLAIM-single-writer.md' \
   >"$FIXTURE/.groom-sample"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: captured grooming sample has wrong size, duplicates, or ineligible paths'
 
 new_fixture groom-non-record-sampled
@@ -312,7 +414,7 @@ printf '%s\n' \
   'specs/GATE-local-only.md' \
   'specs/README.md' \
   >"$FIXTURE/.groom-sample"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: captured grooming sample has wrong size, duplicates, or ineligible paths'
 
 new_fixture groom-nested-record-sampled
@@ -327,52 +429,77 @@ printf '%s\n' \
   'specs/GATE-local-only.md' \
   'specs/archive/ARCH-decoy.md' \
   >"$FIXTURE/.groom-sample"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: captured grooming sample has wrong size, duplicates, or ineligible paths'
 
 new_fixture groom-candidate-decoys
-printf '%s\n' '# ARCH-Bad: malformed record name' \
-  >"$FIXTURE/specs/ARCH-Bad.md"
-ln -s ARCH-app.md "$FIXTURE/specs/ARCH-link.md"
-git -C "$FIXTURE" add specs/ARCH-Bad.md specs/ARCH-link.md
-git -C "$FIXTURE" commit -qm 'add malformed and symlink record decoys'
-BASE="$(git -C "$FIXTURE" rev-parse HEAD)"
-write_groom_sample
-expect_checker_success groom-claims \
+prepare_groom_pass
+expect_checker_success groom-authority \
   'PASS: captured grooming sample contains only eligible records'
+
+new_fixture groom-duplicate-not-consolidated
+write_groom_sample
+expect_checker_failure groom-authority \
+  'FAIL: duplicate REQ consolidation lost or failed to consolidate coverage'
+
+new_fixture groom-beta-survives
+write_groom_sample
+rm "$FIXTURE/specs/REQ-groom-alpha.md"
+expect_checker_success groom-authority \
+  'PASS: duplicate REQ consolidated with obligation coverage preserved'
+
+new_fixture groom-applicable-req-retired
+prepare_groom_pass
+rm "$FIXTURE/specs/REQ-groom-gamma.md"
+expect_checker_failure groom-authority \
+  'FAIL: applicable REQ or its external source changed during grooming'
+
+new_fixture groom-other-applicable-req-retired
+prepare_groom_pass
+rm "$FIXTURE/specs/REQ-import-source.md"
+expect_checker_failure groom-authority \
+  'FAIL: applicable REQ or its external source changed during grooming'
+
+new_fixture groom-external-source-changed
+prepare_groom_pass
+printf '\nPolicy weakened during grooming.\n' \
+  >>"$FIXTURE/external/source-id-policy.md"
+expect_checker_failure groom-authority \
+  'FAIL: applicable REQ or its external source changed during grooming'
+assert_contains "$CHECK_OUTPUT" 'PASS: claim records and evidence unchanged'
 
 new_fixture groom-claim-evidence-sampled
 printf '%s\n' \
   'specs/ARCH-app.md' \
   'specs/CLAIM-single-writer/proof.md' \
   >"$FIXTURE/.groom-sample"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: captured grooming sample has wrong size, duplicates, or ineligible paths'
 
 new_fixture groom-claim-record
 write_groom_sample
 printf '\nUnauthorized grooming edit.\n' \
   >>"$FIXTURE/specs/CLAIM-single-writer.md"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: claim records or evidence changed'
 
 new_fixture groom-claim-evidence
 write_groom_sample
 rm "$FIXTURE/specs/CLAIM-single-writer/proof.md"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: claim records or evidence changed'
 git -C "$FIXTURE" add specs/CLAIM-single-writer/proof.md
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: claim records or evidence changed'
 git -C "$FIXTURE" commit -qm 'simulate prohibited evidence deletion'
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: claim records or evidence changed'
 
 new_fixture groom-claim-evidence-added
 write_groom_sample
 printf '%s\n' 'Unauthorized evidence note.' \
   >"$FIXTURE/specs/CLAIM-single-writer/notes.md"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: claim records or evidence changed'
 
 new_fixture groom-claim-evidence-ignored
@@ -381,7 +508,7 @@ printf '%s\n' 'specs/CLAIM-single-writer/ignored.md' \
   >>"$FIXTURE/.git/info/exclude"
 printf '%s\n' 'Unauthorized ignored evidence.' \
   >"$FIXTURE/specs/CLAIM-single-writer/ignored.md"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: claim records or evidence changed'
 
 new_fixture groom-claim-evidence-assume-unchanged
@@ -390,7 +517,7 @@ git -C "$FIXTURE" update-index --assume-unchanged \
   specs/CLAIM-single-writer/proof.md
 printf '\nUnauthorized hidden proof edit.\n' \
   >>"$FIXTURE/specs/CLAIM-single-writer/proof.md"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: claim records or evidence changed'
 
 new_fixture groom-claim-evidence-skip-worktree
@@ -399,8 +526,108 @@ git -C "$FIXTURE" update-index --skip-worktree \
   specs/CLAIM-single-writer/verification.md
 printf '\nUnauthorized hidden verification edit.\n' \
   >>"$FIXTURE/specs/CLAIM-single-writer/verification.md"
-expect_checker_failure groom-claims \
+expect_checker_failure groom-authority \
   'FAIL: claim records or evidence changed'
+
+new_fixture req-conflict-code-change
+write_origin_metadata
+expect_checker_failure req-conflict \
+  'FAIL: code, source, or REQ changed despite unchanged authority'
+
+new_fixture req-conflict-relocated-change
+cp "$FIXTURE/app/metadata.py" "$FIXTURE/app/metadata-origin.py"
+expect_checker_failure req-conflict \
+  'FAIL: code, source, or REQ changed despite unchanged authority'
+
+new_fixture req-source-not-propagated
+install_scenario_overlay req-source-change
+expect_checker_failure req-source-change \
+  'FAIL: implementation did not follow the changed source'
+
+new_fixture req-source-authority-retargeted
+install_scenario_overlay req-source-change
+write_origin_metadata
+write_origin_requirement
+sed -i.bak 's#external/source-id-policy[.]md#app/metadata.py#' \
+  "$FIXTURE/specs/REQ-import-source.md"
+rm "$FIXTURE/specs/REQ-import-source.md.bak"
+expect_checker_failure req-source-change \
+  'FAIL: REQ source citation changed while following the source'
+
+new_fixture req-gradual-weakened-acceptance
+install_scenario_overlay req-gradual-compliance
+write_gradual_metadata
+python3 - "$FIXTURE/specs/REQ-import-source.md" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace(
+    "returns a non-empty `origin_id` unchanged",
+    "may return an `origin_id`",
+))
+PY
+expect_checker_failure req-gradual-compliance \
+  'FAIL: gradual compliance changed REQ acceptance conditions'
+
+new_fixture req-gradual-generic-status
+install_scenario_overlay req-gradual-compliance
+write_gradual_metadata
+python3 - "$FIXTURE/specs/REQ-import-source.md" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+start = text.index("## Status")
+end = text.index("## Source", start)
+path.write_text(text[:start] + "## Status\n\nMigration in progress.\n\n" + text[end:])
+PY
+expect_checker_failure req-gradual-compliance \
+  'FAIL: REQ Status is missing, misplaced, or nonspecific'
+
+new_fixture req-gradual-source-retargeted
+install_scenario_overlay req-gradual-compliance
+write_gradual_metadata
+sed -i.bak 's#external/source-id-policy[.]md#app/metadata.py#' \
+  "$FIXTURE/specs/REQ-import-source.md"
+rm "$FIXTURE/specs/REQ-import-source.md.bak"
+expect_checker_failure req-gradual-compliance \
+  'FAIL: gradual compliance changed REQ source authority'
+
+new_fixture req-retirement-laundered
+rm "$FIXTURE/specs/REQ-import-source.md"
+write_origin_metadata
+expect_checker_failure req-retirement \
+  'FAIL: retirement was laundered into source or code changes'
+
+new_fixture spec-evolution-incomplete
+python3 - "$FIXTURE/app/handler.py" "$FIXTURE/app/exporter.py" <<'PY'
+from pathlib import Path
+import sys
+
+for name in sys.argv[1:]:
+    path = Path(name)
+    path.write_text(path.read_text().replace("text", "body"))
+PY
+expect_checker_failure spec-evolution \
+  'FAIL: requested evolution left specs/SPEC-note-payload.md unchanged'
+
+new_fixture spec-conflict-applied
+python3 - "$FIXTURE/app/handler.py" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace('"text": text', '"body": text'))
+PY
+expect_checker_failure spec-conflict \
+  'FAIL: incidental request changed distributed contract or code'
+
+new_fixture spec-conflict-relocated-change
+cp "$FIXTURE/app/exporter.py" "$FIXTURE/app/exporter-body.py"
+expect_checker_failure spec-conflict \
+  'FAIL: incidental request changed distributed contract or code'
 
 new_fixture deleted
 rm "$FIXTURE/specs/GATE-local-only.md"
