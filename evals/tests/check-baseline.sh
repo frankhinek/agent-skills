@@ -409,6 +409,12 @@ printf '%s\n' '# SPEC-untracked' >"$FIXTURE/specs/SPEC-untracked.md"
 expect_checker_failure record-threshold 'FAIL: specs/ changed'
 assert_contains "$CHECK_OUTPUT" 'SPEC-untracked.md'
 
+new_fixture ignored-untracked
+printf '%s\n' 'specs/SPEC-hidden.md' >>"$FIXTURE/.gitignore"
+printf '%s\n' '# SPEC-hidden' >"$FIXTURE/specs/SPEC-hidden.md"
+expect_checker_failure record-threshold 'FAIL: specs/ changed'
+assert_contains "$CHECK_OUTPUT" 'SPEC-hidden.md'
+
 new_fixture legitimate-commit
 printf '%s\n' '# notekeep' '' 'Expanded contributor notes.' >"$FIXTURE/README.md"
 git -C "$FIXTURE" add README.md

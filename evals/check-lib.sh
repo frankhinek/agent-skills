@@ -13,23 +13,47 @@ eval_require_base() {
   fi
 }
 
+# Run every checker query against the immutable baseline's index. Final-state
+# ignore rules and index flags must not hide subject-created or modified paths.
+eval_with_baseline_index() {
+  local baseline_index command_rc cleanup_rc
+
+  eval_require_base || return 2
+  baseline_index="$(mktemp "${TMPDIR:-/tmp}/linked-records-tree-index.XXXXXX")" ||
+    return 2
+  rm -f -- "$baseline_index" || return 2
+  if ! GIT_INDEX_FILE="$baseline_index" git read-tree "$EVAL_BASE"; then
+    rm -f -- "$baseline_index"
+    return 2
+  fi
+
+  GIT_INDEX_FILE="$baseline_index" "$@"
+  command_rc=$?
+  rm -f -- "$baseline_index"
+  cleanup_rc=$?
+
+  [ "$cleanup_rc" -eq 0 ] || return 2
+  return "$command_rc"
+}
+
 eval_tracked_unchanged() {
-  git diff --quiet "$EVAL_BASE" -- "$@"
+  eval_with_baseline_index git diff --quiet "$EVAL_BASE" -- "$@"
 }
 
 eval_tracked_diff() {
-  git diff "$EVAL_BASE" -- "$@"
+  eval_with_baseline_index git diff "$EVAL_BASE" -- "$@"
 }
 
 eval_untracked() {
-  git ls-files --others --exclude-standard -- "$@"
+  eval_with_baseline_index git ls-files --others -- "$@"
 }
 
 # NUL-delimited final-state paths changed since the immutable eval baseline.
 # Deleted paths are omitted because there is no remaining content to inspect.
 eval_changed_files() {
-  git diff --name-only -z --diff-filter=ACMRTUXB "$EVAL_BASE" -- "$@" || return $?
-  git ls-files --others --exclude-standard -z -- "$@"
+  eval_with_baseline_index git diff --name-only -z \
+    --diff-filter=ACMRTUXB "$EVAL_BASE" -- "$@" || return $?
+  eval_with_baseline_index git ls-files --others -z -- "$@"
 }
 
 eval_tree_unchanged() {
@@ -39,39 +63,8 @@ eval_tree_unchanged() {
   [ -z "$untracked" ]
 }
 
-# Compare protected paths with the immutable baseline through a disposable
-# baseline-owned index. This bypasses ignore rules and index flags that could
-# otherwise hide a working-tree mutation from an eval checker.
 eval_tree_unchanged_strict() {
-  local baseline_index tracked_rc untracked untracked_rc cleanup_rc
-
-  baseline_index="$(mktemp "${TMPDIR:-/tmp}/linked-records-tree-index.XXXXXX")" ||
-    return 2
-  rm -f -- "$baseline_index" || return 2
-  if ! GIT_INDEX_FILE="$baseline_index" git read-tree "$EVAL_BASE"; then
-    rm -f -- "$baseline_index"
-    return 2
-  fi
-
-  if GIT_INDEX_FILE="$baseline_index" \
-    git diff --quiet "$EVAL_BASE" -- "$@"; then
-    tracked_rc=0
-  else
-    tracked_rc=$?
-  fi
-  if untracked="$(GIT_INDEX_FILE="$baseline_index" \
-    git ls-files --others -- "$@")"; then
-    untracked_rc=0
-  else
-    untracked_rc=$?
-  fi
-  rm -f -- "$baseline_index"
-  cleanup_rc=$?
-
-  [ "$tracked_rc" -le 1 ] || return 2
-  [ "$untracked_rc" -eq 0 ] || return 2
-  [ "$cleanup_rc" -eq 0 ] || return 2
-  [ "$tracked_rc" -eq 0 ] && [ -z "$untracked" ]
+  eval_tree_unchanged "$@"
 }
 
 eval_changed_tree() {
