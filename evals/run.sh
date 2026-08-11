@@ -6,8 +6,8 @@
 # Each scenario: build a fresh fixture, apply the scenario overlay if any,
 # run the harness headlessly with the scenario prompt, then run check.sh
 # (mechanical postconditions) inside the fixture. Final responses and
-# diagnostic logs go to results/<date>-<harness>/logs/ (gitignored); the
-# summary is committed.
+# diagnostic logs go to a fresh results/<date>-<harness>-<run-id>/logs/
+# directory (gitignored); the summary is committed.
 set -uo pipefail
 
 EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -71,8 +71,40 @@ elif [ "${#AVAILABLE_SCENARIOS[@]}" -gt 0 ]; then
 fi
 
 DATE="$(date +%Y-%m-%d)"
-OUT="$EVALS/results/$DATE-$HARNESS${EVAL_LABEL:+-$EVAL_LABEL}"
+if [ -n "${EVAL_LABEL:-}" ]; then
+  case "$EVAL_LABEL" in
+  [A-Za-z0-9]*)
+    case "$EVAL_LABEL" in
+    *[!A-Za-z0-9._-]*)
+      echo "invalid EVAL_LABEL: use only ASCII letters, digits, dots, underscores, and hyphens" >&2
+      exit 2
+      ;;
+    esac
+    ;;
+  *)
+    echo "invalid EVAL_LABEL: start with an ASCII letter or digit" >&2
+    exit 2
+    ;;
+  esac
+  RUN_ID="$EVAL_LABEL"
+else
+  RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+fi
+OUT="$EVALS/results/$DATE-$HARNESS-$RUN_ID"
 summary="$OUT/summary.md"
+
+if ! mkdir -p -- "$EVALS/results"; then
+  echo "result parent directory could not be created: $EVALS/results" >&2
+  exit 2
+fi
+if ! mkdir -- "$OUT" 2>/dev/null; then
+  if [ -e "$OUT" ] || [ -L "$OUT" ]; then
+    echo "result directory already exists: $OUT" >&2
+  else
+    echo "result directory could not be created: $OUT" >&2
+  fi
+  exit 2
+fi
 
 write_summary_header() {
   printf '%s\n' \
@@ -87,7 +119,6 @@ write_summary_header() {
 }
 
 if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ] || [ "${#SCENARIOS[@]}" -eq 0 ]; then
-  mkdir -p "$OUT"
   write_summary_header
   {
     echo
@@ -124,7 +155,10 @@ if [ "${#UNKNOWN_SCENARIOS[@]}" -gt 0 ] || [ "${#SCENARIOS[@]}" -eq 0 ]; then
   exit 2
 fi
 
-mkdir -p "$OUT/logs"
+if ! mkdir -- "$OUT/logs"; then
+  echo "result log directory could not be created: $OUT/logs" >&2
+  exit 2
+fi
 write_summary_header
 
 if ! safety_profile="$("$SANDBOX" --profile-id 2>/dev/null)" || [ -z "$safety_profile" ]; then

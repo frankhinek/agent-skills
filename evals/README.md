@@ -153,7 +153,13 @@ the agent. Then run `check.sh` inside the fixture with the saved revision in
 `EVAL_BASE`, and judge the final response. This manual fixture parent is
 caller-owned; remove it when inspection is complete.
 
-Results land in `results/<date>-<harness>/`: `summary.md` is committed,
+Unlabeled results land in a fresh
+`results/<date>-<harness>-<UTC-timestamp>-<pid>/` directory. Set
+`EVAL_LABEL=<label>` for the stable path
+`results/<date>-<harness>-<label>/`; the runner refuses an existing directory
+instead of merging or overwriting evidence. Labels must start with an ASCII
+letter or digit and may otherwise contain ASCII letters, digits, dots,
+underscores, and hyphens. Each directory contains a committed `summary.md`;
 final responses (`*.response.txt`) and console diagnostics (`*.log`) under
 `logs/` are gitignored. Re-run on model upgrades or substantive skill edits;
 results are point-in-time, and cheap re-runs matter more than exhaustive
@@ -170,6 +176,7 @@ evals/tests/run-failure-gates.sh
 evals/tests/check-safety-boundary.sh
 evals/tests/check-baseline.sh
 evals/tests/check-semantics.sh
+evals/tests/check-result-isolation.sh
 ```
 
 Caveats: prompts are single-shot and fixtures are small — a pass here is

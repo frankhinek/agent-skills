@@ -1033,3 +1033,13 @@ Do not close this checklist until all applicable items above are `[x]` or `[N/A]
 - [x] Preserve the existing static and behavioral contract gates.
 
 **Completion record:** commit `ci: validate official Agent Skills format` after checklist closure · validation: the official validator at commit `69ef37e9424c0a7ea9dd2293b559e43ec8176379` rejected a malformed skill and accepted `skills/linked-records`, `skills/linked-records-claims`, and `skills/linked-records-upkeep` under Python 3.13 on Linux; workflow YAML parsing, the full contract suite, Bash syntax, and `git diff --check` passed · notes the validator itself is commit-pinned while its upstream-declared Python dependencies remain resolved by pip; the first hosted macOS/Linux matrix run remains pending until this commit is pushed
+
+### Post-Closure Eval Result Isolation
+
+- [x] Allocate a fresh result directory for every unlabeled eval invocation.
+- [x] Refuse an existing explicitly labeled directory before writing evidence.
+- [x] Keep explicit labels to one safe result-path component.
+- [x] Prove concurrent unlabeled runs preserve distinct summaries.
+- [x] Prove a labeled collision leaves the existing summary unchanged.
+
+**Completion record:** commit `fix(evals): isolate result directories` after checklist closure · validation red proof: two sequential unlabeled invalid-selection runs both resolved to `results/2026-08-11-claude/summary.md`, and the second overwrote the first; a slash-bearing label could also route evidence through a prepared nested path · green proof: `evals/tests/check-result-isolation.sh` proves concurrent automatic-path separation, single-component label containment, and fail-closed labeled collisions; the complete eval regression suite, repository contract suite, Bash syntax, ShellCheck 0.11.0, and `git diff --check` pass · notes unlabeled paths use a UTC timestamp plus process ID and atomic directory creation; `EVAL_LABEL` keeps a predictable path but is now validated and single-use per date and harness

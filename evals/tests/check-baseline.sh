@@ -3,13 +3,18 @@ set -euo pipefail
 
 EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-check-baseline.XXXXXX")"
-RESULT_DIR="$EVALS/results/$(date +%Y-%m-%d)-claude-f04-overlay-$$"
+PASS_RESULT_DIR="$EVALS/results/$(date +%Y-%m-%d)-claude-f04-overlay-pass-$$"
+REWRITE_RESULT_DIR="$EVALS/results/$(date +%Y-%m-%d)-claude-f04-overlay-rewrite-$$"
 
 cleanup() {
-  case "$RESULT_DIR" in
-  "$EVALS/results/"*) rm -rf -- "$RESULT_DIR" ;;
-  *) echo "refusing to clean unexpected result path: $RESULT_DIR" >&2 ;;
-  esac
+  local result_dir
+
+  for result_dir in "$PASS_RESULT_DIR" "$REWRITE_RESULT_DIR"; do
+    case "$result_dir" in
+    "$EVALS/results/"*) rm -rf -- "$result_dir" ;;
+    *) echo "refusing to clean unexpected result path: $result_dir" >&2 ;;
+    esac
+  done
   case "$TEST_ROOT" in
   "${TMPDIR:-/tmp}/linked-records-check-baseline."*) rm -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;
@@ -454,23 +459,23 @@ chmod +x "$TEST_ROOT/shims/claude"
 
 PATH="$TEST_ROOT/shims:$PATH" \
   TMPDIR="$TEST_ROOT/tmp" \
-  EVAL_LABEL="f04-overlay-$$" \
+  EVAL_LABEL="f04-overlay-pass-$$" \
   "$EVALS/run.sh" claude arch-drift >"$TEST_ROOT/runner.txt" 2>&1 ||
   fail "post-overlay runner positive control failed"
-assert_contains "$RESULT_DIR/summary.md" 'status: PASS'
-assert_contains "$RESULT_DIR/summary.md" 'baseline: [0-9a-f]{40,64}'
+assert_contains "$PASS_RESULT_DIR/summary.md" 'status: PASS'
+assert_contains "$PASS_RESULT_DIR/summary.md" 'baseline: [0-9a-f]{40,64}'
 
 set +e
 PATH="$TEST_ROOT/shims:$PATH" \
   TMPDIR="$TEST_ROOT/tmp" \
-  EVAL_LABEL="f04-overlay-$$" \
+  EVAL_LABEL="f04-overlay-rewrite-$$" \
   FAKE_SKILL_REWRITE=1 \
   "$EVALS/run.sh" claude gate-sweep-edit >"$TEST_ROOT/runner-rewrite.txt" 2>&1
 rewrite_rc=$?
 set -e
 [ "$rewrite_rc" -ne 0 ] || fail "malicious runner rewrite unexpectedly passed"
-assert_contains "$RESULT_DIR/summary.md" 'status: FAIL'
-assert_contains "$RESULT_DIR/summary.md" 'FAIL: postconditions'
-assert_contains "$RESULT_DIR/summary.md" 'FAIL: governing skills changed'
+assert_contains "$REWRITE_RESULT_DIR/summary.md" 'status: FAIL'
+assert_contains "$REWRITE_RESULT_DIR/summary.md" 'FAIL: postconditions'
+assert_contains "$REWRITE_RESULT_DIR/summary.md" 'FAIL: governing skills changed'
 
 echo "PASS: immutable eval baseline"
