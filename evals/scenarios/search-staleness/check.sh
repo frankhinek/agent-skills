@@ -8,10 +8,29 @@ fail=0
 eval_check_governing_skills || fail=1
 
 if eval_tree_unchanged_strict app tests/search_clamp.py \
-  specs/CLAIM-clamped-score.md specs/CLAIM-clamped-score/proof.md; then
-  echo "PASS: search staleness maintenance preserved code, harness, claim, and proof"
+  specs/CLAIM-clamped-score.md; then
+  echo "PASS: search staleness maintenance preserved code, harness, and claim"
 else
-  echo "FAIL: search staleness maintenance changed code, harness, claim, or proof"
+  echo "FAIL: search staleness maintenance changed code, harness, or claim"
+  fail=1
+fi
+
+proof=specs/CLAIM-clamped-score/proof.md
+eval_tracked_unchanged "$proof"
+proof_rc=$?
+if [ "$proof_rc" -eq 0 ] && [ -f "$proof" ] && [ ! -L "$proof" ]; then
+  echo "PASS: prior proof remains available for the recorded search"
+elif [ "$proof_rc" -eq 1 ] && [ -f "$proof" ] && [ ! -L "$proof" ] &&
+  grep -qi 'recorded' "$proof" &&
+  grep -qE '10000|10,000' "$proof" &&
+  grep -qi 'current' "$proof" &&
+  grep -qE '20000|20,000' "$proof" &&
+  grep -qi 'stale' "$proof" &&
+  grep -qiE 'negative[ -]control|unclamped_mutant' "$proof" &&
+  grep -qiE 're-?run|running again' "$proof"; then
+  echo "PASS: changed proof distinguishes the recorded run from stale current coverage"
+else
+  echo "FAIL: proof was removed or changed without preserving the recorded run and stale coverage"
   fail=1
 fi
 
@@ -60,7 +79,7 @@ elif [ -f "$verification" ] && [ ! -L "$verification" ] &&
   grep -qiE 'search-config[.]json|configuration|generator|search domain' "$verification" &&
   grep -qiE 'negative[ -]control' "$verification" &&
   grep -qiE 're-?run|run again' "$verification" &&
-  grep -qiE 'current revision|current source|updated revision|updated configuration' "$verification"; then
+  grep -qiE 'current revision|current source|current configuration|updated revision|updated configuration' "$verification"; then
   echo "PASS: changed search configuration demoted the verdict with exact restoration work"
 else
   echo "FAIL: changed search configuration requires a provisional verdict and rerun of negative controls plus search at the current revision"

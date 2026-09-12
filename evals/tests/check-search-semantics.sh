@@ -90,6 +90,30 @@ Rerun the named negative control and search at the current revision before pass.
 EOF
 }
 
+expand_search_config() {
+  python3 - "$FIXTURE/tests/search-config.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path) as handle:
+    config = json.load(handle)
+config["max_abs"] = 20000
+with open(path, "w") as handle:
+    json.dump(config, handle, indent=2, sort_keys=True)
+    handle.write("\n")
+PY
+}
+
+update_search_proof_for_staleness() {
+  cat >>"$FIXTURE/specs/CLAIM-clamped-score/proof.md" <<'EOF'
+
+The current configuration extends to 20,000, while the recorded run covered
+only 10,000. The search lemma is stale until the unclamped_mutant negative
+control and search are rerun for the wider domain.
+EOF
+}
+
 write_provisional_nonvacuity() {
   cat >"$FIXTURE/specs/CLAIM-policy-decision/verification.md" <<'EOF'
 The oracle is self-derived from the implementation output's logged intent, and
@@ -111,34 +135,26 @@ printf '%s\n' '1. `test` — generated cases passed.' \
 expect_failure search-proof 'FAIL: search lemma must record'
 
 new_fixture search-staleness staleness-complete
-python3 - "$FIXTURE/tests/search-config.json" <<'PY'
-import json
-import sys
-
-path = sys.argv[1]
-with open(path) as handle:
-    config = json.load(handle)
-config["max_abs"] = 20000
-with open(path, "w") as handle:
-    json.dump(config, handle, indent=2, sort_keys=True)
-    handle.write("\n")
-PY
+expand_search_config
 write_provisional_staleness
 expect_success search-staleness 'PASS: requested search-domain configuration change is exact'
 assert_contains "$CHECK_OUTPUT" 'PASS: changed search configuration demoted the verdict with exact restoration work'
 
-new_fixture search-staleness staleness-no-evidence
-python3 - "$FIXTURE/tests/search-config.json" <<'PY'
-import json
-import sys
+new_fixture search-staleness staleness-updated-proof
+expand_search_config
+update_search_proof_for_staleness
+write_provisional_staleness
+expect_success search-staleness 'PASS: changed proof distinguishes the recorded run from stale current coverage'
 
-path = sys.argv[1]
-with open(path) as handle:
-    config = json.load(handle)
-config["max_abs"] = 20000
-with open(path, "w") as handle:
-    json.dump(config, handle)
-PY
+new_fixture search-staleness staleness-invalid-proof
+expand_search_config
+printf '%s\n' 'Current search configuration changed.' \
+  >>"$FIXTURE/specs/CLAIM-clamped-score/proof.md"
+write_provisional_staleness
+expect_failure search-staleness 'FAIL: proof was removed or changed without preserving the recorded run and stale coverage'
+
+new_fixture search-staleness staleness-no-evidence
+expand_search_config
 expect_failure search-staleness 'FAIL: stale search verification was not updated'
 
 new_fixture search-nonvacuity nonvacuity-complete
