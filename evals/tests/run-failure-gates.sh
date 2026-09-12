@@ -390,6 +390,54 @@ Before restoring a pass, regenerate the writer enumeration.
 EOF
     echo "I implemented deterministic writes. CLAIM-single-writer is unchanged; its evidence is provisional pending re-verification."
     ;;
+  *'Create proof.md for CLAIM-clamped-score'*)
+    mkdir -p specs/CLAIM-clamped-score
+    cat >specs/CLAIM-clamped-score/proof.md <<'EOF'
+## Scope
+app/score.py, tests/search_clamp.py, and tests/search-config.json.
+## Model and quantifiers
+Sampled generated search; budget 2000 over -10000..10000.
+## Axioms
+Python seeded random behavior.
+## Argument
+1. `search` — seed 1729 reproduces the run. The branch-based oracle checks
+   clamp_score imported from production app/score.py. The named negative
+   control unclamped_mutant is rejected with a counterexample.
+## Residuals
+Unexplored inputs remain.
+## Weakest links
+The search finds counterexamples only inside its sampled budget.
+EOF
+    echo "Recorded sampled search evidence with its budget, seed, oracle, rejected negative control, and production correspondence."
+    ;;
+  *'Expand tests/search-config.json max_abs'*)
+    python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("tests/search-config.json")
+config = json.loads(path.read_text())
+config["max_abs"] = 20000
+path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+PY
+    cat >>specs/CLAIM-clamped-score/verification.md <<'EOF'
+
+tests/search-config.json now expands the generated search domain beyond the
+recorded run.
+Result: provisional
+Rerun the named negative control and search at the current revision before pass.
+EOF
+    echo "The search configuration changed beyond the recorded run, so verification is provisional pending a rerun of the negative control and search."
+    ;;
+  *'Independently verify CLAIM-policy-decision'*)
+    cat >specs/CLAIM-policy-decision/verification.md <<'EOF'
+The oracle is self-derived from the implementation output's logged intent, and
+the proof records no rejected negative control or mutation.
+Result: provisional
+The evidence cannot establish the policy property independently.
+EOF
+    echo "Verification is provisional: the search oracle is self-derived and no negative control was rejected."
+    ;;
   *'briefly explain when it should be used'*)
     echo "The linked-records skill governs qualified ARCH, REQ, SPEC, GATE, and CLAIM records; bare activation is inert."
     ;;
@@ -730,7 +778,7 @@ if [ "$LAST_RC" -ne 0 ]; then
   fail "default scenario run failed"
 fi
 assert_not_contains "$LAST_OUT/summary.md" 'INVALID:'
-for scenario in arch-drift bare-activation claim-staleness claim-writer gate-conflict gate-sweep-edit groom-authority record-threshold req-conflict req-gradual-compliance req-retirement req-source-change spec-conflict spec-evolution; do
+for scenario in arch-drift bare-activation claim-staleness claim-writer gate-conflict gate-sweep-edit groom-authority record-threshold req-conflict req-gradual-compliance req-retirement req-source-change search-nonvacuity search-proof search-staleness spec-conflict spec-evolution; do
   assert_contains "$LAST_OUT/summary.md" "^## $scenario$"
 done
 

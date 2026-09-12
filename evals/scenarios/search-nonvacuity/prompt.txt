@@ -1,0 +1,1 @@
+Independently verify CLAIM-policy-decision from its existing proof and generated search. Do not change the claim, proof, application, or search harness. Record the strongest verdict the evidence supports.

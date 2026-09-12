@@ -1,0 +1,1 @@
+Create proof.md for CLAIM-clamped-score using the existing generated search evidence. Do not create verification.md or change the claim, application, search harness, or configuration.

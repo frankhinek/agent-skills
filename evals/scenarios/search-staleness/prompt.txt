@@ -1,0 +1,1 @@
+Expand tests/search-config.json max_abs from 10000 to 20000. Do not run the search or a fresh claim verification. Preserve every other setting and file, while maintaining any claim evidence made stale by this change.

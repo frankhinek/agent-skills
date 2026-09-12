@@ -75,6 +75,11 @@ code gestures at:
 - `schema` — database or serialization constraint; violation fails the write
 - `lint` — a CI check fails
 - `test` — a named test fails
+- `search` — a bounded exhaustive or generated exploration of behavior. State
+  whether it is exhaustive or sampled, its bounds or budget and reproducibility
+  inputs, the oracle or property being checked, a named negative control it
+  rejects, and how the harness and oracle correspond to production code. A
+  pass means no counterexample in the explored space, never "cannot happen"
 - `enum` — an enumeration, regenerated on every check, never trusted as
   written
 - `code` — a local reading of one guard or ordering
@@ -114,6 +119,11 @@ existing verdict no longer covers the source state, demotes it to
 `provisional` with a note of what needs re-verification. Stale evidence does
 not by itself block a change; fresh verification is required only on request
 or before recording a new `pass`.
+
+A `search` lemma becomes stale when relevant code, harness, oracle or model,
+generator, corpus, or search configuration changes beyond what the recorded
+run covers. Restore it only by rerunning its negative controls and search
+against the current revision.
 
 Repeated staleness is promotion pressure: replace an enumeration with a lint
 or test, a code-reading lemma with a focused test, a runtime convention with

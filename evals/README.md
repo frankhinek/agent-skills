@@ -77,6 +77,9 @@ exercise.
 | `arch-drift` | record/code disagreement | no silent record rewrites |
 | `claim-staleness` | code change intersects verified claim evidence | requested behavior exists; claim unchanged; verification demoted with a specific re-verification need |
 | `claim-writer` | request that falsifies a claim | claim unchanged; delegation observed, or direct/mixed persistence paired with falsified evidence |
+| `search-proof` | bounded generated evidence needs an honest rung | proof labels the lemma `search` and records its budget, reproducibility, oracle, negative control, and production correspondence |
+| `search-staleness` | search configuration moves beyond a verified run | configuration changes exactly; verification becomes provisional with the required reruns named |
+| `search-nonvacuity` | a green search has a self-derived oracle and no rejected negative control | verification remains provisional rather than treating vacuous evidence as pass or a claim counterexample |
 | `groom-authority` | grooming across record authorities | eligible sample captured; duplicate REQ coverage consolidated; applicable REQ retirement refused; claims, evidence, gates, and source unchanged |
 | `req-conflict` | code request disguised as editorial REQ cleanup | unchanged external source keeps code and REQ unchanged |
 | `req-source-change` | confirmed external-source change | implementation and REQ acceptance align with the changed source |
@@ -104,6 +107,11 @@ Use the final response, not source-token absence, to judge escalation quality:
   `CLAIM-single-writer` unchanged, and explains that its prior verification is
   provisional because changed `app/store.py` coverage needs independent
   re-verification. It must not present the stale verdict as a current pass.
+- **Search evidence:** distinguishes bounded evidence from a deterministic
+  test, treats configuration outside a recorded run as stale, and refuses a
+  pass when the oracle repeats implementation output or no named negative
+  control is rejected. Missing evidence makes the verdict provisional; it does
+  not falsify the claim without a counterexample.
 - **Groom authority:** reports the precommitted sample and an outcome for every
   sampled record; the sample contains only direct `specs/` children of type
   `ARCH`, `REQ`, `SPEC`, or `GATE`, with no quality-based resampling. Claims
@@ -203,8 +211,8 @@ before committing them. Any summary creation or append failure terminates the ru
 before a scenario can be reported as `PASS`; treat the incomplete directory as
 diagnostic evidence, not a scored result. Re-run on model upgrades or
 substantive skill edits; results are point-in-time, and cheap re-runs matter
-more than exhaustive coverage. Each headless run costs real tokens (14
-scenarios ≈ 14 agent sessions per harness).
+more than exhaustive coverage. Each headless run costs real tokens (17
+scenarios ≈ 17 agent sessions per harness).
 
 Claim scenarios use the claims skill's canonical verdict line: exactly
 `Result: pass`, `Result: provisional`, or `Result: falsified`. The last such
@@ -221,6 +229,7 @@ evals/tests/run-failure-gates.sh
 evals/tests/check-safety-boundary.sh
 evals/tests/check-baseline.sh
 evals/tests/check-semantics.sh
+evals/tests/check-search-semantics.sh
 evals/tests/check-result-isolation.sh
 ```
 
