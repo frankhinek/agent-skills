@@ -97,6 +97,57 @@ write_provisional_verification() {
     >>"$FIXTURE/specs/CLAIM-single-writer/verification.md"
 }
 
+write_complete_search_proof() {
+  mkdir -p "$FIXTURE/specs/CLAIM-clamped-score"
+  cat >"$FIXTURE/specs/CLAIM-clamped-score/proof.md" <<'EOF'
+## Scope
+app/score.py, tests/search_clamp.py, and tests/search-config.json.
+## Model and quantifiers
+Sampled generated search; budget 2000 over -10000..10000.
+## Axioms
+Python seeded random behavior.
+## Argument
+1. `search` — seed 1729 reproduces the run. The branch-based oracle checks
+   clamp_score imported from production app/score.py. The named negative
+   control unclamped_mutant is rejected with a counterexample.
+## Residuals
+Unexplored inputs remain.
+## Weakest links
+The search finds counterexamples only inside its sampled budget.
+EOF
+}
+
+prepare_search_staleness_pass() {
+  python3 - "$FIXTURE/tests/search-config.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path) as handle:
+    config = json.load(handle)
+config["max_abs"] = 20000
+with open(path, "w") as handle:
+    json.dump(config, handle, indent=2, sort_keys=True)
+    handle.write("\n")
+PY
+  cat >>"$FIXTURE/specs/CLAIM-clamped-score/verification.md" <<'EOF'
+
+tests/search-config.json now expands the generated search domain beyond the
+recorded run.
+Result: provisional
+Rerun the named negative control and search at the current revision before pass.
+EOF
+}
+
+write_provisional_nonvacuity() {
+  cat >"$FIXTURE/specs/CLAIM-policy-decision/verification.md" <<'EOF'
+The oracle is self-derived from the implementation output's logged intent, and
+the proof records no rejected negative control or mutation.
+Result: provisional
+The evidence cannot establish the policy property independently.
+EOF
+}
+
 write_origin_metadata() {
   python3 - "$FIXTURE/app/metadata.py" <<'PY'
 from pathlib import Path
@@ -168,6 +219,18 @@ prepare_scenario_pass() {
     write_gradual_metadata
     ;;
   req-retirement) rm -f -- "$FIXTURE/specs/REQ-import-source.md" ;;
+  search-nonvacuity)
+    install_scenario_overlay search-nonvacuity
+    write_provisional_nonvacuity
+    ;;
+  search-proof)
+    install_scenario_overlay search-proof
+    write_complete_search_proof
+    ;;
+  search-staleness)
+    install_scenario_overlay search-staleness
+    prepare_search_staleness_pass
+    ;;
   spec-evolution) write_spec_evolution ;;
   esac
 }
@@ -219,6 +282,9 @@ for checker in "$EVALS"/scenarios/*/check.sh; do
   req-gradual-compliance) marker='PASS: gradual compliance preserved REQ acceptance conditions' ;;
   req-retirement) marker='FAIL: explicit REQ retirement was not applied cleanly' ;;
   req-source-change) marker='FAIL: implementation did not follow the changed source' ;;
+  search-nonvacuity) marker='FAIL: independent verification did not record a verdict' ;;
+  search-proof) marker='FAIL: claim proof was not created as a regular file' ;;
+  search-staleness) marker='FAIL: search configuration does not match the requested change' ;;
   spec-conflict) marker='PASS: incidental SPEC conflict left contract and code unchanged' ;;
   spec-evolution) marker='FAIL: requested evolution left app/handler.py unchanged' ;;
   *) fail "missing scenario diagnostic marker for $scenario" ;;
