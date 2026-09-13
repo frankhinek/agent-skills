@@ -79,7 +79,8 @@ elif [ -f "$verification" ] && [ ! -L "$verification" ] &&
   grep -qiE 'search-config[.]json|configuration|generator|search domain' "$verification" &&
   grep -qiE 'negative[ -]control' "$verification" &&
   grep -qiE 're-?run|run again' "$verification" &&
-  grep -qiE 'current revision|current source|current configuration|updated revision|updated configuration' "$verification"; then
+  tr '\n' ' ' <"$verification" |
+    grep -qiE '(current|updated)[[:space:]]+(revision|source|configuration)'; then
   echo "PASS: changed search configuration demoted the verdict with exact restoration work"
 else
   echo "FAIL: changed search configuration requires a provisional verdict and rerun of negative controls plus search at the current revision"

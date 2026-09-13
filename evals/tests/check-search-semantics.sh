@@ -86,7 +86,8 @@ write_provisional_staleness() {
 tests/search-config.json now expands the generated search domain beyond the
 recorded run.
 Result: provisional
-Rerun the named negative control and search at the current revision before pass.
+Rerun the named negative control and search at the current
+revision before pass.
 EOF
 }
 
