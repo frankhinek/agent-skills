@@ -1,11 +1,11 @@
 ---
-name: linked-records-claims
-description: Use when creating, reading, proving, or verifying a CLAIM-* record under the linked-records convention, or when a change touches code an existing claim's evidence depends on.
+name: assurance-records-claims
+description: Use when creating, reading, proving, or verifying a CLAIM-* record under the assurance-records convention, or when a change touches code an existing claim's evidence depends on.
 ---
 
 # Claims
 
-Read the `linked-records` skill (`../linked-records/SKILL.md`) first. A
+Read the `assurance-records` skill (`../assurance-records/SKILL.md`) first. A
 claim states one falsifiable, load-bearing
 property the code in scope claims to hold — "this named bad thing cannot
 happen" or "this invariant is preserved" — precisely enough to judge whether

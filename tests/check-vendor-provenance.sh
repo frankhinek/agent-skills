@@ -7,7 +7,7 @@ REAL_RM="$(type -P rm)"
 SYSTEM_BASH="${SYSTEM_BASH:-/bin/bash}"
 ORIGINAL_PATH="$PATH"
 TEST_PARENT="${TMPDIR:-/tmp}"
-TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-provenance.XXXXXX")"
+TEST_ROOT="$(mktemp -d "$TEST_PARENT/assurance-records-vendor-provenance.XXXXXX")"
 SOURCE="$TEST_ROOT/source"
 PROJECTS="$TEST_ROOT/projects"
 SNAPSHOTS="$TEST_ROOT/snapshots"
@@ -16,9 +16,9 @@ GIT_SPY_LOG="$TEST_ROOT/git-calls"
 HOSTILE_GLOBAL="$TEST_ROOT/hostile-global.gitconfig"
 HOSTILE_SYSTEM="$TEST_ROOT/hostile-system.gitconfig"
 HOSTILE_HOME="$TEST_ROOT/hostile-home"
-SAFE_URL="https://github.com/example/linked-records-fixture"
+SAFE_URL="https://github.com/example/assurance-records-fixture"
 SECRET_SENTINEL="f05-secret-sentinel"
-SKILLS=(linked-records linked-records-claims linked-records-upkeep)
+SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
 
 unset BASH_ENV ENV
 unset -f git 2>/dev/null || true
@@ -26,7 +26,7 @@ unset -f rm 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
-  "$TEST_PARENT/linked-records-vendor-provenance."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
+  "$TEST_PARENT/assurance-records-vendor-provenance."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test root: $TEST_ROOT" >&2 ;;
   esac
 }
@@ -160,7 +160,7 @@ configure_repo "$SOURCE"
 "$REAL_GIT" -C "$SOURCE" add -A
 "$REAL_GIT" -C "$SOURCE" commit -q -m "fixture source"
 "$REAL_GIT" -C "$SOURCE" remote add origin \
-  'git@github.com:example/linked-records-fixture.git'
+  'git@github.com:example/assurance-records-fixture.git'
 
 cat >"$HOSTILE_GLOBAL" <<'EOF'
 [url "https://evil.invalid/global/"]
@@ -186,7 +186,7 @@ EOF
   printf '%s\n' 'done'
   printf '%s\n' 'if [ "$is_remote" = yes ]; then'
   printf '%s\n' '  printf "ls-remote %s\n" "$url" >>"$VENDOR_TEST_GIT_LOG"'
-  printf '%s\n' '  [ "$url" = "https://github.com/example/linked-records-fixture" ] || exit 91'
+  printf '%s\n' '  [ "$url" = "https://github.com/example/assurance-records-fixture" ] || exit 91'
   printf '%s\n' '  [ "${GIT_ALLOW_PROTOCOL:-}" = https ] || exit 92'
   printf '%s\n' '  [ "${GIT_CONFIG_NOSYSTEM:-}" = 1 ] || exit 93'
   printf '%s\n' '  [ "${GIT_CONFIG_GLOBAL:-}" = /dev/null ] || exit 94'
@@ -237,14 +237,14 @@ cmp -s "$SNAPSHOTS/valid.before" "$SNAPSHOTS/valid.after" ||
   fail "valid check changed the project tree"
 
 "$REAL_GIT" -C "$SOURCE" remote set-url origin \
-  'https://github.com/example/linked-records-fixture.git'
+  'https://github.com/example/assurance-records-fixture.git'
 https_project="$(make_project https-source)"
 grep -Fxq -- "# vendored-from: $SAFE_URL" \
   "$https_project/.agents/skills/.vendored-manifest" ||
   fail "HTTPS source was not stored as canonical provenance"
 
 "$REAL_GIT" -C "$SOURCE" remote set-url origin \
-  "https://alice:$SECRET_SENTINEL@github.com/example/linked-records-fixture.git"
+  "https://alice:$SECRET_SENTINEL@github.com/example/assurance-records-fixture.git"
 credential_project="$PROJECTS/credential-source"
 mkdir -p "$credential_project"
 run_vendor --copy "$credential_project"

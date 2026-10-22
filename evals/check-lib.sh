@@ -19,7 +19,7 @@ eval_with_baseline_index() {
   local baseline_index command_rc cleanup_rc
 
   eval_require_base || return 2
-  baseline_index="$(mktemp "${TMPDIR:-/tmp}/linked-records-tree-index.XXXXXX")" ||
+  baseline_index="$(mktemp "${TMPDIR:-/tmp}/assurance-records-tree-index.XXXXXX")" ||
     return 2
   rm -f -- "$baseline_index" || return 2
   if ! GIT_INDEX_FILE="$baseline_index" git read-tree "$EVAL_BASE"; then
@@ -102,7 +102,7 @@ eval_markdown_section() {
 eval_check_governing_skills() {
   local baseline_index tracked_changes untracked untracked_rc
 
-  baseline_index="$(mktemp "${TMPDIR:-/tmp}/linked-records-skill-index.XXXXXX")" || {
+  baseline_index="$(mktemp "${TMPDIR:-/tmp}/assurance-records-skill-index.XXXXXX")" || {
     echo "FAIL: governing skill integrity could not be evaluated"
     return 2
   }

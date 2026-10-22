@@ -99,7 +99,7 @@ eval_fixture_temp_init() {
     echo "eval fixture temporary parent is unavailable: ${TMPDIR:-/tmp}" >&2
     return 1
   }
-  EVAL_FIXTURE_PREFIX="${tmp_parent%/}/linked-records-eval."
+  EVAL_FIXTURE_PREFIX="${tmp_parent%/}/assurance-records-eval."
 
   raw="$(mktemp -d "${EVAL_FIXTURE_PREFIX}XXXXXX")"
   rc=$?

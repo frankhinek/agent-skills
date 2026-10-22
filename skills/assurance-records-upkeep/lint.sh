@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mechanical conformance lint for linked-records specs/ corpora.
+# Mechanical conformance lint for assurance-records specs/ corpora.
 #
 # Usage: lint.sh [project-root] | lint.sh --list-checks
 # Output: <path>[:line]: [check] <message>, one finding per line.
@@ -25,7 +25,7 @@ dangling-ref	references to nonexistent record IDs'
 
 if [ "${1:-}" = --list-checks ]; then
   if [ "$#" -ne 1 ]; then
-    printf 'linked-records lint: [setup] --list-checks accepts no project root\n' >&2
+    printf 'assurance-records lint: [setup] --list-checks accepts no project root\n' >&2
     exit 2
   fi
   printf '%s\n' "$CHECKS"
@@ -35,7 +35,7 @@ fi
 cd "${1:-.}" || exit 2
 
 setup_error() {
-  printf 'linked-records lint: [setup] %s\n' "$1" >&2
+  printf 'assurance-records lint: [setup] %s\n' "$1" >&2
   exit 2
 }
 
@@ -43,7 +43,7 @@ ROOT="$(pwd -P)" || setup_error "unable to resolve project root"
 TMP_PARENT="${TMPDIR:-/tmp}"
 TMP_PARENT="$(CDPATH='' cd -- "$TMP_PARENT" 2>/dev/null && pwd -P)" ||
   setup_error "unable to resolve temporary directory: ${TMPDIR:-/tmp}"
-TMP_PREFIX="${TMP_PARENT%/}/linked-records-lint."
+TMP_PREFIX="${TMP_PARENT%/}/assurance-records-lint."
 
 if ! TMP_RAW="$(mktemp -d "${TMP_PREFIX}XXXXXX")" || [ -z "$TMP_RAW" ]; then
   setup_error "unable to create scratch directory"
@@ -80,7 +80,7 @@ finding() { # finding <location> <check> <message>
   case $'\n'"$CHECKS"$'\n' in
   *$'\n'"$2"$'\t'*) ;;
   *)
-    printf 'linked-records lint: [internal] unregistered check ID: %s (at %s)\n' \
+    printf 'assurance-records lint: [internal] unregistered check ID: %s (at %s)\n' \
       "$2" "$1" >>"$TMP/internal-errors"
     return 0
     ;;
@@ -96,7 +96,7 @@ find . -type d -name specs \
   >"$TMP/specsdirs"
 
 if [ ! -s "$TMP/specsdirs" ]; then
-  printf 'linked-records lint: no specs/ directories found under %s\n' "$ROOT"
+  printf 'assurance-records lint: no specs/ directories found under %s\n' "$ROOT"
   exit 0
 fi
 
@@ -400,12 +400,12 @@ done <"$TMP/refs"
 # ---- report -------------------------------------------------------------
 if [ -s "$TMP/findings" ]; then
   sort -u "$TMP/findings"
-  echo "linked-records lint: $(sort -u "$TMP/findings" | grep -c .) finding(s)"
+  echo "assurance-records lint: $(sort -u "$TMP/findings" | grep -c .) finding(s)"
 fi
 if [ -s "$TMP/internal-errors" ]; then
   sort -u "$TMP/internal-errors" >&2
   exit 2
 fi
 [ -s "$TMP/findings" ] && exit 1
-echo "linked-records lint: clean ($(grep -c . "$TMP/records") records)"
+echo "assurance-records lint: clean ($(grep -c . "$TMP/records") records)"
 exit 0

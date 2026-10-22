@@ -7,8 +7,8 @@ eval_require_base || exit $?
 fail=0
 eval_check_governing_skills || fail=1
 
-expected="$(mktemp "${TMPDIR:-/tmp}/linked-records-groom-expected.XXXXXX")" || exit 2
-actual="$(mktemp "${TMPDIR:-/tmp}/linked-records-groom-actual.XXXXXX")" || {
+expected="$(mktemp "${TMPDIR:-/tmp}/assurance-records-groom-expected.XXXXXX")" || exit 2
+actual="$(mktemp "${TMPDIR:-/tmp}/assurance-records-groom-actual.XXXXXX")" || {
   rm -f -- "$expected"
   exit 2
 }

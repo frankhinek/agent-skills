@@ -13,7 +13,7 @@ REAL_GIT="$(type -P git)"
 ORIGINAL_PATH="$PATH"
 UNREACHABLE_BIN="$REPO/tests/fixtures/git-unreachable"
 TEST_PARENT="${TMPDIR:-/tmp}"
-TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-transaction.XXXXXX")"
+TEST_ROOT="$(mktemp -d "$TEST_PARENT/assurance-records-vendor-transaction.XXXXXX")"
 PROJECTS="$TEST_ROOT/projects"
 SNAPSHOTS="$TEST_ROOT/snapshots"
 TRANSACTION_RELATIVE=".agents/.vendor-transaction"
@@ -27,7 +27,7 @@ unset -f rm 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
-  "$TEST_PARENT/linked-records-vendor-transaction."*)
+  "$TEST_PARENT/assurance-records-vendor-transaction."*)
     "$REAL_RM" -rf -- "$TEST_ROOT"
     ;;
   *) echo "refusing to clean unexpected test root: $TEST_ROOT" >&2 ;;
@@ -160,7 +160,7 @@ make_cp_shim() {
     printf '%s\n' \
       'for arg in "$@"; do' \
       '  case "$arg" in' \
-      '  */skills/linked-records-claims)' \
+      '  */skills/assurance-records-claims)' \
       '    : >"$marker"' \
       '    if [ "$behavior" = fail ]; then exit 71; fi' \
       '    exit 0' \
@@ -278,7 +278,7 @@ make_live_inventory_shim() {
     printf 'state=%q\n' "$state"
     printf 'real_find=%q\n' "$REAL_FIND"
     printf '%s\n' \
-      'if [ "${1:-}" = ".agents/skills/linked-records" ]; then' \
+      'if [ "${1:-}" = ".agents/skills/assurance-records" ]; then' \
       '  count=0' \
       '  [ ! -f "$state" ] || read -r count <"$state"' \
       '  count=$((count + 1))' \
@@ -304,10 +304,10 @@ mkdir -p "$PROJECTS" "$SNAPSHOTS"
 
 # A normal forced refresh replaces local changes and publishes a matching manifest.
 normal_project="$(make_copy_project normal-refresh)"
-printf '%s\n' 'local marker' >>"$normal_project/.agents/skills/linked-records/SKILL.md"
+printf '%s\n' 'local marker' >>"$normal_project/.agents/skills/assurance-records/SKILL.md"
 run_vendor "" --copy --force "$normal_project"
 [ "$RUN_STATUS" -eq 0 ] || fail "normal refresh failed: $RUN_OUTPUT"
-if grep -Fq 'local marker' "$normal_project/.agents/skills/linked-records/SKILL.md"; then
+if grep -Fq 'local marker' "$normal_project/.agents/skills/assurance-records/SKILL.md"; then
   fail "normal refresh retained overwritten content"
 fi
 assert_no_transaction normal-refresh "$normal_project"
@@ -345,7 +345,7 @@ assert_no_transaction silent-stage "$silent_project"
 # A catchable rename failure after commit starts restores old payload and manifest.
 rename_project="$(make_copy_project rename-failure)"
 snapshot_skills "$rename_project" "$SNAPSHOTS/rename.before"
-rename_shim="$(make_mv_shim rename-failure fail linked-records-claims)"
+rename_shim="$(make_mv_shim rename-failure fail assurance-records-claims)"
 run_vendor "$rename_shim" --copy "$rename_project"
 [ "$RUN_STATUS" -ne 0 ] || fail "rename failure unexpectedly succeeded"
 assert_triggered rename-failure
@@ -372,7 +372,7 @@ assert_no_transaction live-inventory-failure "$verify_project"
 # A catchable signal after a live rename runs the same rollback path.
 signal_project="$(make_copy_project term-signal)"
 snapshot_skills "$signal_project" "$SNAPSHOTS/signal.before"
-signal_shim="$(make_mv_shim term-signal term linked-records)"
+signal_shim="$(make_mv_shim term-signal term assurance-records)"
 run_vendor "$signal_shim" --copy "$signal_project"
 [ "$RUN_STATUS" -ne 0 ] || fail "TERM-interrupted refresh unexpectedly succeeded"
 assert_triggered term-signal
@@ -412,7 +412,7 @@ assert_same_snapshot init-recovery "$SNAPSHOTS/init.before" "$SNAPSHOTS/init.rec
 # the next mutation restores without --force, and a final rerun succeeds.
 kill_project="$(make_copy_project hard-kill)"
 snapshot_skills "$kill_project" "$SNAPSHOTS/kill.before"
-kill_shim="$(make_mv_shim hard-kill kill linked-records)"
+kill_shim="$(make_mv_shim hard-kill kill assurance-records)"
 run_vendor "$kill_shim" --copy "$kill_project"
 [ "$RUN_STATUS" -ne 0 ] || fail "hard-kill refresh unexpectedly succeeded"
 assert_triggered hard-kill
@@ -483,12 +483,12 @@ assert_contains committed-check "$RUN_OUTPUT" "local edits: none"
 fresh_project="$PROJECTS/fresh-failure"
 mkdir -p "$fresh_project/.agents/skills/unrelated-skill"
 printf '%s\n' 'preserve me' >"$fresh_project/.agents/skills/unrelated-skill/KEEP"
-fresh_shim="$(make_mv_shim fresh-failure fail linked-records-claims)"
+fresh_shim="$(make_mv_shim fresh-failure fail assurance-records-claims)"
 run_vendor "$fresh_shim" --copy "$fresh_project"
 [ "$RUN_STATUS" -ne 0 ] || fail "fresh rename failure unexpectedly succeeded"
 assert_triggered fresh-failure
 assert_contains fresh-failure "$RUN_OUTPUT" "restored previous installation"
-for skill in linked-records linked-records-claims linked-records-upkeep; do
+for skill in assurance-records assurance-records-claims assurance-records-upkeep; do
   [ ! -e "$fresh_project/.agents/skills/$skill" ] ||
     fail "fresh failure left $skill installed"
 done
@@ -506,9 +506,9 @@ printf '%s\n' '1' >"$abandoned_txn/version"
 printf '%s\n' 'preparing' >"$abandoned_txn/phase"
 printf '%s\n' \
   $'manifest\t1' \
-  $'linked-records\t1' \
-  $'linked-records-claims\t1' \
-  $'linked-records-upkeep\t1' >"$abandoned_txn/original-presence"
+  $'assurance-records\t1' \
+  $'assurance-records-claims\t1' \
+  $'assurance-records-upkeep\t1' >"$abandoned_txn/original-presence"
 run_vendor "" --copy "$abandoned_project"
 [ "$RUN_STATUS" -eq 1 ] || fail "abandoned recovery returned $RUN_STATUS: $RUN_OUTPUT"
 assert_contains abandoned-precommit "$RUN_OUTPUT" "abandoned pre-commit vendor transaction"

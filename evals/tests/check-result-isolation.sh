@@ -5,7 +5,7 @@ EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNNER="$EVALS/run.sh"
 REAL_MKTEMP="$(type -P mktemp)"
 REAL_RM="$(type -P rm)"
-TEST_ROOT="$($REAL_MKTEMP -d "${TMPDIR:-/tmp}/linked-records-result-isolation.XXXXXX")"
+TEST_ROOT="$($REAL_MKTEMP -d "${TMPDIR:-/tmp}/assurance-records-result-isolation.XXXXXX")"
 RESULT_DIRS=()
 ESCAPED_TARGET="$EVALS/result-isolation-outside-$$"
 
@@ -19,7 +19,7 @@ cleanup() {
     esac
   done
   case "$TEST_ROOT" in
-  "${TMPDIR:-/tmp}/linked-records-result-isolation."*)
+  "${TMPDIR:-/tmp}/assurance-records-result-isolation."*)
     "$REAL_RM" -rf -- "$TEST_ROOT"
     ;;
   *) echo "refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;

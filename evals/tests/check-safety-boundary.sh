@@ -4,7 +4,7 @@ set -euo pipefail
 EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNNER="$EVALS/run.sh"
 REAL_CODEX="$(type -P codex || true)"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-safety.XXXXXX")"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/assurance-records-safety.XXXXXX")"
 RESULT_DIRS=()
 
 cleanup() {
@@ -16,7 +16,7 @@ cleanup() {
     esac
   done
   case "$TEST_ROOT" in
-  "${TMPDIR:-/tmp}/linked-records-safety."*) rm -rf -- "$TEST_ROOT" ;;
+  "${TMPDIR:-/tmp}/assurance-records-safety."*) rm -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;
   esac
 }

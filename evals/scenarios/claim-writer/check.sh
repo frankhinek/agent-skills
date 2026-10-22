@@ -10,7 +10,7 @@ else
   echo "FAIL: claim records changed"; fail=1
 fi
 
-changed_list="$(mktemp "${TMPDIR:-/tmp}/linked-records-claim-paths.XXXXXX")" || exit 2
+changed_list="$(mktemp "${TMPDIR:-/tmp}/assurance-records-claim-paths.XXXXXX")" || exit 2
 trap 'rm -f -- "$changed_list"' EXIT
 if ! eval_changed_files >"$changed_list"; then
   echo "FAIL: changed files could not be enumerated"

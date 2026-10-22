@@ -6,14 +6,14 @@ VENDOR="$REPO/vendor.sh"
 REAL_GIT="$(type -P git)"
 REAL_RM="$(type -P rm)"
 UNREACHABLE_BIN="$REPO/tests/fixtures/git-unreachable"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-vendor-args.XXXXXX")"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/assurance-records-vendor-args.XXXXXX")"
 
 unset BASH_ENV ENV
 unset -f rm 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
-  "${TMPDIR:-/tmp}/linked-records-vendor-args."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
+  "${TMPDIR:-/tmp}/assurance-records-vendor-args."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;
   esac
 }

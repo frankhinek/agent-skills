@@ -1,8 +1,8 @@
 ---
-summary: "Install and use Frank's portable linked-records agent skills."
+summary: "Install and use Frank's portable assurance-records agent skills."
 read_when:
   - Installing skills globally for an Agent Skills client
-  - Vendoring linked-records into a project
+  - Vendoring assurance-records into a project
 title: "Agent Skills"
 ---
 
@@ -13,19 +13,23 @@ Frank's personal agent skills, usable from any tool that reads the
 Codex CLI / ChatGPT, Goose, Gemini CLI, Cursor, …) or a plain `AGENTS.md`
 pointer.
 
-The main content is **linked-records**: a convention for durable project
+The main content is **Assurance Records**: a convention for durable project
 knowledge as small, linked Markdown records (`ARCH`, `REQ`, `SPEC`, `GATE`,
 `CLAIM`) in `specs/` directories. It is a personal synthesis of dpc's
 Linked Specs (GATE-era), maan2003's agentic-claims, and the useful residue
-of ADR practice. Start with [skills/linked-records/SKILL.md](skills/linked-records/SKILL.md).
+of ADR practice. Start with [skills/assurance-records/SKILL.md](skills/assurance-records/SKILL.md).
+
+Previously named **Linked Records**. The record types and `specs/` layout are
+unchanged. Historical reviews and eval results retain the names used when
+they were recorded.
 
 ## Layout
 
 ```
 skills/
-├── linked-records/SKILL.md         # core convention: record types, authority rules
-├── linked-records-claims/SKILL.md  # claim proofs + adversarial verification
-└── linked-records-upkeep/          # bootstrap / lint / groom workflows
+├── assurance-records/SKILL.md        # core convention: record types, authority rules
+├── assurance-records-claims/SKILL.md # claim proofs + adversarial verification
+└── assurance-records-upkeep/         # bootstrap / lint / groom workflows
     ├── SKILL.md
     └── lint.sh                     # executable mechanical checks (CI-ready)
 install.sh                          # symlink skills into each tool's global dir
@@ -73,6 +77,29 @@ returns nonzero after processing all targets. Missing optional tool directories
 remain ordinary skips. Idempotent; edit skills here, every tool sees the change
 immediately. Project-level vendoring via `vendor.sh` is the universal path and
 needs no installer at all.
+
+## Migrate from Linked Records
+
+The three `linked-records`, `linked-records-claims`, and `linked-records-upkeep`
+skill directories are now `assurance-records`, `assurance-records-claims`, and
+`assurance-records-upkeep`. Existing installations need a one-time migration;
+the installer and vendor script manage only the new names.
+
+For global installs, remove only old symlinks that point into this repository,
+then run `./install.sh` with any custom targets you used originally. Preserve
+real directories and locally changed copies for reconciliation.
+
+For a vendored project:
+
+1. Finish any interrupted vendor transaction using the pre-rename version of
+   `vendor.sh` before migrating.
+2. Inspect and preserve local edits. Move the three old skill directories and
+   `.agents/skills/.vendored-manifest`, if present, to a backup outside
+   `.agents/skills/`; leave unrelated skills in place.
+3. Update the convention name and skill paths in `AGENTS.md` and any other
+   active project references. Keep the project's records and record IDs.
+4. From a committed checkout of this rename, run `vendor.sh --copy <project>`
+   and `vendor.sh --check <project>`. Review the project diff before committing.
 
 ## New project
 
@@ -191,7 +218,7 @@ provenance or network work and print every skill's state. When all three skills
 and the manifest are absent, the install is called out separately as not
 installed or the wrong project directory, even if the shared `.agents/skills`
 directory contains unrelated skills. Preserve or move only affected
-linked-records entries, inspect and merge local work, then reinstall with an
+assurance-records entries, inspect and merge local work, then reinstall with an
 explicit `--copy` or `--link` mode.
 
 ## Using it day to day
@@ -202,7 +229,7 @@ The value comes from a few explicit moves at the right moments:
 
 | Moment | Say to your agent |
 |---|---|
-| Project has real code, no records yet | "bootstrap linked-records" — surveys the code, writes the initial `ARCH-*` baseline |
+| Project has real code, no records yet | "bootstrap assurance-records" — surveys the code, writes the initial `ARCH-*` baseline |
 | You make a decision that must stick ("local-only, no cloud sync") | "establish a gate: \<constraint\>, because \<goal\>" — agents can no longer undo it without you |
 | A property's failure would really hurt ("payments can't double-apply") | "create a claim: \<property\>" — future changes treat it as an invariant to uphold |
 | You want actual evidence (pre-release, after a scary refactor) | "prove and verify CLAIM-x" — written proof plus an independent adversarial check |
@@ -229,19 +256,19 @@ commit, push — every tool sees the change immediately.
   project's `.agents/skills/` and load them when the description matches
   the task.
 - **Everything else** falls back to the `AGENTS.md` pointer: any agent that
-  can read files can follow "read `.agents/skills/linked-records/SKILL.md`
+  can read files can follow "read `.agents/skills/assurance-records/SKILL.md`
   first." For a tool that reads a different hints file (e.g. Goose's
   `.goosehints`), a one-line "Read AGENTS.md" suffices.
 
 ## Provenance & license
 
-The linked-records skill family is a personal synthesis with this lineage:
+The assurance-records skill family is a personal synthesis with this lineage:
 
 | Local material | Upstream lineage |
 |---|---|
-| `linked-records` | dpc's Linked Specs record model, with maan2003's claim concept incorporated as the `CLAIM` record type |
-| `linked-records-claims` | maan2003's agentic-claims proof and verification practice, adapted to the Linked Specs authority model |
-| `linked-records-upkeep` | dpc's Linked Specs bootstrapping and grooming practices, with claim boundaries from the combined model |
+| `assurance-records` | dpc's Linked Specs record model, with maan2003's claim concept incorporated as the `CLAIM` record type |
+| `assurance-records-claims` | maan2003's agentic-claims proof and verification practice, adapted to the Linked Specs authority model |
+| `assurance-records-upkeep` | dpc's Linked Specs bootstrapping and grooming practices, with claim boundaries from the combined model |
 | Scripts, linter, and eval suite | Original to this repository |
 
 ADR practice is the historical backdrop. The relevant upstream instruction

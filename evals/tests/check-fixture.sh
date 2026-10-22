@@ -5,14 +5,14 @@ EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURE="$EVALS/fixture.sh"
 REAL_GIT="$(type -P git)"
 REAL_RM="$(type -P rm)"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-check-fixture.XXXXXX")"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/assurance-records-check-fixture.XXXXXX")"
 
 unset BASH_ENV ENV
 unset -f git rm 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
-  "${TMPDIR:-/tmp}/linked-records-check-fixture."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
+  "${TMPDIR:-/tmp}/assurance-records-check-fixture."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;
   esac
 }
@@ -35,10 +35,10 @@ assert_complete_fixture() {
     fail "$dest has no valid HEAD"
   [ -z "$("$REAL_GIT" -C "$dest" status --porcelain)" ] ||
     fail "$dest worktree is not clean"
-  [ -f "$dest/.agents/skills/linked-records/SKILL.md" ] ||
-    fail "$dest lacks vendored linked-records"
-  [ -f "$dest/.agents/skills/linked-records-claims/SKILL.md" ] ||
-    fail "$dest lacks vendored linked-records-claims"
+  [ -f "$dest/.agents/skills/assurance-records/SKILL.md" ] ||
+    fail "$dest lacks vendored assurance-records"
+  [ -f "$dest/.agents/skills/assurance-records-claims/SKILL.md" ] ||
+    fail "$dest lacks vendored assurance-records-claims"
 }
 
 snapshot_dir() {

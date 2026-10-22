@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Regression matrix for the linked-records mechanical linter contract.
+# Regression matrix for the assurance-records mechanical linter contract.
 set -uo pipefail
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 LINTER="$SCRIPT_DIR/../lint.sh"
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-lint.XXXXXX")" || exit 2
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/assurance-records-lint.XXXXXX")" || exit 2
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 put() {
@@ -26,7 +26,7 @@ install_rm_probe() {
     'unset CDPATH' \
     'tmp_parent="$(cd -- "${TMPDIR%/}" && pwd -P)" || exit 98' \
     'case "$*" in' \
-    '"-rf -- $tmp_parent/linked-records-lint.INIT00") command -p rm "$@" ;;' \
+    '"-rf -- $tmp_parent/assurance-records-lint.INIT00") command -p rm "$@" ;;' \
     '*) exit 99 ;;' \
     'esac'
   chmod +x "$root/.test-bin/rm"
@@ -50,7 +50,7 @@ setup_scratch_initialization_failure() {
   local root="$1"
   put "$root/.test-bin/mktemp" \
     '#!/bin/sh' \
-    'scratch="${TMPDIR%/}/linked-records-lint.INIT00"' \
+    'scratch="${TMPDIR%/}/assurance-records-lint.INIT00"' \
     'mkdir -p "$scratch/findings"' \
     'printf '\''%s\n'\'' "$scratch"'
   chmod +x "$root/.test-bin/mktemp"
@@ -69,14 +69,14 @@ verify_case() {
   scratch-initialization-failure)
     local canonical_root
     canonical_root="$(CDPATH='' cd -- "$root" && pwd -P)" || return 1
-    [ ! -e "$root/linked-records-lint.INIT00" ] || return 1
-    grep -Fqx -e "-rf -- $canonical_root/linked-records-lint.INIT00" "$root/rm-called" || return 1
+    [ ! -e "$root/assurance-records-lint.INIT00" ] || return 1
+    grep -Fqx -e "-rf -- $canonical_root/assurance-records-lint.INIT00" "$root/rm-called" || return 1
     ;;
   reference-scan-boundary)
     local expected
     expected="$(printf '%s\n%s' \
       './src/app.py:1: [dangling-ref] references non-existent record REQ-source-missing' \
-      'linked-records lint: 1 finding(s)')"
+      'assurance-records lint: 1 finding(s)')"
     [ "$output" = "$expected" ] || return 1
     [ "$elapsed" -le 10 ] || return 1
     ;;
@@ -85,14 +85,14 @@ verify_case() {
     expected="$(printf '%s\n%s\n%s' \
       './SKILL.md:6: [dangling-ref] references non-existent record GATE-root-skill-missing' \
       './src/app.py:1: [dangling-ref] references non-existent record REQ-project-missing' \
-      'linked-records lint: 2 finding(s)')"
+      'assurance-records lint: 2 finding(s)')"
     [ "$output" = "$expected" ] || return 1
     ;;
   link-grammar)
     local expected
     expected="$(printf '%s\n%s' \
       './specs/ARCH-links.md:17: [link] broken relative link: ../docs/missing.md' \
-      'linked-records lint: 1 finding(s)')"
+      'assurance-records lint: 1 finding(s)')"
     [ "$output" = "$expected" ] || return 1
     ;;
   esac
@@ -375,9 +375,9 @@ setup_alternate_skill_root() {
     '---' '' \
     'Project constraint: GATE-root-skill-missing.'
   put "$root/src/app.py" 'requirement = "REQ-project-missing"'
-  put "$root/.custom [client]/skill store/linked-records-claims/SKILL.md" \
+  put "$root/.custom [client]/skill store/assurance-records-claims/SKILL.md" \
     '---' \
-    'name: linked-records-claims' \
+    'name: assurance-records-claims' \
     'description: Example installed skill.' \
     '---' '' \
     '```text' \
@@ -387,11 +387,11 @@ setup_alternate_skill_root() {
     '```'
 }
 
-CASES='no-specs|0|linked-records lint: no specs/ directories found under @ROOT@|setup_no_specs
+CASES='no-specs|0|assurance-records lint: no specs/ directories found under @ROOT@|setup_no_specs
 mktemp-failure|2|[setup] unable to create scratch directory|setup_mktemp_failure
 mktemp-unsafe-path|2|[setup] unsafe scratch directory returned by mktemp: /|setup_mktemp_unsafe_path
 scratch-initialization-failure|2|[setup] unable to initialize scratch directory|setup_scratch_initialization_failure
-valid-corpus|0|linked-records lint: clean|setup_valid_corpus
+valid-corpus|0|assurance-records lint: clean|setup_valid_corpus
 duplicate-id|1|[unique-id] record ID in multiple specs dirs|setup_duplicate_id
 index-file|1|[no-index] index-like file in specs/|setup_index_file
 bad-name|1|[type] not a recognized record name|setup_bad_name
@@ -401,7 +401,7 @@ link-grammar|1|[link] broken relative link: ../docs/missing.md|setup_link_gramma
 spec-missing-justification|1|missing '\''## Record justification'\'' section|setup_spec_missing_justification
 spec-empty-justification|1|Record justification'\'' section must contain non-empty content|setup_spec_empty_justification
 spec-duplicate-justification|1|exactly one '\''## Record justification'\'' section|setup_spec_duplicate_justification
-spec-allowed-fences|0|linked-records lint: clean|setup_spec_allowed_fences
+spec-allowed-fences|0|assurance-records lint: clean|setup_spec_allowed_fences
 spec-unlabeled-fence|1|[spec-shape] fenced block must use an approved diagram label|setup_spec_unlabeled_fence
 spec-source-backtick|1|[spec-shape] fenced block must use an approved diagram label|setup_spec_source_backtick
 spec-source-tilde|1|[spec-shape] fenced block must use an approved diagram label|setup_spec_source_tilde
@@ -417,7 +417,7 @@ claim-metadata-mixed-case|1|claim-level proof/verdict material belongs in|setup_
 tombstone-field|1|[tombstone] explicit tombstone marker|setup_tombstone_field
 tombstone-status-field|1|[tombstone] explicit tombstone marker|setup_tombstone_status_field
 tombstone-heading|1|[tombstone] explicit tombstone marker|setup_tombstone_heading
-valid-gradual-status|0|linked-records lint: clean|setup_valid_gradual_status
+valid-gradual-status|0|assurance-records lint: clean|setup_valid_gradual_status
 orphan-evidence|1|[orphan-evidence] evidence directory without a CLAIM-orphan.md record|setup_orphan_evidence
 unexpected-evidence|1|[evidence-shape] unexpected evidence file|setup_unexpected_evidence
 stray-directory|1|[stray-dir] unexpected directory in specs/|setup_stray_directory

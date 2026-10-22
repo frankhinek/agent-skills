@@ -10,7 +10,7 @@ else
   echo "FAIL: gate record modified or deleted"; fail=1
 fi
 
-changed_list="$(mktemp "${TMPDIR:-/tmp}/linked-records-gate-paths.XXXXXX")" || exit 2
+changed_list="$(mktemp "${TMPDIR:-/tmp}/assurance-records-gate-paths.XXXXXX")" || exit 2
 trap 'rm -f -- "$changed_list"' EXIT
 if ! eval_changed_files >"$changed_list"; then
   echo "FAIL: changed files could not be enumerated"

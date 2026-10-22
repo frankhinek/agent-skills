@@ -9,13 +9,13 @@ REAL_GIT="$(type -P git)"
 ORIGINAL_PATH="$PATH"
 UNREACHABLE_BIN="$REPO/tests/fixtures/git-unreachable"
 TEST_PARENT="${TMPDIR:-/tmp}"
-TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-state.XXXXXX")"
+TEST_ROOT="$(mktemp -d "$TEST_PARENT/assurance-records-vendor-state.XXXXXX")"
 PROJECTS="$TEST_ROOT/projects"
 SNAPSHOTS="$TEST_ROOT/snapshots"
 SPY_BIN="$TEST_ROOT/git-spy-bin"
 COMPARISON_SPY_BIN="$TEST_ROOT/comparison-spy-bin"
 GIT_SPY_LOG="$TEST_ROOT/git-calls"
-SKILLS=(linked-records linked-records-claims linked-records-upkeep)
+SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
 
 unset BASH_ENV ENV
 unset -f rm 2>/dev/null || true
@@ -24,7 +24,7 @@ unset -f awk 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
-  "$TEST_PARENT/linked-records-vendor-state."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
+  "$TEST_PARENT/assurance-records-vendor-state."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test root: $TEST_ROOT" >&2 ;;
   esac
 }
@@ -165,11 +165,11 @@ assert_structural_failure() {
   [ "$RUN_STATUS" -eq 1 ] ||
     fail "$name returned $RUN_STATUS instead of 1: $RUN_OUTPUT"
 
-  assert_contains "$name" "$RUN_OUTPUT" "  linked-records: $state_core"
-  assert_contains "$name" "$RUN_OUTPUT" "  linked-records-claims: $state_claims"
-  assert_contains "$name" "$RUN_OUTPUT" "  linked-records-upkeep: $state_upkeep"
+  assert_contains "$name" "$RUN_OUTPUT" "  assurance-records: $state_core"
+  assert_contains "$name" "$RUN_OUTPUT" "  assurance-records-claims: $state_claims"
+  assert_contains "$name" "$RUN_OUTPUT" "  assurance-records-upkeep: $state_upkeep"
   assert_contains "$name" "$RUN_OUTPUT" \
-    "Preserve or move only affected linked-records entries under .agents/skills before recovery."
+    "Preserve or move only affected assurance-records entries under .agents/skills before recovery."
   assert_contains "$name" "$RUN_OUTPUT" "Inspect and merge any local work"
   assert_contains "$name" "$RUN_OUTPUT" "--copy"
   assert_contains "$name" "$RUN_OUTPUT" "--link"
@@ -204,8 +204,8 @@ edited_manifest="$edited_project/.agents/skills/.vendored-manifest"
   grep -v '^# vendored-from:' "$edited_manifest"
 } >"$edited_manifest.tmp"
 mv "$edited_manifest.tmp" "$edited_manifest"
-printf '\nlocal claims edit\n' >>"$edited_project/.agents/skills/linked-records-claims/SKILL.md"
-printf '\nlocal core edit\n' >>"$edited_project/.agents/skills/linked-records/SKILL.md"
+printf '\nlocal claims edit\n' >>"$edited_project/.agents/skills/assurance-records-claims/SKILL.md"
+printf '\nlocal core edit\n' >>"$edited_project/.agents/skills/assurance-records/SKILL.md"
 
 missing_manifest_project="$(make_copy_project copied-no-manifest)"
 "$REAL_RM" -f -- "$missing_manifest_project/.agents/skills/.vendored-manifest"
@@ -242,24 +242,24 @@ for skill in "${SKILLS[@]}"; do
 done
 
 first_linked_project="$(make_copy_project mixed-first-linked)"
-replace_with_exact_link "$first_linked_project" linked-records
+replace_with_exact_link "$first_linked_project" assurance-records
 
 first_copied_project="$(make_copy_project mixed-first-copied)"
-replace_with_exact_link "$first_copied_project" linked-records-claims
-replace_with_exact_link "$first_copied_project" linked-records-upkeep
+replace_with_exact_link "$first_copied_project" assurance-records-claims
+replace_with_exact_link "$first_copied_project" assurance-records-upkeep
 
 regular_file_project="$(make_copy_project invalid-regular-file)"
-"$REAL_RM" -rf -- "$regular_file_project/.agents/skills/linked-records-claims"
-printf '%s\n' 'not a skill directory' >"$regular_file_project/.agents/skills/linked-records-claims"
+"$REAL_RM" -rf -- "$regular_file_project/.agents/skills/assurance-records-claims"
+printf '%s\n' 'not a skill directory' >"$regular_file_project/.agents/skills/assurance-records-claims"
 
 dangling_link_project="$(make_link_project invalid-dangling-link)"
-"$REAL_RM" -f -- "$dangling_link_project/.agents/skills/linked-records-claims"
-ln -s "$TEST_ROOT/absent-skill" "$dangling_link_project/.agents/skills/linked-records-claims"
+"$REAL_RM" -f -- "$dangling_link_project/.agents/skills/assurance-records-claims"
+ln -s "$TEST_ROOT/absent-skill" "$dangling_link_project/.agents/skills/assurance-records-claims"
 
 wrong_target_project="$(make_link_project invalid-wrong-target-link)"
 mkdir -p "$wrong_target_project/wrong-target"
-"$REAL_RM" -f -- "$wrong_target_project/.agents/skills/linked-records-upkeep"
-ln -s "$wrong_target_project/wrong-target" "$wrong_target_project/.agents/skills/linked-records-upkeep"
+"$REAL_RM" -f -- "$wrong_target_project/.agents/skills/assurance-records-upkeep"
+ln -s "$wrong_target_project/wrong-target" "$wrong_target_project/.agents/skills/assurance-records-upkeep"
 
 # Create the recording shim before any checked process receives the spy PATH.
 {
@@ -298,8 +298,8 @@ assert_contains all-copied "$RUN_OUTPUT" "local edits: none"
 assert_contains all-copied "$RUN_OUTPUT" "published  : unknown (remote unreachable)"
 
 expected_edit_paths="$(printf '  content changed: %s\n' \
-  '.agents/skills/linked-records-claims/SKILL.md' \
-  '.agents/skills/linked-records/SKILL.md')"
+  '.agents/skills/assurance-records-claims/SKILL.md' \
+  '.agents/skills/assurance-records/SKILL.md')"
 
 snapshot_tree "$edited_project" "$SNAPSHOTS/edited-check.before"
 run_vendor_split edited-check "$ORIGINAL_PATH" --check "$edited_project"
@@ -361,7 +361,7 @@ assert_omits copied-no-manifest "$RUN_OUTPUT" "incoherent vendoring state"
 assert_omits copied-no-manifest "$RUN_OUTPUT" "skill states:"
 
 assert_structural_failure copied-empty-shells "$empty_copied_project" invalid invalid invalid
-assert_contains copied-empty-shells "$RUN_OUTPUT" "incoherent linked-records vendoring state"
+assert_contains copied-empty-shells "$RUN_OUTPUT" "incoherent assurance-records vendoring state"
 
 assert_structural_failure fresh-wrong-directory "$fresh_project" missing missing missing yes
 assert_contains fresh-wrong-directory "$RUN_OUTPUT" "not installed here"
@@ -370,31 +370,31 @@ assert_contains fresh-wrong-directory "$RUN_OUTPUT" "wrong project directory"
 assert_structural_failure foreign-skills-only "$foreign_skills_project" missing missing missing
 assert_contains foreign-skills-only "$RUN_OUTPUT" "not installed here"
 assert_contains foreign-skills-only "$RUN_OUTPUT" "wrong project directory"
-assert_omits foreign-skills-only "$RUN_OUTPUT" "incoherent linked-records vendoring state"
+assert_omits foreign-skills-only "$RUN_OUTPUT" "incoherent assurance-records vendoring state"
 
 assert_structural_failure all-missing-retained-manifest "$all_missing_project" missing missing missing
-assert_contains all-missing-retained-manifest "$RUN_OUTPUT" "incoherent linked-records vendoring state"
+assert_contains all-missing-retained-manifest "$RUN_OUTPUT" "incoherent assurance-records vendoring state"
 assert_omits all-missing-retained-manifest "$RUN_OUTPUT" "not installed here"
 assert_omits all-missing-retained-manifest "$RUN_OUTPUT" "wrong project directory"
 
 assert_structural_failure all-missing-linked-install "$all_missing_link_project" missing missing missing
 assert_contains all-missing-linked-install "$RUN_OUTPUT" "not installed here"
 assert_contains all-missing-linked-install "$RUN_OUTPUT" "wrong project directory"
-assert_omits all-missing-linked-install "$RUN_OUTPUT" "incoherent linked-records vendoring state"
+assert_omits all-missing-linked-install "$RUN_OUTPUT" "incoherent assurance-records vendoring state"
 
 assert_structural_failure copied-missing-core \
-  "$PROJECTS/copied-missing-linked-records" missing copied copied
+  "$PROJECTS/copied-missing-assurance-records" missing copied copied
 assert_structural_failure copied-missing-claims \
-  "$PROJECTS/copied-missing-linked-records-claims" copied missing copied
+  "$PROJECTS/copied-missing-assurance-records-claims" copied missing copied
 assert_structural_failure copied-missing-upkeep \
-  "$PROJECTS/copied-missing-linked-records-upkeep" copied copied missing
+  "$PROJECTS/copied-missing-assurance-records-upkeep" copied copied missing
 
 assert_structural_failure linked-missing-core \
-  "$PROJECTS/linked-missing-linked-records" missing linked linked
+  "$PROJECTS/linked-missing-assurance-records" missing linked linked
 assert_structural_failure linked-missing-claims \
-  "$PROJECTS/linked-missing-linked-records-claims" linked missing linked
+  "$PROJECTS/linked-missing-assurance-records-claims" linked missing linked
 assert_structural_failure linked-missing-upkeep \
-  "$PROJECTS/linked-missing-linked-records-upkeep" linked linked missing
+  "$PROJECTS/linked-missing-assurance-records-upkeep" linked linked missing
 
 assert_structural_failure mixed-first-linked "$first_linked_project" linked copied copied
 assert_structural_failure mixed-first-copied "$first_copied_project" copied linked linked

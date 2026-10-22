@@ -9,7 +9,7 @@ from pathlib import Path
 def main():
     sys.path.insert(0, str(Path.cwd()))
     store_module = importlib.import_module("app.store")
-    with tempfile.TemporaryDirectory(prefix="linked-records-staleness-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="assurance-records-staleness-") as tmp:
         store_module.DATA_DIR = tmp
         store_module.Store().write("ordering", {"z": 1, "a": 2})
         raw = (Path(tmp) / "ordering.json").read_text()

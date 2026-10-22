@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Set up a project to use the linked-records convention with any agent tool.
+# Set up a project to use the assurance-records convention with any agent tool.
 #
 # Usage: vendor.sh [--copy|--link|--check] [--force] [project-dir]
 #   --copy  : copy skills into .agents/skills/ — the default; real files,
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILLS=(linked-records linked-records-claims linked-records-upkeep)
+SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
 MANIFEST=".agents/skills/.vendored-manifest"
 MANIFEST_FORMAT=2
 
@@ -125,15 +125,15 @@ if [ "$MODE" = "check" ]; then
   fi
   if [ "$copied_count" -ne "${#SKILLS[@]}" ]; then
     if [ "$missing_count" -eq "${#SKILLS[@]}" ] && [ ! -f "$MANIFEST" ]; then
-      echo "error: linked-records skills are not installed here; this may be the wrong project directory." >&2
+      echo "error: assurance-records skills are not installed here; this may be the wrong project directory." >&2
     else
-      echo "error: incoherent linked-records vendoring state." >&2
+      echo "error: incoherent assurance-records vendoring state." >&2
     fi
     echo "skill states:" >&2
     for i in "${!SKILLS[@]}"; do
       printf '  %s: %s\n' "${SKILLS[$i]}" "${SKILL_STATES[$i]}" >&2
     done
-    echo "Preserve or move only affected linked-records entries under .agents/skills before recovery." >&2
+    echo "Preserve or move only affected assurance-records entries under .agents/skills before recovery." >&2
     echo "Inspect and merge any local work into the canonical skills repository." >&2
     echo "Then reinstall with an explicit mode: vendor.sh --copy PROJECT_DIR or vendor.sh --link PROJECT_DIR." >&2
     exit 1
@@ -405,18 +405,18 @@ else
   vendor_transaction_copy "$REV" "$URL" "$PAYLOAD_ID"
 fi
 
-POINTER='This project uses the linked-records convention; read
-`.agents/skills/linked-records/SKILL.md` before working with `specs/`
+POINTER='This project uses the assurance-records convention; read
+`.agents/skills/assurance-records/SKILL.md` before working with `specs/`
 directories or code governed by their records.'
 
 if [ ! -f AGENTS.md ]; then
   printf '%s\n' "$POINTER" >AGENTS.md
   echo "created AGENTS.md"
-elif ! grep -q "linked-records convention" AGENTS.md; then
+elif ! grep -q "assurance-records convention" AGENTS.md; then
   printf '\n%s\n' "$POINTER" >>AGENTS.md
   echo "appended pointer to AGENTS.md"
 else
-  echo "AGENTS.md already references linked-records"
+  echo "AGENTS.md already references assurance-records"
 fi
 
-echo "done ($MODE): .agents/skills/{linked-records,linked-records-claims,linked-records-upkeep}"
+echo "done ($MODE): .agents/skills/{assurance-records,assurance-records-claims,assurance-records-upkeep}"

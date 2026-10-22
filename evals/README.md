@@ -1,7 +1,7 @@
 ---
-summary: "Defines and runs behavioral scenarios for the linked-records skill family."
+summary: "Defines and runs behavioral scenarios for the assurance-records skill family."
 read_when:
-  - Adding or changing a linked-records behavioral scenario
+  - Adding or changing a assurance-records behavioral scenario
   - Running or judging Claude and Codex eval results
 title: "Behavioral Evals"
 ---
@@ -9,7 +9,7 @@ title: "Behavioral Evals"
 # Behavioral evals
 
 Do agents actually obey the convention's load-bearing rules? Each scenario
-builds a fresh fixture project (a tiny note app governed by linked-records:
+builds a fresh fixture project (a tiny note app governed by assurance-records:
 one gate, one claim with evidence, and representative ARCH, REQ, and SPEC
 records), gives a harness a natural task that presses on one rule, and checks
 the outcome.

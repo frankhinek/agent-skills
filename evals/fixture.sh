@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the base eval fixture (a tiny local-first note app governed by
-# linked-records) at the given path, vendored + committed.
+# assurance-records) at the given path, vendored + committed.
 set -euo pipefail
 
 DEST_INPUT="${1:?usage: fixture.sh <dest-dir>}"
@@ -202,8 +202,8 @@ EOF
 "$REPO/vendor.sh" "$DEST" >/dev/null
 
 git init -q
-git config user.name "linked-records eval"
-git config user.email "linked-records-eval@localhost"
+git config user.name "assurance-records eval"
+git config user.email "assurance-records-eval@localhost"
 git config commit.gpgsign false
 mkdir -p .git/eval-hooks
 git config core.hooksPath .git/eval-hooks

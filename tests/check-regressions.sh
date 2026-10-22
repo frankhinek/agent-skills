@@ -8,7 +8,7 @@ REAL_MKDIR="$(type -P mkdir)"
 REAL_MKTEMP="$(type -P mktemp)"
 REAL_RM="$(type -P rm)"
 TEST_PARENT="${TMPDIR:-/tmp}"
-TEST_ROOT="$($REAL_MKTEMP -d "$TEST_PARENT/linked-records-regressions.XXXXXX")"
+TEST_ROOT="$($REAL_MKTEMP -d "$TEST_PARENT/assurance-records-regressions.XXXXXX")"
 SNAPSHOT="$TEST_ROOT/repo"
 SUITES=(
   tests/check-vendor-arguments.sh
@@ -19,7 +19,7 @@ SUITES=(
   tests/check-vendor-state.sh
   tests/check-vendor-transaction.sh
   tests/check-install.sh
-  skills/linked-records-upkeep/tests/check-lint.sh
+  skills/assurance-records-upkeep/tests/check-lint.sh
 )
 
 unset BASH_ENV ENV
@@ -34,7 +34,7 @@ unset -f rm 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
-  "$TEST_PARENT/linked-records-regressions."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
+  "$TEST_PARENT/assurance-records-regressions."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test root: $TEST_ROOT" >&2 ;;
   esac
 }
@@ -59,11 +59,11 @@ fixture_git() {
 
 fixture_git init --quiet
 "$REAL_MKDIR" -p "$SNAPSHOT/.git/test-hooks"
-fixture_git config user.name "Linked Records Tests"
-fixture_git config user.email "tests@linked-records.invalid"
+fixture_git config user.name "Assurance Records Tests"
+fixture_git config user.email "tests@assurance-records.invalid"
 fixture_git config commit.gpgsign false
 fixture_git config core.hooksPath .git/test-hooks
-fixture_git remote add origin https://github.com/example/linked-records-fixture.git
+fixture_git remote add origin https://github.com/example/assurance-records-fixture.git
 fixture_git add vendor.sh install.sh lib skills tests
 fixture_git commit --quiet -m "Build regression fixture"
 
@@ -77,7 +77,7 @@ done
 for discovered_suite in \
   "$SNAPSHOT"/tests/check-vendor-*.sh \
   "$SNAPSHOT"/tests/check-install*.sh \
-  "$SNAPSHOT"/skills/linked-records-upkeep/tests/check-lint*.sh; do
+  "$SNAPSHOT"/skills/assurance-records-upkeep/tests/check-lint*.sh; do
   [ -f "$discovered_suite" ] || continue
   discovered_suite="${discovered_suite#"$SNAPSHOT/"}"
   registered=false

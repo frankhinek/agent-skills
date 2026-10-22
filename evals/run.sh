@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the linked-records behavioral evals against a harness.
+# Run the assurance-records behavioral evals against a harness.
 #
 # Usage: run.sh <claude|codex> [scenario ...]     (default: all scenarios)
 #
@@ -115,9 +115,9 @@ summary_write_failed() {
 write_summary_header() {
   if printf '%s\n' \
     '---' \
-    "summary: \"Records the $HARNESS_NAME linked-records behavioral eval run from $DATE.\"" \
+    "summary: \"Records the $HARNESS_NAME assurance-records behavioral eval run from $DATE.\"" \
     'read_when:' \
-    '  - Comparing linked-records behavior across harnesses or model versions' \
+    '  - Comparing assurance-records behavior across harnesses or model versions' \
     "  - Investigating this eval run's mechanical and escalation results" \
     "title: \"$HARNESS_NAME Eval Run — $DATE\"" \
     '---' \

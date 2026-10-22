@@ -2,11 +2,11 @@
 set -euo pipefail
 
 EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-check-semantics.XXXXXX")"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/assurance-records-check-semantics.XXXXXX")"
 
 cleanup() {
   case "$TEST_ROOT" in
-  "${TMPDIR:-/tmp}/linked-records-check-semantics."*) rm -rf -- "$TEST_ROOT" ;;
+  "${TMPDIR:-/tmp}/assurance-records-check-semantics."*) rm -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;
   esac
 }

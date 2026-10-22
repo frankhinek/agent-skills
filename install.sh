@@ -13,7 +13,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILLS=(linked-records linked-records-claims linked-records-upkeep)
+SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
 DEFAULTS=(
   "$HOME/.claude/skills"        # Claude Code
   "$HOME/.codex/skills"         # Codex CLI / ChatGPT desktop

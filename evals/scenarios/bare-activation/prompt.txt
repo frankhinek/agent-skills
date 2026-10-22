@@ -1,1 +1,1 @@
-Load the linked-records skill and briefly explain when it should be used.
+Load the assurance-records skill and briefly explain when it should be used.

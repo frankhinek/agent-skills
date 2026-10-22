@@ -1,12 +1,12 @@
 ---
-name: linked-records-upkeep
-description: Use when explicitly asked to bootstrap linked-records in a project, lint the records corpus, or groom/trim an accumulated one. Not for ordinary implementation work.
+name: assurance-records-upkeep
+description: Use when explicitly asked to bootstrap assurance-records in a project, lint the records corpus, or groom/trim an accumulated one. Not for ordinary implementation work.
 ---
 
 # Upkeep
 
-Read the `linked-records` skill (`../linked-records/SKILL.md`) first, and
-`../linked-records-claims/SKILL.md` when claims are involved. Three
+Read the `assurance-records` skill (`../assurance-records/SKILL.md`) first, and
+`../assurance-records-claims/SKILL.md` when claims are involved. Three
 explicit-request workflows: bootstrap, lint, groom.
 
 ## Bootstrap
@@ -26,8 +26,8 @@ a transcription of the repository.
    remove only what the new records fully duplicate. Correct editorial
    contradictions; escalate substantive ones.
 4. Add to the project's `AGENTS.md` (create it if absent): "This project
-   uses the linked-records convention; read
-   `.agents/skills/linked-records/SKILL.md` before working with `specs/`
+   uses the assurance-records convention; read
+   `.agents/skills/assurance-records/SKILL.md` before working with `specs/`
    directories or code governed by their records." Vendor the three skill
    directories into `.agents/skills/` when they are not already present.
 5. Finish with the lint pass below.
@@ -114,7 +114,7 @@ exist.
    of an applicable obligation is retirement and requires an explicit user
    request naming the record; otherwise report it. Treat every `CLAIM-*` and
    its sibling evidence directory as read-only context. Any change to either
-   belongs to `linked-records-claims`, requires explicit user request, and
+   belongs to `assurance-records-claims`, requires explicit user request, and
    remains unapplied during grooming.
 5. Report: sampled IDs, each outcome with a concise reason, drift findings
    and escalations, and the net record and word-count change.

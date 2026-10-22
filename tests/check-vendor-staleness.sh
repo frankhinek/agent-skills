@@ -6,13 +6,13 @@ REAL_RM="$(type -P rm)"
 REAL_GIT="$(type -P git)"
 SYSTEM_BASH="${SYSTEM_BASH:-/bin/bash}"
 TEST_PARENT="${TMPDIR:-/tmp}"
-TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-staleness.XXXXXX")"
+TEST_ROOT="$(mktemp -d "$TEST_PARENT/assurance-records-vendor-staleness.XXXXXX")"
 SOURCE="$TEST_ROOT/source"
 REMOTE="$TEST_ROOT/published"
 PROJECTS="$TEST_ROOT/projects"
 SNAPSHOTS="$TEST_ROOT/snapshots"
-SAFE_URL="https://github.com/example/linked-records-fixture"
-SKILLS=(linked-records linked-records-claims linked-records-upkeep)
+SAFE_URL="https://github.com/example/assurance-records-fixture"
+SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
 
 unset BASH_ENV ENV
 unset -f git 2>/dev/null || true
@@ -20,7 +20,7 @@ unset -f rm 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
-  "$TEST_PARENT/linked-records-vendor-staleness."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
+  "$TEST_PARENT/assurance-records-vendor-staleness."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test root: $TEST_ROOT" >&2 ;;
   esac
 }
@@ -198,7 +198,7 @@ mkdir -p "$SOURCE/lib" "$SOURCE/skills" "$PROJECTS" "$SNAPSHOTS" "$SHIMS"
   printf '%s\n' '  esac'
   printf '%s\n' 'done'
   printf '%s\n' 'if [ "$remote_query" = yes ]; then'
-  printf '%s\n' '  [ "$remote_url" = "https://github.com/example/linked-records-fixture" ] || exit 87'
+  printf '%s\n' '  [ "$remote_url" = "https://github.com/example/assurance-records-fixture" ] || exit 87'
   printf '%s\n' '  remote_head="$(unset GIT_DIR GIT_COMMON_DIR GIT_WORK_TREE; "$VENDOR_TEST_REAL_GIT" --git-dir="$VENDOR_TEST_REMOTE" rev-parse HEAD)"'
   printf '%s\n' '  printf "%s\tHEAD\n" "$remote_head"'
   printf '%s\n' '  exit 0'
@@ -247,7 +247,7 @@ assert_check unrelated-head "$baseline_project" 0 \
   "local edits: none" "published  : current" "managed payload"
 assert_omits unrelated-head "$RUN_OUTPUT" "STALE"
 
-printf '\nmanaged payload change\n' >>"$SOURCE/skills/linked-records/SKILL.md"
+printf '\nmanaged payload change\n' >>"$SOURCE/skills/assurance-records/SKILL.md"
 commit_all "$SOURCE" "change managed payload"
 git -C "$SOURCE" push -q
 assert_check changed-payload "$baseline_project" 1 \
@@ -267,16 +267,16 @@ assert_omits unavailable-head "$RUN_OUTPUT" "published  : STALE"
 
 git -C "$SOURCE" fetch -q published
 git -C "$SOURCE" merge -q --ff-only FETCH_HEAD
-missing_skill_backup="$TEST_ROOT/linked-records-claims.backup"
-cp -R "$SOURCE/skills/linked-records-claims" "$missing_skill_backup"
-git -C "$SOURCE" rm -q -r skills/linked-records-claims
+missing_skill_backup="$TEST_ROOT/assurance-records-claims.backup"
+cp -R "$SOURCE/skills/assurance-records-claims" "$missing_skill_backup"
+git -C "$SOURCE" rm -q -r skills/assurance-records-claims
 commit_all "$SOURCE" "remove one managed skill"
 git -C "$SOURCE" push -q
 assert_check incomplete-published-payload "$current_project" 1 \
   "local edits: none" "published  : unknown" "no complete managed payload"
 assert_omits incomplete-published-payload "$RUN_OUTPUT" "published  : current"
 assert_omits incomplete-published-payload "$RUN_OUTPUT" "published  : STALE"
-cp -R "$missing_skill_backup" "$SOURCE/skills/linked-records-claims"
+cp -R "$missing_skill_backup" "$SOURCE/skills/assurance-records-claims"
 commit_all "$SOURCE" "restore managed skill"
 git -C "$SOURCE" push -q
 
@@ -325,39 +325,39 @@ assert_check malformed-payload-id "$malformed_project" 1 \
   "local edits: none" "published  : unknown" "invalid payload identity"
 
 guard_project="$(make_project source-fidelity-guards)"
-ignored_path="$SOURCE/skills/linked-records/extra.ignored"
+ignored_path="$SOURCE/skills/assurance-records/extra.ignored"
 printf '%s\n' 'ignored but copyable' >"$ignored_path"
 assert_refused_without_mutation ignored-source "$guard_project" \
   "source skills differ from the committed managed payload"
 "$REAL_RM" -f -- "$ignored_path"
 
-empty_path="$SOURCE/skills/linked-records/untracked-empty"
+empty_path="$SOURCE/skills/assurance-records/untracked-empty"
 mkdir "$empty_path"
 assert_refused_without_mutation empty-directory "$guard_project" \
   "source skills differ from the committed managed payload"
 rmdir "$empty_path"
 
-hidden_path="$SOURCE/skills/linked-records/SKILL.md"
+hidden_path="$SOURCE/skills/assurance-records/SKILL.md"
 cp "$hidden_path" "$TEST_ROOT/SKILL.md.backup"
-git -C "$SOURCE" update-index --assume-unchanged skills/linked-records/SKILL.md
+git -C "$SOURCE" update-index --assume-unchanged skills/assurance-records/SKILL.md
 printf '%s\n' 'hidden working-tree change' >>"$hidden_path"
 assert_refused_without_mutation index-hidden "$guard_project" \
   "source skills differ from the committed managed payload"
-git -C "$SOURCE" update-index --no-assume-unchanged skills/linked-records/SKILL.md
+git -C "$SOURCE" update-index --no-assume-unchanged skills/assurance-records/SKILL.md
 mv "$TEST_ROOT/SKILL.md.backup" "$hidden_path"
 
 cp "$hidden_path" "$TEST_ROOT/SKILL.md.skip-backup"
-git -C "$SOURCE" update-index --skip-worktree skills/linked-records/SKILL.md
+git -C "$SOURCE" update-index --skip-worktree skills/assurance-records/SKILL.md
 printf '%s\n' 'skip-worktree-hidden change' >>"$hidden_path"
 assert_refused_without_mutation skip-worktree "$guard_project" \
   "source skills differ from the committed managed payload"
-git -C "$SOURCE" update-index --no-skip-worktree skills/linked-records/SKILL.md
+git -C "$SOURCE" update-index --no-skip-worktree skills/assurance-records/SKILL.md
 mv "$TEST_ROOT/SKILL.md.skip-backup" "$hidden_path"
 
 original_mode="$(mode_bits "$hidden_path")"
 git -C "$SOURCE" config core.filemode false
 chmod +x "$hidden_path"
-[ -z "$(git -C "$SOURCE" status --porcelain -- skills/linked-records/SKILL.md)" ] ||
+[ -z "$(git -C "$SOURCE" status --porcelain -- skills/assurance-records/SKILL.md)" ] ||
   fail "core.filemode=false probe was not Git-clean"
 assert_refused_without_mutation filemode-masked "$guard_project" \
   "source skills differ from the committed managed payload"
@@ -368,27 +368,27 @@ git -C "$SOURCE" config filter.vendor-clean.clean \
   "sed 's/WORKTREE/COMMITTED/g'"
 git -C "$SOURCE" config filter.vendor-clean.smudge cat
 printf '%s\n' '*.filtered filter=vendor-clean' > \
-  "$SOURCE/skills/linked-records/.gitattributes"
-printf '%s\n' 'WORKTREE' >"$SOURCE/skills/linked-records/filter-probe.filtered"
+  "$SOURCE/skills/assurance-records/.gitattributes"
+printf '%s\n' 'WORKTREE' >"$SOURCE/skills/assurance-records/filter-probe.filtered"
 commit_all "$SOURCE" "add clean-filter probe"
 [ -z "$(git -C "$SOURCE" status --porcelain -- skills/)" ] ||
   fail "clean-filter probe was not Git-clean"
 assert_refused_without_mutation clean-filter "$guard_project" \
   "source skills differ from the committed managed payload"
-git -C "$SOURCE" rm -q skills/linked-records/.gitattributes \
-  skills/linked-records/filter-probe.filtered
+git -C "$SOURCE" rm -q skills/assurance-records/.gitattributes \
+  skills/assurance-records/filter-probe.filtered
 commit_all "$SOURCE" "remove clean-filter probe"
 git -C "$SOURCE" config --unset-all filter.vendor-clean.clean
 git -C "$SOURCE" config --unset-all filter.vendor-clean.smudge
 
-nested_repo="$SOURCE/skills/linked-records/nested-link"
+nested_repo="$SOURCE/skills/assurance-records/nested-link"
 mkdir "$nested_repo"
 git -C "$nested_repo" init -q
 configure_repo "$nested_repo"
 printf '%s\n' 'nested repository' >"$nested_repo/README.md"
 commit_all "$nested_repo" "initial nested content"
 git -C "$SOURCE" -c advice.addEmbeddedRepo=false add \
-  skills/linked-records/nested-link 2>/dev/null
+  skills/assurance-records/nested-link 2>/dev/null
 git -C "$SOURCE" commit -q -m "add gitlink probe"
 [ -z "$(git -C "$SOURCE" status --porcelain -- skills/)" ] ||
   fail "gitlink probe was not Git-clean"

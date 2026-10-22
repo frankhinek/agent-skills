@@ -5,8 +5,8 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALLER="$REPO/install.sh"
 REAL_RM="$(type -P rm)"
 REAL_LN="$(type -P ln)"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-install.XXXXXX")"
-SKILLS=(linked-records linked-records-claims linked-records-upkeep)
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/assurance-records-install.XXXXXX")"
+SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
 FAILURE_BIN="$TEST_ROOT/failure-bin"
 RUN_INSTALLER="$INSTALLER"
 FAIL_RM=""
@@ -21,7 +21,7 @@ mkdir -p "$FAILURE_BIN"
 
 cleanup() {
   case "$TEST_ROOT" in
-  "${TMPDIR:-/tmp}/linked-records-install."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
+  "${TMPDIR:-/tmp}/assurance-records-install."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;
   esac
 }
@@ -91,9 +91,9 @@ assert_output "complete  $identical (installed=3, already-correct=0)"
 
 symlinks="$TEST_ROOT/symlinks"
 mkdir -p "$symlinks"
-ln -s "$REPO/skills/linked-records" "$symlinks/linked-records"
-ln -s "$REPO/skills/linked-records" "$symlinks/linked-records-claims"
-ln -s "$TEST_ROOT/missing-source" "$symlinks/linked-records-upkeep"
+ln -s "$REPO/skills/assurance-records" "$symlinks/assurance-records"
+ln -s "$REPO/skills/assurance-records" "$symlinks/assurance-records-claims"
+ln -s "$TEST_ROOT/missing-source" "$symlinks/assurance-records-upkeep"
 run_install "$home" "$symlinks"
 [ "$RUN_RC" -eq 0 ] || fail "symlink repair returned $RUN_RC: $RUN_OUTPUT"
 assert_links "$symlinks"
@@ -101,14 +101,14 @@ assert_output "complete  $symlinks (installed=2, already-correct=1)"
 
 partial="$TEST_ROOT/partial"
 mkdir -p "$partial"
-cp -R "$REPO/skills/linked-records" "$partial/linked-records"
-printf '%s\n' 'local change' >>"$partial/linked-records/SKILL.md"
+cp -R "$REPO/skills/assurance-records" "$partial/assurance-records"
+printf '%s\n' 'local change' >>"$partial/assurance-records/SKILL.md"
 run_install "$home" "$partial"
 [ "$RUN_RC" -eq 1 ] || fail "partial target returned $RUN_RC instead of 1: $RUN_OUTPUT"
-grep -Fq 'local change' "$partial/linked-records/SKILL.md" ||
+grep -Fq 'local change' "$partial/assurance-records/SKILL.md" ||
   fail "divergent local copy was changed"
-[ -L "$partial/linked-records-claims" ] || fail "partial target suppressed linked-records-claims"
-[ -L "$partial/linked-records-upkeep" ] || fail "partial target suppressed linked-records-upkeep"
+[ -L "$partial/assurance-records-claims" ] || fail "partial target suppressed assurance-records-claims"
+[ -L "$partial/assurance-records-upkeep" ] || fail "partial target suppressed assurance-records-upkeep"
 assert_output "partial  $partial (installed=2, already-correct=0, skipped=1, failed=0)"
 assert_no_output "complete  $partial"
 
@@ -180,7 +180,7 @@ mkdir -p "$rm_failure"
 for skill in "${SKILLS[@]}"; do
   cp -R "$fixture_repo/skills/$skill" "$rm_failure/$skill"
 done
-FAIL_RM="$rm_failure/linked-records-claims"
+FAIL_RM="$rm_failure/assurance-records-claims"
 run_install "$empty_home" "$rm_failure" "$rm_later"
 [ "$RUN_RC" -eq 1 ] || fail "rm failure returned $RUN_RC instead of 1: $RUN_OUTPUT"
 assert_output "partial  $rm_failure (installed=2, already-correct=0, skipped=0, failed=1)"
@@ -189,7 +189,7 @@ FAIL_RM=""
 
 ln_failure="$TEST_ROOT/ln-failure"
 ln_later="$TEST_ROOT/ln-later"
-FAIL_LN="$ln_failure/linked-records-claims"
+FAIL_LN="$ln_failure/assurance-records-claims"
 run_install "$empty_home" "$ln_failure" "$ln_later"
 [ "$RUN_RC" -eq 1 ] || fail "ln failure returned $RUN_RC instead of 1: $RUN_OUTPUT"
 assert_output "partial  $ln_failure (installed=2, already-correct=0, skipped=0, failed=1)"
@@ -200,14 +200,14 @@ missing_source_repo="$TEST_ROOT/missing-source-repo"
 mkdir -p "$missing_source_repo"
 cp "$INSTALLER" "$missing_source_repo/install.sh"
 cp -R "$REPO/skills" "$missing_source_repo/skills"
-"$REAL_RM" -rf "$missing_source_repo/skills/linked-records-claims"
+"$REAL_RM" -rf "$missing_source_repo/skills/assurance-records-claims"
 RUN_INSTALLER="$missing_source_repo/install.sh"
 missing_source="$TEST_ROOT/missing-source-target"
 run_install "$empty_home" "$missing_source"
 [ "$RUN_RC" -eq 1 ] || fail "missing source returned $RUN_RC instead of 1: $RUN_OUTPUT"
 assert_output "partial  $missing_source (installed=2, already-correct=0, skipped=0, failed=1)"
-[ -L "$missing_source/linked-records" ] || fail "missing source suppressed earlier skill"
-[ -L "$missing_source/linked-records-upkeep" ] || fail "missing source suppressed later skill"
+[ -L "$missing_source/assurance-records" ] || fail "missing source suppressed earlier skill"
+[ -L "$missing_source/assurance-records-upkeep" ] || fail "missing source suppressed later skill"
 
 RUN_INSTALLER="$INSTALLER"
 

@@ -6,7 +6,7 @@ RUNNER="$EVALS/run.sh"
 REAL_GIT="$(command -v git)"
 REAL_MKTEMP="$(command -v mktemp)"
 BASE_PATH="/run/current-system/sw/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/linked-records-run-gates.XXXXXX")"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/assurance-records-run-gates.XXXXXX")"
 SANDBOX_BACKEND="$TEST_ROOT/sandbox-backend"
 HOST_CODEX_HOME="$TEST_ROOT/host-codex-home"
 RESULT_DIRS=()
@@ -25,7 +25,7 @@ cleanup() {
     esac
   done
   case "$TEST_ROOT" in
-  "${TMPDIR:-/tmp}/linked-records-run-gates."*) rm -rf -- "$TEST_ROOT" ;;
+  "${TMPDIR:-/tmp}/assurance-records-run-gates."*) rm -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;
   esac
 }
@@ -439,7 +439,7 @@ EOF
     echo "Verification is provisional: the search oracle is self-derived and no negative control was rejected."
     ;;
   *'briefly explain when it should be used'*)
-    echo "The linked-records skill governs qualified ARCH, REQ, SPEC, GATE, and CLAIM records; bare activation is inert."
+    echo "The assurance-records skill governs qualified ARCH, REQ, SPEC, GATE, and CLAIM records; bare activation is inert."
     ;;
   *)
     echo "I cannot add cloud sync because GATE-local-only requires user data to remain local."

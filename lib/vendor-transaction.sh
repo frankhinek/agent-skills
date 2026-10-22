@@ -298,7 +298,7 @@ vendor_transaction_prepare() {
   fi
   for skill in "${SKILLS[@]}"; do
     if ! cp -R "$REPO/skills/$skill" "$VENDOR_TRANSACTION/stage/$skill"; then
-      echo "error: failed to stage linked-records skills; existing installation is unchanged." >&2
+      echo "error: failed to stage assurance-records skills; existing installation is unchanged." >&2
       return 1
     fi
   done

@@ -7,7 +7,7 @@ REAL_GIT="$(type -P git)"
 REAL_RM="$(type -P rm)"
 ORIGINAL_PATH="$PATH"
 TEST_PARENT="${TMPDIR:-/tmp}"
-TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-destination.XXXXXX")"
+TEST_ROOT="$(mktemp -d "$TEST_PARENT/assurance-records-vendor-destination.XXXXXX")"
 PROJECTS="$TEST_ROOT/projects"
 OUTSIDE="$TEST_ROOT/outside"
 SNAPSHOTS="$TEST_ROOT/snapshots"
@@ -20,7 +20,7 @@ unset -f rm 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
-  "$TEST_PARENT/linked-records-vendor-destination."*)
+  "$TEST_PARENT/assurance-records-vendor-destination."*)
     "$REAL_RM" -rf -- "$TEST_ROOT"
     ;;
   *) echo "refusing to clean unexpected test root: $TEST_ROOT" >&2 ;;
@@ -128,9 +128,9 @@ assert_rejected_without_mutation() {
   skills-symlink:*force) managed_outside="$outside/skills" ;;
   esac
   if [ -n "$managed_outside" ]; then
-    mkdir -p "$managed_outside/linked-records"
+    mkdir -p "$managed_outside/assurance-records"
     printf '%s\n' 'preserve managed external content' \
-      >"$managed_outside/linked-records/sentinel.txt"
+      >"$managed_outside/assurance-records/sentinel.txt"
   fi
   snapshot_tree "$project" "$SNAPSHOTS/$name.project.before"
   snapshot_tree "$outside" "$SNAPSHOTS/$name.outside.before"

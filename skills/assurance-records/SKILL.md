@@ -1,9 +1,9 @@
 ---
-name: linked-records
+name: assurance-records
 description: Personal convention for durable project knowledge kept as small, linked Markdown records (ARCH, REQ, SPEC, GATE, CLAIM) in specs/ directories. Use when working with such records or code they govern, or when asked to record architecture, requirements, constraints, decisions, or claims. If the project defines its own records convention (e.g. Linked Specs), follow the project's convention instead.
 ---
 
-# Linked Records
+# Assurance Records
 
 Keep durable project knowledge at the strongest enforcement rung available:
 type > schema constraint > lint/CI check > test > record > nothing. Records
@@ -69,8 +69,8 @@ conflict and leave the gate unchanged.
   sibling directory, and the claim's exact wording is what that evidence
   attests: never reword a claim in an editorial or documentation pass, and
   retire one only on the user's explicit request. Every claim-record change
-  goes through the `linked-records-claims` skill
-  (`../linked-records-claims/SKILL.md`) — read it before creating, proving,
+  goes through the `assurance-records-claims` skill
+  (`../assurance-records-claims/SKILL.md`) — read it before creating, proving,
   verifying, or retiring one.
 
 An `ARCH-*` or `SPEC-*` may end with a selective `## Alternatives` section:
@@ -96,9 +96,9 @@ rewrites unless asked afterward.
 
 ## Maintenance
 
-The `linked-records-claims` skill (`../linked-records-claims/SKILL.md`)
+The `assurance-records-claims` skill (`../assurance-records-claims/SKILL.md`)
 covers claim proofs and adversarial verification. The
-`linked-records-upkeep` skill (`../linked-records-upkeep/SKILL.md`) covers
+`assurance-records-upkeep` skill (`../assurance-records-upkeep/SKILL.md`) covers
 bootstrapping a project, the mechanical lint pass, and grooming an
 accumulated corpus. When practice exposes a failure mode this convention did
 not anticipate, amend these skill files — the convention is itself a record

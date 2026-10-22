@@ -10,7 +10,7 @@ REAL_GIT="$(type -P git)"
 ORIGINAL_PATH="$PATH"
 UNREACHABLE_BIN="$REPO/tests/fixtures/git-unreachable"
 TEST_PARENT="${TMPDIR:-/tmp}"
-TEST_ROOT="$(mktemp -d "$TEST_PARENT/linked-records-vendor-inventory.XXXXXX")"
+TEST_ROOT="$(mktemp -d "$TEST_PARENT/assurance-records-vendor-inventory.XXXXXX")"
 PROJECTS="$TEST_ROOT/projects"
 SNAPSHOTS="$TEST_ROOT/snapshots"
 
@@ -23,7 +23,7 @@ unset -f stat 2>/dev/null || true
 
 cleanup() {
   case "$TEST_ROOT" in
-  "$TEST_PARENT/linked-records-vendor-inventory."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
+  "$TEST_PARENT/assurance-records-vendor-inventory."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test root: $TEST_ROOT" >&2 ;;
   esac
 }
@@ -221,49 +221,49 @@ mkdir -p "$PROJECTS" "$SNAPSHOTS"
 
 # Executable state changes are local work in both directions.
 chmod_remove_project="$(make_copy_project chmod-remove)"
-chmod_remove_target="$chmod_remove_project/.agents/skills/linked-records-upkeep/lint.sh"
+chmod_remove_target="$chmod_remove_project/.agents/skills/assurance-records-upkeep/lint.sh"
 chmod -x "$chmod_remove_target"
 assert_check_change chmod-remove "$chmod_remove_project" \
-  "executable changed: .agents/skills/linked-records-upkeep/lint.sh (yes -> no)"
+  "executable changed: .agents/skills/assurance-records-upkeep/lint.sh (yes -> no)"
 assert_refresh_refused chmod-remove-refresh "$chmod_remove_project"
 [ ! -x "$chmod_remove_target" ] || fail "chmod-remove refresh restored executable state"
 
 chmod_add_project="$(make_copy_project chmod-add)"
-chmod_add_target="$chmod_add_project/.agents/skills/linked-records/SKILL.md"
+chmod_add_target="$chmod_add_project/.agents/skills/assurance-records/SKILL.md"
 chmod +x "$chmod_add_target"
 assert_check_change chmod-add "$chmod_add_project" \
-  "executable changed: .agents/skills/linked-records/SKILL.md (no -> yes)"
+  "executable changed: .agents/skills/assurance-records/SKILL.md (no -> yes)"
 assert_refresh_refused chmod-add-refresh "$chmod_add_project"
 [ -x "$chmod_add_target" ] || fail "chmod-add refresh removed executable state"
 
 # Added links, empty directories, type replacements, and renames are inventoried.
 link_add_project="$(make_copy_project link-add)"
-link_add_path="$link_add_project/.agents/skills/linked-records/local link"
+link_add_path="$link_add_project/.agents/skills/assurance-records/local link"
 ln -s SKILL.md "$link_add_path"
 assert_check_change link-add "$link_add_project" \
-  "added: .agents/skills/linked-records/local link (symlink -> SKILL.md)"
+  "added: .agents/skills/assurance-records/local link (symlink -> SKILL.md)"
 assert_refresh_refused link-add-refresh "$link_add_project"
 [ -L "$link_add_path" ] || fail "link-add refresh removed the link"
 
 empty_dir_project="$(make_copy_project empty-dir-add)"
-mkdir "$empty_dir_project/.agents/skills/linked-records/empty local dir"
+mkdir "$empty_dir_project/.agents/skills/assurance-records/empty local dir"
 assert_check_change empty-dir-add "$empty_dir_project" \
-  "added: .agents/skills/linked-records/empty local dir (directory)"
+  "added: .agents/skills/assurance-records/empty local dir (directory)"
 
 type_project="$(make_copy_project type-change)"
-type_path="$type_project/.agents/skills/linked-records-upkeep/lint.sh"
+type_path="$type_project/.agents/skills/assurance-records-upkeep/lint.sh"
 "$REAL_RM" -f -- "$type_path"
 mkdir "$type_path"
 assert_check_change type-change "$type_project" \
-  "type changed: .agents/skills/linked-records-upkeep/lint.sh (file -> directory)"
+  "type changed: .agents/skills/assurance-records-upkeep/lint.sh (file -> directory)"
 
 rename_project="$(make_copy_project rename)"
-rename_from="$rename_project/.agents/skills/linked-records-upkeep/tests/check-lint.sh"
-rename_to="$rename_project/.agents/skills/linked-records-upkeep/tests/check-lint-renamed.sh"
+rename_from="$rename_project/.agents/skills/assurance-records-upkeep/tests/check-lint.sh"
+rename_to="$rename_project/.agents/skills/assurance-records-upkeep/tests/check-lint-renamed.sh"
 mv "$rename_from" "$rename_to"
 assert_check_change rename "$rename_project" \
-  "removed: .agents/skills/linked-records-upkeep/tests/check-lint.sh (file)" \
-  "added: .agents/skills/linked-records-upkeep/tests/check-lint-renamed.sh (file)"
+  "removed: .agents/skills/assurance-records-upkeep/tests/check-lint.sh (file)" \
+  "added: .agents/skills/assurance-records-upkeep/tests/check-lint-renamed.sh (file)"
 
 # A committed source symlink proves remove and retarget behavior against a real baseline.
 SYMLINK_SOURCE="$TEST_ROOT/symlink-source"
@@ -273,8 +273,8 @@ git -C "$SYMLINK_SOURCE" config user.email "vendor-inventory@example.invalid"
 git -C "$SYMLINK_SOURCE" config commit.gpgsign false
 git -C "$SYMLINK_SOURCE" remote set-url origin \
   'https://github.com/example/vendor-inventory-fixture.git'
-ln -s SKILL.md "$SYMLINK_SOURCE/skills/linked-records/source-link"
-git -C "$SYMLINK_SOURCE" add skills/linked-records/source-link
+ln -s SKILL.md "$SYMLINK_SOURCE/skills/assurance-records/source-link"
+git -C "$SYMLINK_SOURCE" add skills/assurance-records/source-link
 git -C "$SYMLINK_SOURCE" commit --quiet -m "test: add source symlink"
 cp "$VENDOR" "$SYMLINK_SOURCE/vendor.sh"
 mkdir -p "$SYMLINK_SOURCE/lib"
@@ -283,25 +283,25 @@ cp "$REPO/lib/vendor-provenance.sh" "$SYMLINK_SOURCE/lib/vendor-provenance.sh"
 cp "$REPO/lib/vendor-transaction.sh" "$SYMLINK_SOURCE/lib/vendor-transaction.sh"
 
 retarget_project="$(make_copy_project link-retarget "$SYMLINK_SOURCE/vendor.sh")"
-retarget_path="$retarget_project/.agents/skills/linked-records/source-link"
+retarget_path="$retarget_project/.agents/skills/assurance-records/source-link"
 "$REAL_RM" -f -- "$retarget_path"
-ln -s ../linked-records-claims/SKILL.md "$retarget_path"
+ln -s ../assurance-records-claims/SKILL.md "$retarget_path"
 assert_check_change link-retarget "$retarget_project" \
-  "target changed: .agents/skills/linked-records/source-link (SKILL.md -> ../linked-records-claims/SKILL.md)"
+  "target changed: .agents/skills/assurance-records/source-link (SKILL.md -> ../assurance-records-claims/SKILL.md)"
 
 link_remove_project="$(make_copy_project link-remove "$SYMLINK_SOURCE/vendor.sh")"
-"$REAL_RM" -f -- "$link_remove_project/.agents/skills/linked-records/source-link"
+"$REAL_RM" -f -- "$link_remove_project/.agents/skills/assurance-records/source-link"
 assert_check_change link-remove "$link_remove_project" \
-  "removed: .agents/skills/linked-records/source-link (symlink -> SKILL.md)"
+  "removed: .agents/skills/assurance-records/source-link (symlink -> SKILL.md)"
 
 # Unsupported live entries fail before mutation, including with --force.
 fifo_project="$(make_copy_project fifo)"
-fifo_path="$fifo_project/.agents/skills/linked-records/local-fifo"
+fifo_path="$fifo_project/.agents/skills/assurance-records/local-fifo"
 mkfifo "$fifo_path"
 snapshot_tree "$fifo_project" "$SNAPSHOTS/fifo.before"
 run_vendor "$VENDOR" --check "$fifo_project"
 [ "$RUN_STATUS" -eq 1 ] || fail "FIFO check returned $RUN_STATUS: $RUN_OUTPUT"
-assert_contains fifo-check "$RUN_OUTPUT" "unsupported vendored entry: .agents/skills/linked-records/local-fifo (fifo)"
+assert_contains fifo-check "$RUN_OUTPUT" "unsupported vendored entry: .agents/skills/assurance-records/local-fifo (fifo)"
 assert_contains fifo-check "$RUN_OUTPUT" "local edits: unknown (inventory failed)"
 assert_refresh_refused fifo-refresh "$fifo_project"
 assert_refresh_refused fifo-force "$fifo_project" yes
@@ -325,7 +325,7 @@ mkdir -p "$traversal_shim"
 {
   printf '%s\n' '#!/usr/bin/env bash'
   printf '%s\n' \
-    'if [ "${1:-}" = ".agents/skills/linked-records" ]; then' \
+    'if [ "${1:-}" = ".agents/skills/assurance-records" ]; then' \
     '  echo "forced early find failure" >&2' \
     '  exit 74' \
     'fi'

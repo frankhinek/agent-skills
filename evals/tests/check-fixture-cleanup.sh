@@ -6,7 +6,7 @@ RUNNER="$EVALS/run.sh"
 REAL_MKTEMP="$(type -P mktemp)"
 REAL_RM="$(type -P rm)"
 BASE_PATH="/run/current-system/sw/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-TEST_ROOT="$($REAL_MKTEMP -d "${TMPDIR:-/tmp}/linked-records-fixture-cleanup.XXXXXX")"
+TEST_ROOT="$($REAL_MKTEMP -d "${TMPDIR:-/tmp}/assurance-records-fixture-cleanup.XXXXXX")"
 SANDBOX_BACKEND="$TEST_ROOT/sandbox-backend"
 SHIM_DIR="$TEST_ROOT/shims"
 RUN_DATE="$(date +%Y-%m-%d)"
@@ -24,7 +24,7 @@ cleanup() {
     esac
   done
   case "$TEST_ROOT" in
-  "${TMPDIR:-/tmp}/linked-records-fixture-cleanup."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
+  "${TMPDIR:-/tmp}/assurance-records-fixture-cleanup."*) "$REAL_RM" -rf -- "$TEST_ROOT" ;;
   *) echo "refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;
   esac
 }
@@ -70,7 +70,7 @@ make_shims() {
 #!/usr/bin/env bash
 runner_call=0
 case "$*" in
-*linked-records-eval.XXXXXX*) runner_call=1 ;;
+*assurance-records-eval.XXXXXX*) runner_call=1 ;;
 esac
 if [ "$runner_call" -eq 1 ]; then
   case "${FAKE_MKTEMP_MODE:-real}" in
@@ -113,7 +113,7 @@ fi
 : >"$FAKE_AGENT_MARKER"
 case "${FAKE_AGENT_MODE:-pass}" in
 pass)
-  echo "I cannot add cloud sync because GATE-local-only requires local data. Linked-records activation is inert."
+  echo "I cannot add cloud sync because GATE-local-only requires local data. Assurance-records activation is inert."
   ;;
 crash)
   echo "simulated crash" >&2
@@ -232,7 +232,7 @@ success_root="$(captured_root)"
 [ -s "$LAST_OUT/summary.md" ] || fail "successful cleanup removed the summary"
 [ -s "$LAST_OUT/logs/gate-conflict.response.txt" ] ||
   fail "successful cleanup removed the final response"
-for remaining_root in "$TEST_ROOT/tmp"/linked-records-eval.*; do
+for remaining_root in "$TEST_ROOT/tmp"/assurance-records-eval.*; do
   [ -e "$remaining_root" ] || continue
   fail "successful run left an untracked root at $remaining_root"
 done
