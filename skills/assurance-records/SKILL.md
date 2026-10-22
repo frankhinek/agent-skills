@@ -15,6 +15,31 @@ intent, not qualification; apply the thresholds below. Records are not
 planning, changelog, archive, or general documentation. Delete superseded
 records; git preserves history.
 
+## Discover affected records
+
+Before implementation or review:
+
+1. Identify the changed paths and the behavior, interfaces, and persisted
+   data the task affects. Include planned changes before editing.
+2. Look for applicable `specs/` directories in each changed path's containing
+   directory and ancestors, up to the project root. Their natural scope
+   is their parent directory and descendants; links can cross scopes.
+3. Search for references to the affected paths, stable code identifiers, and
+   discovered record IDs. Follow relevant links both out of and into affected
+   records, including references from code and tests.
+4. Trace consumers of changed public interfaces, persisted data, protocols,
+   events, or shared state across package boundaries. Read their applicable
+   records even when those consumers are outside the requested edit scope.
+5. Finish when each changed surface and its affected consumers have been
+   checked for governing records. Report material gaps in that coverage.
+
+Keep discovery targeted to the change and relationships it can affect;
+repeat it when the change's scope expands. Respect existing project docs
+with a distinct governing purpose. Discovery supplies context, not authority
+to create or change records. For changes intersecting claim evidence, follow
+`assurance-records-claims` (`../assurance-records-claims/SKILL.md`) for
+staleness handling; discovery alone does not request proof or verification.
+
 ## Records
 
 Records live in the governed project or package's `specs/` directory. Name

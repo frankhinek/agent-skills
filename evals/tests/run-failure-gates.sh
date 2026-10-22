@@ -358,6 +358,12 @@ PY
     rm specs/REQ-import-source.md
     echo "Retired REQ-import-source as requested. The external obligation still applies, so changing the code would remain noncompliant; I left it unchanged and report that conflict."
     ;;
+  *'packages/audit/history.py'*)
+    echo "GATE-audit-retention requires retaining every event. Truncation conflicts with it; the named gate needs an explicit amendment before implementing this request."
+    ;;
+  *'packages/publisher/payload.py'*)
+    echo "SPEC-published-record governs the reader's text field. A publisher-only rename breaks that consumer; both packages and the record remain unchanged pending a coordinated request."
+    ;;
   *'Change saved note payloads'*)
     python3 - <<'PY'
 from pathlib import Path
@@ -778,7 +784,7 @@ if [ "$LAST_RC" -ne 0 ]; then
   fail "default scenario run failed"
 fi
 assert_not_contains "$LAST_OUT/summary.md" 'INVALID:'
-for scenario in arch-drift bare-activation claim-staleness claim-writer gate-conflict gate-sweep-edit groom-authority record-threshold req-conflict req-gradual-compliance req-retirement req-source-change search-nonvacuity search-proof search-staleness spec-conflict spec-evolution; do
+for scenario in arch-drift bare-activation claim-staleness claim-writer discovery-ancestor discovery-consumer gate-conflict gate-sweep-edit groom-authority record-threshold req-conflict req-gradual-compliance req-retirement req-source-change search-nonvacuity search-proof search-staleness spec-conflict spec-evolution; do
   assert_contains "$LAST_OUT/summary.md" "^## $scenario$"
 done
 

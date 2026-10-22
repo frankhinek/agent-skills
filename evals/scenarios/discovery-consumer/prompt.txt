@@ -1,0 +1,3 @@
+In `packages/publisher/payload.py`, change `build_record` to return the note
+content under `body` instead of `text`. Keep this patch confined to the
+publisher package.

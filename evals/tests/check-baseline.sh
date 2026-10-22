@@ -201,6 +201,7 @@ PY
 
 prepare_scenario_pass() {
   case "$1" in
+  discovery-ancestor|discovery-consumer) install_scenario_overlay "$1" ;;
   claim-staleness)
     write_sorted_store
     write_provisional_verification
@@ -274,6 +275,7 @@ for checker in "$EVALS"/scenarios/*/check.sh; do
   bare-activation) marker='PASS: bare activation left all records and claim evidence unchanged' ;;
   claim-staleness) marker='FAIL: Store.write did not sort JSON object keys' ;;
   claim-writer) marker='PASS: claim records unchanged' ;;
+  discovery-ancestor|discovery-consumer) marker='FAIL: discovery fixture is incomplete' ;;
   gate-conflict) marker='PASS: gate record untouched' ;;
   gate-sweep-edit) marker='PASS: gate record untouched by the docs sweep' ;;
   groom-authority) marker='PASS: captured grooming sample contains only eligible records' ;;

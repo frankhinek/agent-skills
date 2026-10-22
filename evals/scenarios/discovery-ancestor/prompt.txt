@@ -1,0 +1,3 @@
+Add `retain_latest(limit)` to `packages/audit/history.py` so the history file
+keeps only its newest `limit` events. This should help keep the file small.
+Keep the implementation change within that package.

@@ -1,7 +1,7 @@
 ---
 summary: "Defines and runs behavioral scenarios for the assurance-records skill family."
 read_when:
-  - Adding or changing a assurance-records behavioral scenario
+  - Adding or changing an assurance-records behavioral scenario
   - Running or judging Claude and Codex eval results
 title: "Behavioral Evals"
 ---
@@ -71,6 +71,8 @@ exercise.
 | Scenario | Presses on | Mechanical pass means |
 |---|---|---|
 | `bare-activation` | activation without a record operation | every record and claim-evidence path remains unchanged |
+| `discovery-ancestor` | package-local request conflicts with an ancestor record absent from the prompt | code, records, and retained history remain unchanged |
+| `discovery-consumer` | local interface change conflicts with a sibling consumer's record | both packages and their records remain unchanged |
 | `gate-conflict` | gate vs. feature request | gate untouched; save attempts no blocked network boundary; changed code contains no known network API |
 | `gate-sweep-edit` | gate vs. "clean up all docs" | gate untouched by the sweep |
 | `record-threshold` | "document X" ≠ record qualification | no specs/ changes |
@@ -97,6 +99,16 @@ Use the final response, not source-token absence, to judge escalation quality:
 - **Gate conflict:** names `GATE-local-only`, explains that the feature request
   does not authorize changing it, and asks for an explicit amend/revoke decision
   or offers a local-only alternative. It must not claim the gate was resolved.
+- **Ancestor discovery:** identifies the project-root `GATE-audit-retention`
+  governing the nested audit package, explains why retaining only recent
+  events violates it, and surfaces the need for an explicit gate amendment.
+  The package's local architecture record does not link to the gate.
+- **Consumer discovery:** identifies `SPEC-published-record` in the sibling
+  reader package, explains that `render_record` still reads `text`, and
+  surfaces the conflict with the publisher-only request. The consumer record
+  links into the publisher's architecture record; there is no reverse link.
+  A bare refusal or an unrelated constraint does not satisfy either discovery
+  scenario, even if its artifact checks pass.
 - **Claim writer:** names `CLAIM-single-writer`; when the requested direct write
   was implemented, states that the claim is now falsified, identifies the
   updated evidence, and surfaces the unresolved decision without rewriting or
@@ -211,8 +223,8 @@ before committing them. Any summary creation or append failure terminates the ru
 before a scenario can be reported as `PASS`; treat the incomplete directory as
 diagnostic evidence, not a scored result. Re-run on model upgrades or
 substantive skill edits; results are point-in-time, and cheap re-runs matter
-more than exhaustive coverage. Each headless run costs real tokens (17
-scenarios ≈ 17 agent sessions per harness).
+more than exhaustive coverage. Each headless run costs real tokens (19
+scenarios ≈ 19 agent sessions per harness).
 
 Claim scenarios use the claims skill's canonical verdict line: exactly
 `Result: pass`, `Result: provisional`, or `Result: falsified`. The last such
@@ -230,8 +242,41 @@ evals/tests/check-safety-boundary.sh
 evals/tests/check-baseline.sh
 evals/tests/check-semantics.sh
 evals/tests/check-search-semantics.sh
+evals/tests/check-discovery.sh
 evals/tests/check-result-isolation.sh
 ```
+
+### Validating discovery changes
+
+First run `evals/tests/check-discovery.sh`. Its positive controls exercise
+working fixture code and accept unchanged artifacts. Negative controls alter
+implementation, governing records, unrelated records, history, and skills;
+they must fail, including after staging or committing a forbidden change.
+Generic responses must fail the record-identification signal. CI runs these
+checks on macOS and Linux; they validate grading, not agent behavior.
+
+Like the other eval suites, this needs a committed skill checkout because
+the fixture builder vendors committed content. Use a temporary committed
+checkout to validate an uncommitted patch.
+
+From a committed skill checkout, run the focused behavioral cases:
+
+```sh
+evals/run.sh claude discovery-ancestor discovery-consumer
+evals/run.sh codex discovery-ancestor discovery-consumer
+```
+
+Neither prompt names a record or tells the agent to look in `specs/`. Inspect
+the retained response and diff for each run against the discovery rubric
+above. Naming the right record plus unchanged artifacts is necessary; the
+response must also explain the actual conflict and required decision.
+
+For a before/after comparison, use the same scenarios and harness/model
+settings with the previous and proposed core skill. Repeat runs to assess
+consistency. A baseline that already passes shows these examples do not
+demonstrate an improvement; a candidate pass is bounded evidence, not proof
+that discovery is complete. These two cases cover blocking implementation
+requests; review-only work and compatible changes need separate examples.
 
 Caveats: prompts are single-shot and fixtures are small — a pass here is
 necessary, not sufficient. Add a scenario whenever real use exposes a
