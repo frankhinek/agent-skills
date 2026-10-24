@@ -47,7 +47,8 @@ staleness handling; discovery alone does not request proof or verification.
 
 Records live in the governed project or package's `specs/` directory. Name
 them `<TYPE>-<short-slug>.md`; begin `# <TYPE>-<short-slug>: Title`; keep the
-stem repository-unique. No indexes: find IDs with `rg`, links, and code
+stem repository-unique. `AGENTS.md` and `CLAUDE.md` may also live in `specs/`
+as agent instructions; they are not records. No indexes: find IDs with `rg`, links, and code
 references. Code/test citations must add rationale. Prefer Markdown links
 whose text is the target ID and whose wording names the relationship
 (`constrained by`, `refines`, `supersedes`).

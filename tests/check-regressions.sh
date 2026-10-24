@@ -21,6 +21,7 @@ SUITES=(
   tests/check-vendor-upgrade.sh
   tests/check-install.sh
   skills/assurance-records-upkeep/tests/check-lint.sh
+  skills/assurance-records-upkeep/tests/check-lint-scope.sh
 )
 
 unset BASH_ENV ENV

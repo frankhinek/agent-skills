@@ -54,10 +54,23 @@ absolute and network paths, and fragment- or query-only targets are skipped.
 Reference-style and multiline links, autolinks, HTML, and URL/entity decoding
 are intentionally outside the mechanical check.
 
-The reference scan excludes `.git/`, `.agents/`, `node_modules/`, `build/`,
+Record discovery and the reference scan exclude `.git/`, `.agents/`,
+`node_modules/`, `build/`,
 `dist/`, `.venv/`, `venv/`, `vendor/`, and nested skill roots containing a
 regular `SKILL.md`. A project-root `SKILL.md` remains in scope. Binary and
-nonregular files are outside the scan.
+nonregular files are outside the reference scan. `AGENTS.md` and `CLAUDE.md`
+inside `specs/` supply agent instructions; they are not records, but their
+record references are checked.
+
+For retained source snapshots or other copies outside the live corpus, declare
+directory exclusions in the project-root `.assurance-records-lint-ignore`.
+Use one literal, existing project-relative directory per line; blank lines and
+lines beginning with `#` are ignored. Paths must be normalized: no absolute
+paths, `.` or `..` components, doubled or trailing slashes, or symlinks.
+The linter prints each exclusion and applies it to record discovery and the
+reference scan. An invalid configuration exits 2. Excluded records cannot
+satisfy live references. Keep exclusions narrow and justified; a clean result
+covers only the remaining corpus, and does not validate retained snapshots.
 
 Then the checks that still need reading:
 

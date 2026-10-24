@@ -91,9 +91,64 @@ finding() { # finding <location> <check> <message>
 TYPES='ARCH|REQ|SPEC|GATE|CLAIM'
 
 # ---- collect specs/ dirs and their records ------------------------------
-find . -type d -name specs \
-  -not -path './.git/*' -not -path './.agents/*' -not -path '*/node_modules/*' \
-  >"$TMP/specsdirs"
+reference_prune=(
+  -name .git -o -name .agents -o -name node_modules -o
+  -name build -o -name dist -o -name .venv -o -name venv -o
+  -name vendor
+)
+
+
+# Explicit directory exclusions are local project policy, never inferred from
+# names such as verification/ or results/. Match literal paths, not globs.
+IGNORE=.assurance-records-lint-ignore
+if [ -L "$IGNORE" ] || { [ -e "$IGNORE" ] && [ ! -f "$IGNORE" ]; }; then
+  setup_error "$IGNORE must be a regular file, not a link or directory"
+fi
+if [ -f "$IGNORE" ]; then
+  [ -r "$IGNORE" ] || setup_error "unable to read $IGNORE"
+  while IFS= read -r excluded || [ -n "$excluded" ]; do
+    case "$excluded" in
+    "" | \#*) continue ;;
+    esac
+    case "/$excluded/" in
+    //* | */./* | */../* | *//* )
+      setup_error "$IGNORE: expected a normalized project-relative directory: $excluded"
+      ;;
+    esac
+    # Check every component so a link inside the project cannot select an
+    # external directory, even when its final component is a real directory.
+    remaining="$excluded"
+    prefix=.
+    while [ -n "$remaining" ]; do
+      component="${remaining%%/*}"
+      prefix="$prefix/$component"
+      [ ! -L "$prefix" ] || setup_error "$IGNORE: symlink in excluded path: $excluded"
+      [ -d "$prefix" ] || setup_error "$IGNORE: excluded directory does not exist: $excluded"
+      if [ "$remaining" = "$component" ]; then break; fi
+      remaining="${remaining#*/}"
+    done
+    excluded_pattern="$(printf '%s\n' "./$excluded" | sed 's/[][\\*?]/\\&/g')"
+    reference_prune+=( -o -path "$excluded_pattern" )
+    printf 'assurance-records lint: excluded directory: %s\n' "$excluded"
+  done <"$IGNORE"
+fi
+
+# A nested SKILL.md marks agent instructions, not project source. Preserve a
+# root SKILL.md so a project that is itself a skill cannot suppress its scan.
+find . \
+  \( -type d \( "${reference_prune[@]}" \) -prune \) -o \
+  -type f -name SKILL.md -print \
+  2>/dev/null | sort -u >"$TMP/skillroots" || true
+while IFS= read -r skill_file; do
+  skill_dir="${skill_file%/SKILL.md}"
+  [ "$skill_dir" = . ] && continue
+  skill_pattern="$(printf '%s\n' "$skill_dir" | sed 's/[][\\*?]/\\&/g')"
+  reference_prune+=( -o -path "$skill_pattern" )
+done <"$TMP/skillroots"
+
+find . \
+  \( -type d \( "${reference_prune[@]}" \) -prune \) -o \
+  -type d -name specs -print >"$TMP/specsdirs" || setup_error "unable to discover specs directories"
 
 if [ ! -s "$TMP/specsdirs" ]; then
   printf 'assurance-records lint: no specs/ directories found under %s\n' "$ROOT"
@@ -102,7 +157,7 @@ fi
 
 : >"$TMP/records"
 while IFS= read -r d; do
-  find "$d" -maxdepth 1 -type f -name '*.md' >>"$TMP/records"
+  find "$d" -maxdepth 1 -type f -name '*.md' ! -name AGENTS.md ! -name CLAUDE.md >>"$TMP/records"
 done <"$TMP/specsdirs"
 sort -o "$TMP/records" "$TMP/records"
 
@@ -369,24 +424,6 @@ done <"$TMP/specsdirs"
 # Search regular text files while pruning conventional generated, dependency,
 # and environment trees; -I makes binary handling explicit on both BSD and
 # GNU grep.
-reference_prune=(
-  -name .git -o -name .agents -o -name node_modules -o
-  -name build -o -name dist -o -name .venv -o -name venv -o
-  -name vendor
-)
-
-# A nested SKILL.md marks agent instructions, not project source. Preserve a
-# root SKILL.md so a project that is itself a skill cannot suppress its scan.
-find . \
-  \( -type d \( "${reference_prune[@]}" \) -prune \) -o \
-  -type f -name SKILL.md -print \
-  2>/dev/null | sort -u >"$TMP/skillroots" || true
-while IFS= read -r skill_file; do
-  skill_dir="${skill_file%/SKILL.md}"
-  [ "$skill_dir" = . ] && continue
-  skill_pattern="$(printf '%s\n' "$skill_dir" | sed 's/[][\\*?]/\\&/g')"
-  reference_prune+=( -o -path "$skill_pattern" )
-done <"$TMP/skillroots"
 
 find . \
   \( -type d \( "${reference_prune[@]}" \) -prune \) -o \

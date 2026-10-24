@@ -61,6 +61,11 @@ script. Run the same static check locally with:
 git ls-files -z -- '*.sh' | xargs -0 shellcheck --severity=warning
 ```
 
+When a consuming project retains historical source copies, scope its record
+linter with `.assurance-records-lint-ignore`; see the
+[upkeep skill's lint rules](skills/assurance-records-upkeep/SKILL.md#lint).
+Exclusions are explicit directory paths, and the linter reports them on each run.
+
 ## Install (per machine)
 
 ```sh
