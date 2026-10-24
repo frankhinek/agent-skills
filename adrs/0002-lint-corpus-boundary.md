@@ -24,7 +24,7 @@ Exclude `AGENTS.md` and `CLAUDE.md` from the record inventory while retaining
 their references in the reference scan. Use the existing generated-directory
 and nested-skill boundaries for both discovery and reference scans.
 
-Allow a project-root `.assurance-records-lint-ignore` to name explicit, literal
+Allow a project-root `.assuranceignore` to name explicit, literal
 directory exclusions. Require existing normalized project-relative paths with
 no symlink components. Reject invalid configuration, report every exclusion,
 and keep archived IDs out of the live reference target set.

@@ -63,7 +63,7 @@ inside `specs/` supply agent instructions; they are not records, but their
 record references are checked.
 
 For retained source snapshots or other copies outside the live corpus, declare
-directory exclusions in the project-root `.assurance-records-lint-ignore`.
+directory exclusions in the project-root `.assuranceignore`.
 Use one literal, existing project-relative directory per line; blank lines and
 lines beginning with `#` are ignored. Paths must be normalized: no absolute
 paths, `.` or `..` components, doubled or trailing slashes, or symlinks.

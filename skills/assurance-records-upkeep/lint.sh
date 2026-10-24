@@ -100,7 +100,7 @@ reference_prune=(
 
 # Explicit directory exclusions are local project policy, never inferred from
 # names such as verification/ or results/. Match literal paths, not globs.
-IGNORE=.assurance-records-lint-ignore
+IGNORE=.assuranceignore
 if [ -L "$IGNORE" ] || { [ -e "$IGNORE" ] && [ ! -f "$IGNORE" ]; }; then
   setup_error "$IGNORE must be a regular file, not a link or directory"
 fi

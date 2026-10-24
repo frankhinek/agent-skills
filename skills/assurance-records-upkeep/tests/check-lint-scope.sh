@@ -52,7 +52,7 @@ put "$root/verification/results/snapshot/specs/REQ-live.md" '# REQ-live: Archive
 put "$root/verification/results/snapshot/old.py" '# REQ-historical-only'
 put "$root/verification/current/specs/REQ-validation.md" '# REQ-validation: Live validation' '' 'Keep live validation in scope.'
 check archives-are-live-by-default "$root" 1 '[unique-id]'
-put "$root/.assurance-records-lint-ignore" '# Captured source, not the live corpus.' '' 'verification/results/snapshot'
+put "$root/.assuranceignore" '# Captured source, not the live corpus.' '' 'verification/results/snapshot'
 check explicit-archive-exclusion "$root" 0 'clean (2 records)'
 check reported-exclusion "$root" 0 'assurance-records lint: excluded directory: verification/results/snapshot'
 put "$root/verification/current/specs/REQ-live.md" '# REQ-live: Duplicate live obligation' '' 'Still an error.'
@@ -68,7 +68,7 @@ check archive-cannot-satisfy-live-reference "$root" 1 './src/app.py:1: [dangling
 root="$TEST_ROOT/literal-path"
 put "$root/specs/REQ-live.md" '# REQ-live: Live obligation' '' 'Keep accepted work.'
 put "$root/snapshots/run [1]*?/specs/REQ-live.md" '# REQ-live: Snapshot' '' 'Historical.'
-put "$root/.assurance-records-lint-ignore" 'snapshots/run [1]*?'
+put "$root/.assuranceignore" 'snapshots/run [1]*?'
 check literal-path-metacharacters "$root" 0 'clean (1 records)'
 put "$root/snapshots/run 1abc/specs/REQ-live.md" '# REQ-live: Sibling' '' 'Live.'
 check metacharacters-do-not-hide-siblings "$root" 1 '[unique-id]'
@@ -80,21 +80,21 @@ put "$root/plain-file" 'Not a directory.'
 ln -s snapshots "$root/link"
 ln -s "$TEST_ROOT" "$root/outside"
 for excluded in . /specs ../specs snapshots/../specs ./snapshots snapshots//old snapshots/ missing plain-file link/old outside/config; do
-  put "$root/.assurance-records-lint-ignore" "$excluded"
+  put "$root/.assuranceignore" "$excluded"
   check "invalid-exclusion-$excluded" "$root" 2 '[setup]'
 done
-put "$root/.assurance-records-lint-ignore" '' '# Empty configuration is allowed.'
+put "$root/.assuranceignore" '' '# Empty configuration is allowed.'
 check empty-configuration "$root" 0 'clean (1 records)'
-rm "$root/.assurance-records-lint-ignore"
+rm "$root/.assuranceignore"
 put "$root/settings" 'snapshots/old'
-ln -s settings "$root/.assurance-records-lint-ignore"
+ln -s settings "$root/.assuranceignore"
 check configuration-symlink "$root" 2 '[setup]'
-rm "$root/.assurance-records-lint-ignore"
-mkdir "$root/.assurance-records-lint-ignore"
+rm "$root/.assuranceignore"
+mkdir "$root/.assuranceignore"
 check configuration-directory "$root" 2 '[setup]'
 
 root="$TEST_ROOT/no-specs"
-put "$root/.assurance-records-lint-ignore" 'missing'
+put "$root/.assuranceignore" 'missing'
 check bad-config-without-records "$root" 2 '[setup]'
 
 root="$TEST_ROOT/generated"
