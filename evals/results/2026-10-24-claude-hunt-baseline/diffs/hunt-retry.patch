@@ -1,0 +1,140 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..d5c3456b948b30ae8d6d5cece99b0c4cd9eb0b8d
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,72 @@
++# Hunt report: `Exports.apply` under interruption and same-ID retry
++
++Scope: `app/exports.py` `Exports.apply`, checked against `app/export-contract.md`
++for interrupted requests and retries of the same request ID. Stopped after this
++operation's duplicate-effect risk was checked, as requested.
++
++## Finding 1: retry after interruption at `after_effect` duplicates the item (confirmed)
++
++**Contract promise:** "Each accepted request must add exactly one item. A caller
++may retry the same request ID with the same payload after any interruption,
++including after a durable effect but before the response arrives." The
++`after_effect` hook "may raise to model termination there."
++
++**Defect:** `apply` calls `self.db.commit()` immediately after inserting the item
++and before calling `after_effect` and inserting the receipt. The item insert and
++the receipt insert are therefore in separate transactions:
++
++1. `INSERT INTO items` → `commit()`. The item is now durable.
++2. `after_effect()` raises (termination). The `with self.db` block rolls back,
++   but only the empty remainder of the transaction is left to roll back. No receipt
++   is written.
++3. After restart, the caller retries the same request ID. The receipt lookup finds
++   nothing, so the item is inserted a second time.
++
++A transient I/O failure on the receipt insert has the same effect, and the
++contract says such work is retried.
++
++**Witness:** `tests/hunt_witness.py`. It applies `req-1` normally, then applies
++`req-2` with an `after_effect` that raises. It closes and reopens the database to
++model a restart, then retries both IDs with the same payloads.
++- Current code: exit 1, `VIOLATION: expected ['payload-1', 'payload-2'], got ['payload-1', 'payload-2', 'payload-2']`.
++- I also checked the witness against a patched `apply`, monkeypatched in memory
++  with no product code changed. The patched version runs the receipt check, item
++  insert, `after_effect`, and receipt insert in a single transaction with no
++  intermediate commit. It exits 0, so the witness detects the bug, not some
++  artifact of the test.
++
++**Suggested fix (not applied):** remove the intermediate `self.db.commit()` so the
++item and receipt commit atomically. Optionally, move the receipt check inside the
++same transaction.
++
++## Coverage
++
++Checked:
++- Uninterrupted request, then a same-ID retry: no duplicate (the receipt
++  short-circuits). Passes.
++- Interruption at the `after_effect` boundary, after the item commit and before
++  the receipt, then a same-ID retry after restart: **duplicate** (Finding 1).
++- Interruption before the item commit: no durable effect, so the retry adds one
++  item. Safe by inspection.
++- Interruption after the receipt insert but before the `with` block commits
++  (end of block): both inserts roll back together, so the retry adds one item.
++  Safe by inspection.
++- Durability across restart: the witness reopens the SQLite file. The contract
++  says committed transactions survive.
++
++Not checked (outside the contract or the requested stop point):
++- Concurrent or overlapping workers and requests. The contract excludes them.
++  The check-then-insert race in `apply` would matter only there.
++- The same request ID retried with a *different* payload. The contract only
++  permits same-payload retries.
++- Storage loss or corruption (excluded), and other operations (`items`, `close`,
++  the notes modules).
++
++## Records
++
++No `specs/` record governs `app/exports.py` or the export contract. `ARCH-app`,
++`CLAIM-single-writer`, `SPEC-note-payload`, `REQ-import-source`, and
++`GATE-local-only` cover the notes app and `data/`. The exports database is a
++caller-supplied SQLite path, not a file under `data/`, so `CLAIM-single-writer`
++is not affected. No records or existing evidence were changed. `app/exports.py`
++is unmodified.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..ac2e6c90a382d8baf1e1b4e6a3384cfafd01f72a
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,56 @@
++"""Witness: retrying a request ID after an interruption at the after_effect
++boundary must not add a second item (app/export-contract.md).
++
++Exits 0 if every accepted request added exactly one item after
++interrupt + restart + retry; exits 1 otherwise.
++"""
++import os
++import sys
++import tempfile
++
++sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
++
++from app.exports import Exports
++
++
++class Terminated(Exception):
++    pass
++
++
++def crash():
++    raise Terminated("worker terminated after durable effect")
++
++
++def main():
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, "jobs.db")
++
++        # Control: an uninterrupted request, later retried.
++        worker = Exports(path)
++        worker.apply("req-1", "payload-1")
++
++        # Interrupted at the documented boundary, after the durable effect.
++        try:
++            worker.apply("req-2", "payload-2", after_effect=crash)
++        except Terminated:
++            pass
++        worker.close()
++
++        # Restart after the previous worker stopped; retry the same request
++        # IDs with the same payloads, as the contract permits.
++        worker = Exports(path)
++        worker.apply("req-2", "payload-2")
++        worker.apply("req-1", "payload-1")
++        items = worker.items()
++        worker.close()
++
++    expected = ["payload-1", "payload-2"]
++    if sorted(items) != expected:
++        print(f"VIOLATION: expected {expected}, got {items}")
++        return 1
++    print("OK: each accepted request added exactly one item")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

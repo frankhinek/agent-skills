@@ -1,0 +1,180 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..62d2fd9570de9735b9af483f5703ab496e9e8312
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,93 @@
++# Export worker acceptance and recovery hunt
++
++Assessed revision `91e8b90472306885b3b8cabd84648ed755f7ef17` on
++2026-10-24. Product code, governing records, and existing evidence are unchanged.
++This report records findings, not a new claim verification pass.
++
++## Authority and coverage
++
++The governing behavior is in `app/export-contract.md`: local durable SQLite,
++one worker with sequential requests, restart only after the old worker stops,
++retry after transient I/O failures, eventual results for accepted jobs, one
++payload per ID, and no further work required for completed jobs. Storage loss,
++corruption, simultaneous workers, and overlapping requests are excluded by that
++contract, not by this hunt.
++
++Read the entire `Queue` implementation, both claim statements and proofs,
++the root records, and application modules. Searched references to `Queue`,
++`submit`, `recover`, `export_queue`, and the recovery claim. No application
++consumer of the queue was found; the note exporter uses the separate Store.
++The note payload, import-source, and Store single-writer records do not supply
++the queue's recovery guarantee. All executions used temporary local databases.
++
++Before reading historical verification, code inspection identified the running
++state gap, conflicting acceptance, and same-worker output-error retry gap; these
++were also stated in conversation. The attempted scratch-report write failed.
++Historical reports and the existing witness were then opened before a successful
++scratch write. Therefore the skill's fresh-assessment recording procedure was
++not completed; no independent verification pass is asserted here.
++
++## Findings still unresolved
++
++1. **Known: committed running jobs disappear from scheduling after restart.**
++   `work` commits `running` before output; `recover` does nothing and selection
++   only includes `pending`. The contract's interruption hook exposes this exact
++   boundary. Reopening and repeated work cannot finish that accepted job.
++   `python3 -B tests/known_loss.py` exits 1 with
++   `accepted work abandoned after restart`. This agrees with the existing
++   `CLAIM-export-recovery/verification.md` falsification; it remains unresolved.
++
++2. **Additional: conflicting payloads are acknowledged as accepted.**
++   `submit` uses `INSERT OR IGNORE` and unconditionally returns acceptance.
++   Sequentially submit `("job", "original")`, then
++   `("job", "replacement")`: both receive acceptance, but only the original
++   payload is retained. This also occurs after the original job completes.
++   Acceptance therefore does not enforce the contract's one-payload-per-ID
++   rule or distinguish an unsatisfied conflicting request. Identical-payload
++   resubmission is a separate, working idempotent case. This is an acceptance
++   contract defect; it does not independently demonstrate loss of the original
++   job, nor establish that the recovery claim quantifies over a replacement
++   payload rather than job identity.
++
++3. **Additional path through the known state defect: output failure strands
++   work without restart.** After the running-state transaction commits, an
++   exception in the output transaction rolls back that transaction only.
++   Later calls select no pending job. The new witness rejects the output INSERT
++   through SQLite's authorizer, restores authorization, then makes three normal
++   work calls; the result remains absent. The number of retries is not the
++   liveness argument: the durable `running` state is unchanged and no later
++   selection can select it. This shares the root cause with finding 1, but
++   expands its demonstrated failure boundary to same-process transaction errors.
++   The injected error is a real SQLite `DatabaseError` caused by authorization,
++   not an actual transient disk I/O error. Code inspection shows the same
++   transaction ordering for transient output I/O errors; that specific error
++   class was not injected, so its executable reproduction remains a coverage gap.
++
++## Executable evidence and checks
++
++`python3 -B tests/hunt_witness.py` exits 1 and reports all three cases:
++`conflict-pending`, `conflict-done`, and `output-retry`. It runs independent
++temporary databases, continues after individual failures, and exits zero only
++when all its assertions hold. The output fault must actually fire before the
++recovery assertion is evaluated. No production methods are replaced.
++
++A separate direct Queue smoke check passed: pending job survives close/reopen,
++identical resubmission retains the payload, normal work produces the result,
++completed work is not selected again, and its result survives another restart.
++The existing known-loss witness was rerun unchanged and failed as above.
++
++Inspected transaction boundaries: interruption before the running commit leaves
++pending work; results and `done` share one transaction, so a successful commit
++does not leave a result paired with an incomplete state under the storage
++contract. These are code-reading conclusions, not crash-injection coverage.
++
++## Limits and remaining work
++
++No repair was authorized or applied. The recovery claim's existing falsified
++verdict remains untouched. Fixing restart alone would not establish same-worker
++retry recovery, and fixing recovery would not settle conflicting acceptance.
++No further distinct in-contract defect was established in this small surface.
++Real process-kill/disk-error injection, ambiguous commit failures, exhaustive
++failure schedules, and independent fresh verification were not performed.
++Input-type/NULL handling was not promoted to a finding because the contract
++does not define those input domains. No concurrency guarantee was assumed.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..c05c3b3239f6000b23f973ad9e9ed7b37a723657
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,75 @@
++"""Contract witnesses: nonzero if any promised behavior is violated."""
++from pathlib import Path
++import sqlite3
++import sys
++import tempfile
++
++sys.dont_write_bytecode = True
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from app.export_queue import Queue
++
++
++def conflicting_payload(path, completed):
++    worker = Queue(path)
++    try:
++        assert worker.submit("job", "original")["accepted"]
++        if completed:
++            worker.work()
++        reply = worker.submit("job", "replacement")
++        assert not reply["accepted"], (
++            "conflicting payload accepted for an existing job ID"
++        )
++    finally:
++        worker.close()
++
++
++def transient_output_failure(path):
++    worker = Queue(path)
++    try:
++        assert worker.submit("job", "hello")["accepted"]
++        # Deny exactly one output INSERT using SQLite's connection-local
++        # authorizer. Production work executes both real transactions.
++        def deny_output(action, table, *_):
++            if action == sqlite3.SQLITE_INSERT and table == "results":
++                return sqlite3.SQLITE_DENY
++            return sqlite3.SQLITE_OK
++
++        worker.db.set_authorizer(deny_output)
++        failed = False
++        try:
++            worker.work()
++        except sqlite3.DatabaseError:
++            failed = True
++        finally:
++            worker.db.set_authorizer(lambda *_: sqlite3.SQLITE_OK)
++        assert failed, "fault injection did not reach output INSERT"
++        for _ in range(3):
++            worker.work()
++        assert worker.result("job") == "hello", (
++            "accepted job stranded after output failure and same-worker retries"
++        )
++    finally:
++        worker.close()
++
++
++def main():
++    failures = []
++    with tempfile.TemporaryDirectory() as scratch:
++        cases = [
++            ("conflict-pending", lambda p: conflicting_payload(p, False)),
++            ("conflict-done", lambda p: conflicting_payload(p, True)),
++            ("output-retry", transient_output_failure),
++        ]
++        for name, check in cases:
++            try:
++                check(str(Path(scratch) / (name + ".db")))
++            except Exception as error:
++                failures.append(name)
++                print(f"FAIL {name}: {type(error).__name__}: {error}")
++            else:
++                print(f"PASS {name}")
++    return bool(failures)
++
++
++if __name__ == "__main__":
++    sys.exit(main())

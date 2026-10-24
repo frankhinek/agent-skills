@@ -1,0 +1,173 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..a4403d9d8b9895c1676ca72786e7e72906232096
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,89 @@
++# Export acceptance and restart recovery hunt
++
++Checked revision: `817185a6bf680e6aa24432f9b1061e26ed08e1d0`.
++
++## Scope and fault model
++
++Scope: `Queue.submit`, `Queue.work`, constructor recovery, and `Queue.result`
++in [app/export_queue.py](app/export_queue.py), governed by
++[app/export-contract.md](app/export-contract.md). Prioritized harms were
++abandoned accepted work, false acceptance durability, and repeated completed
++work. Stop after these operation and direct recovery cases; no broader app audit.
++
++The contract establishes local SQLite persistence across process termination,
++one worker, sequential requests, restart only after the old worker stops,
++immutable payload per ID, and repeated work calls after transient failures
++cease. Storage loss/corruption and overlapping workers are excluded by that
++contract. The witness uses actual process termination, a temporary local database,
++and the documented post-running-commit hook. No mocked queue or state model.
++
++## Demonstrated defect: accepted jobs become permanently stranded
++
++**High impact:** interruption after the running-state commit abandons accepted
++work, violating “Accepted jobs must eventually produce their result after
++recovery.”
++
++Reachable trace:
++
++1. `submit("job", "payload")` commits a pending job and returns accepted
++   (`app/export_queue.py:21–25`).
++2. `work` commits `state = 'running'` (`:33–34`). Its documented hook then
++   terminates the child with `os._exit(73)`, before output starts.
++3. A fresh process opens the same database. Constructor calls `recover`, but
++   it does nothing (`:15–19`). The job remains running without a result.
++4. Repeated `work` calls select only pending jobs (`:28–32`), return false,
++   and never produce this job's result.
++
++This is permanent under allowed recovery, rather than a transient delay:
++without another pending job, each work call takes the same read-only false
++branch; restart has no recovery mutation. Even a same-ID submission retry uses
++`INSERT OR IGNORE`, so cannot restore the obligation. A healthy environment and
++arbitrarily many retries cannot change this closed state.
++
++Fix direction: reconstruct unfinished running obligations at restart, or make
++them eligible for retry under the single-worker contract. Preserve the atomic
++result insertion/done transition and completed-job behavior. No repair applied.
++
++## Executed evidence and coverage
++
++Command: `python3 -B tests/hunt_witness.py` using Python 3.9.6.
++Observed exit status: **1**, with:
++
++```text
++PASS: pending restart, completion and completed retry
++FAIL: running: accepted job has no result after restart and five work calls (initial persisted state=running)
++```
++
++[tests/hunt_witness.py](tests/hunt_witness.py) exits nonzero on violated
++assertions and zero when both scenarios satisfy the contract. Each scenario
++uses a separate database; subprocess termination is checked before restart.
++Assertions inspect real results, and the passing case additionally checks
++completed state behavior across a second restart and same-payload resubmission.
++Scratch databases are removed automatically. This is a direct executable
++counterexample and control case, not a generated search or formal proof.
++
++| Case | Coverage and outcome |
++| --- | --- |
++| Accepted pending job, termination before work | Executed: survives restart and completes |
++| Termination after running commit, before output | Executed: stranded job, missing result |
++| Completed job after restart; same-ID/same-payload retry | Executed in pending control: result preserved, no new work |
++| Output insert and done update atomicity | Code inspection: both in one SQLite transaction; no process kill inside transaction executed |
++| Transient error after running commit | Code inspection: same stranding mechanism if output transaction fails and rolls back; no I/O fault injection executed |
++| Submit before commit | Code inspection only: no successful acceptance returned before transaction exit |
++
++No counterexample found in the executed control; that is not a guarantee of bug
++absence. Other commit boundaries were not exhaustively fault-injected. SQLite
++transaction durability is taken from the supplied contract; no pinned SQLite
++source or storage implementation audit was performed. No missing tool blocked
++the selected checks.
++
++## Records and preservation
++
++Discovery covered root `specs/`, app paths and references to queue/recovery and
++record IDs. No narrower specs directory or queue consumer was found. Read the
++root architecture, gate, requirement, payload spec, and single-writer claim as
++context. The local-only gate is respected by temporary local databases. The
++claim concerns writes under `data/`; this witness does not write there and
++neither verifies nor changes that claim. Claim proof/verification artifacts
++were not used or modified. Unrelated note export and import behavior are outside
++this hunt. Product code, governing records, and existing evidence are preserved.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..800adbd03a803a9a9da00a39b77a181fcd0afc33
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,72 @@
++"""Run with python3 -B tests/hunt_witness.py; no third-party dependencies."""
++import os
++from pathlib import Path
++import subprocess
++import sys
++import tempfile
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from app.export_queue import Queue
++
++
++def interrupt():
++    os._exit(73)
++
++
++def child(path, boundary):
++    queue = Queue(path)
++    assert queue.submit("job", "payload") == {"accepted": True, "id": "job"}
++    if boundary == "pending":
++        interrupt()
++    queue.work(after_claim=interrupt)
++    raise AssertionError("interruption hook was not reached")
++
++
++def check(path, boundary):
++    result = subprocess.run(
++        [sys.executable, "-B", __file__, "--child", path, boundary],
++        check=False,
++    )
++    assert result.returncode == 73, result.returncode
++    queue = Queue(path)
++    try:
++        initial = queue.db.execute("SELECT state FROM jobs").fetchone()[0]
++        # A finite check plus the report's closed-state argument establishes
++        # why further calls cannot help the broken implementation.
++        for _ in range(5):
++            queue.work()
++        assert queue.result("job") == "payload", (
++            f"{boundary}: accepted job has no result after restart and five "
++            f"work calls (initial persisted state={initial})"
++        )
++        assert not queue.work(), "completed job was selected again"
++    finally:
++        queue.close()
++    queue = Queue(path)
++    try:
++        queue.submit("job", "payload")  # supported retry, same payload
++        assert not queue.work(), "completed retry created more work"
++        assert queue.result("job") == "payload"
++    finally:
++        queue.close()
++
++
++def main():
++    failures = []
++    with tempfile.TemporaryDirectory(prefix="export-hunt-") as scratch:
++        for boundary in ("pending", "running"):
++            try:
++                check(str(Path(scratch) / (boundary + ".sqlite")), boundary)
++            except AssertionError as error:
++                failures.append(str(error))
++                print("FAIL:", error)
++            else:
++                print("PASS:", boundary, "restart, completion and completed retry")
++    return int(bool(failures))
++
++
++if __name__ == "__main__":
++    if len(sys.argv) > 1 and sys.argv[1] == "--child":
++        child(sys.argv[2], sys.argv[3])
++    else:
++        sys.exit(main())

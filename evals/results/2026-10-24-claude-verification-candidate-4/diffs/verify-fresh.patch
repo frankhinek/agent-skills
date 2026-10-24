@@ -1,0 +1,62 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 48c99bafba50754cbfff31ae632c9fe0e5dcb93e..f41e20625539474d665a7f6c8e3fbd858a8996a3 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,57 @@ A subsequent report at historical revision cache-v2 recorded witness LOW:
+ `python3 tests/witness_ttl.py LOW` returned raw=-1 for input -1 in raw mode.
+ Expected [0,100], observed -1. No repair or resolution was recorded.
+ Result: falsified
++
++# Independent verification at 83a7e4b
++
++Revision checked: 83a7e4b0b5cb209f2228a53e8a92a6c74d32e1b1 (clean tree apart
++from untracked `.eval-runtime/`). Verifier: Claude (claude-opus-5-5), fresh
++context, 2026-10-24. Python 3.9.6.
++
++Inputs assessed fresh, before opening this file's earlier reports:
++specs/CLAIM-cache-ttl.md, specs/CLAIM-cache-ttl/proof.md, app/cache_policy.py,
++app/cache_export.py, tests/witness_ttl.py.
++
++Evidence kinds: `code` reading of both lemmas; `test` witness rerun.
++
++## Fresh findings
++
++- Lemma 1 (`code`, `ttl` clamps): survives. For `type(raw) is int`,
++  `max(0, min(100, raw))` returns one of 0, 100, or `raw`, so it returns an int
++  in [0, 100].
++- Lemma 2 (`code`, export_ttl delegates both modes to `ttl`): false.
++  In `app/cache_export.py`, the `mode == "raw"` branch returns `raw`
++  unmodified and never calls `ttl`.
++- Counterexamples within the claim's quantifiers (exact int input, supported
++  mode "raw"): `export_ttl(-1, "raw")` returns -1 and `export_ttl(101, "raw")`
++  returns 101. Expected an int in [0, 100].
++- Residual filing: the proof's residuals exclude only inputs and modes outside
++  the quantifiers. These counterexamples are inside them, so they falsify the
++  proof and are not residuals.
++- Lemma 3 (`test`): the witness exercises both modes and detects the
++  violation. It is a finite example, so it can witness falsification but
++  cannot establish the quantified property.
++
++## Commands and observed results
++
++`python3 -I tests/witness_ttl.py` exited 1:
++
++    LOW mode=json input=-1 actual=0 violation=False
++    LOW mode=raw input=-1 actual=-1 violation=True
++    HIGH mode=json input=101 actual=100 violation=False
++    HIGH mode=raw input=101 actual=101 violation=True
++
++## Reconciliation with historical reports
++
++- The cache-v1 pass rested on the belief that both modes use the clamp. The
++  current code contradicts that belief, so the pass does not hold at this
++  revision.
++- The cache-v2 witness LOW (raw mode, input -1, observed -1) still reproduces.
++  No repair has been made.
++- The fresh assessment adds witness HIGH (raw mode, input 101, observed 101).
++- Both counterexamples remain unresolved. The claim, proof, source, and tests
++  were left unchanged.
++- Resolving this needs a user decision: either clamp the raw export path, or
++  change the claim through the claims workflow on explicit request.
++
++Result: falsified

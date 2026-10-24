@@ -1,0 +1,167 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..74b876570330734ec4ffc608ccfab2603088f215
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,77 @@
++# Export acceptance and restart recovery hunt
++
++## Result and scope
++
++No implementation defect demonstrated in the selected process-interruption
++and restart cases. Stopped after checking export acceptance and its direct
++recovery path, as requested. This is bounded coverage, not a guarantee of bug
++absence or independent verification of an existing claim.
++
++Baseline: `8461fa46ced55aba1ce3a1b4753e69576fa4c0be`.
++Authority: [supported contract](app/export-contract.md).
++Implementation: [Queue](app/export_queue.py), including `submit`, `work`,
++`recover`, startup, and `result`. Prioritized harms were abandoned accepted
++jobs, lost output, duplicate output, and completed jobs becoming stuck or
++being replayed after restart.
++
++## Fault model and governing context
++
++One worker, sequential requests and restarts, immutable payload per job ID,
++local SQLite, no corruption or storage loss. A stopped process is replaced
++and work is called after recovery. The witness uses actual child-process
++`os._exit`, without graceful connection cleanup. SQLite transactions are the
++atomic durability boundary promised by the contract.
++
++Read the root architecture, note payload specification, and local-only gate;
++searched repository references to export, acceptance, queue, and restart.
++No additional export-specific governing records or consumers were found.
++The note storage single-writer claim and its evidence were not assessed or
++changed: this queue uses a separate SQLite file, not the note `data/` store.
++All test databases and mutation copies remained local and temporary.
++
++## Coverage and executed evidence
++
++Run from the repository root:
++
++```sh
++python3 tests/hunt_witness.py
++```
++
++Observed exit status: **0**, all four cases passed.
++
++| Interruption boundary | Durable state before recovery | Checked result |
++| --- | --- | --- |
++| After `submit` returns accepted | Pending job, no output | Restart produces original payload |
++| After running-state commit, before output (documented hook) | Running job, no output | Startup resets to pending and work completes |
++| After result insert, before done update | Running job, result transaction rolled back | Restart completes without duplicate-key failure |
++| After completion commits | Done job and output | Restart preserves output and schedules no further work |
++
++Each case also retries submission with the same ID and payload, performs two
++sequential reopens, checks exactly one result, and checks idle work after
++completion. The partial-output boundary uses SQLite's trace callback before
++the done update; it does not replace product logic. Pre-recovery inspection
++confirms both that the boundary was reached and what actually survived.
++Assertions raise and exit nonzero on violations; unexpected child failure
++also fails the witness.
++
++Code inspection supports these observations: `submit` returns after its
++transaction commits (lines 22–26); startup calls `recover`, which resets
++running jobs (lines 15–20); result insertion and done state share one
++transaction (lines 38–40). An interrupted recovery transaction can be retried
++on another startup, and the reset is idempotent.
++
++Oracle sensitivity check: copied only the queue and witness into an isolated
++temporary tree, replaced startup's `self.recover()` with `pass`, and ran the
++same witness. It exited **1** at the running-state case with
++`running: unexpected replay/completion behavior`. The accepted-pending case
++still passed. The temporary mutation was removed; product code was untouched.
++
++## Remaining gaps
++
++No exhaustive crash schedule or interruption inside SQLite commit/recovery
++was injected; those atomicity conclusions rely on the supplied storage
++contract and transaction structure. Power loss, corruption, concurrent workers,
++overlapping requests, and changing an ID's payload are outside the supported
++fault model. Same-process transient I/O retry without a restart was not tested
++in this process-interruption slice. No separate dependency-source audit or
++formal model was performed. Existing records and evidence were preserved.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..0fba8030655d4ccf396426734a8a401eeb2acb27
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,78 @@
++"""Executable checks of export obligations across process interruption."""
++import os
++from pathlib import Path
++import sqlite3
++import subprocess
++import sys
++import tempfile
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT))
++from app.export_queue import Queue
++
++
++def require(condition, message):
++    if not condition:
++        raise AssertionError(message)
++
++
++def child(path, boundary):
++    queue = Queue(path)
++    if boundary == "accepted":
++        require(queue.submit("job", "payload")["accepted"], "submission rejected")
++        os._exit(73)
++    if boundary == "running":
++        queue.work(after_claim=lambda: os._exit(73))
++    elif boundary == "output_uncommitted":
++        # This callback runs before the done update, after the result insert
++        # has executed in the same still-uncommitted transaction.
++        def trace(sql):
++            if sql.startswith("UPDATE jobs SET state = 'done'"):
++                os._exit(73)
++        queue.db.set_trace_callback(trace)
++        queue.work()
++    elif boundary == "completed":
++        require(queue.work(), "no pending job")
++        os._exit(73)
++    raise AssertionError("crash boundary not reached")
++
++
++def main():
++    with tempfile.TemporaryDirectory(prefix="export-hunt-", dir=ROOT / "tests") as directory:
++        for boundary in ("accepted", "running", "output_uncommitted", "completed"):
++            path = str(Path(directory) / (boundary + ".sqlite"))
++            if boundary != "accepted":
++                queue = Queue(path)
++                require(queue.submit("job", "payload") ==
++                        {"accepted": True, "id": "job"}, "acceptance response")
++                queue.close()
++            process = subprocess.run([sys.executable, str(Path(__file__).resolve()),
++                                      "--child", path, boundary], check=False)
++            require(process.returncode == 73, f"{boundary}: child did not interrupt")
++            with sqlite3.connect(path) as db:
++                state = db.execute("SELECT state FROM jobs WHERE id='job'").fetchone()
++                expected = {"accepted": "pending", "running": "running",
++                            "output_uncommitted": "running", "completed": "done"}[boundary]
++                require(state == (expected,), f"{boundary}: durable job state {state}")
++                count = db.execute("SELECT count(*) FROM results").fetchone()[0]
++                require(count == (1 if boundary == "completed" else 0),
++                        f"{boundary}: unexpected durable result")
++            for restart in range(2):
++                queue = Queue(path)
++                require(queue.submit("job", "payload")["accepted"], "retry rejected")
++                worked = queue.work()
++                require(worked == (restart == 0 and boundary != "completed"),
++                        f"{boundary}: unexpected replay/completion behavior")
++                require(queue.result("job") == "payload", f"{boundary}: lost output")
++                require(not queue.work(), f"{boundary}: completed work rescheduled")
++                require(queue.db.execute("SELECT count(*) FROM results").fetchone() == (1,),
++                        f"{boundary}: duplicate output")
++                queue.close()
++            print(f"PASS {boundary}: obligation recovered; completion stable")
++
++
++if __name__ == "__main__":
++    if len(sys.argv) > 1 and sys.argv[1] == "--child":
++        child(sys.argv[2], sys.argv[3])
++    else:
++        main()

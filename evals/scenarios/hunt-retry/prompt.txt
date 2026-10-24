@@ -1,0 +1,2 @@
+Hunt implementation bugs in export application under interrupted requests and retries of the same request ID. Use app/export-contract.md for the supported conditions; stop after checking this operation's duplicate-effect risk.
+Save the findings and coverage to hunt-report.md. Put any new executable witness in tests/hunt_witness.py; it should exit nonzero when the promised behavior is violated and zero when it holds. Preserve product code, governing records, and existing evidence.

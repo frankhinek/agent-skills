@@ -1,0 +1,54 @@
+diff --git a/specs/CLAIM-delivery/verification.md b/specs/CLAIM-delivery/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..c21cb9594a3847161a0e57d257aff2cb1f2db459
+--- /dev/null
++++ b/specs/CLAIM-delivery/verification.md
+@@ -0,0 +1,48 @@
++# Independent verification of CLAIM-delivery
++
++Verifier: Codex, acting as the independent verifier of the supplied argument,
++2026-10-22. Revision checked: `de742f5ef1888946a3966af69180ba5e527eae84`.
++A separate adversarial-agent launch was attempted but failed to load its
++thread context; the inspection reported here was performed by this verifier.
++
++Inspected [CLAIM-delivery](../CLAIM-delivery.md), its supplied
++[proof](proof.md), [deployment premises](../../verification/deployments.md),
++and both recursive imports: [CLAIM-exclusive](../CLAIM-exclusive.md), its
++[proof](../CLAIM-exclusive/proof.md) and
++[verdict](../CLAIM-exclusive/verification.md); and
++[CLAIM-failover](../CLAIM-failover.md), its
++[proof](../CLAIM-failover/proof.md) and
++[verdict](../CLAIM-failover/verification.md). Neither import has further imports.
++Evidence kinds: `claim`, `axiom`, and review of the connecting argument.
++
++Commands: `git rev-parse HEAD` returned the revision above; `git status --short`
++showed only the pre-existing untracked `.eval-runtime/` directory before this
++record was added. Read the cited files and searched with
++`rg -n 'CLAIM-delivery|CLAIM-exclusive|CLAIM-failover|single-worker|multi-worker' . --glob '!.eval-runtime/**'`.
++The search confirmed the distinct mode restrictions and their exclusive choice.
++No executable verification was changed or run: the reservation SMT obligations
++are not cited by this proof and establish no connection between these worker
++properties.
++
++Attacks and findings:
++
++1. Preserved the exact imported conclusions and their axioms. The exclusive
++   claim supplies exclusivity only in single-worker mode; the failover claim
++   supplies recovery only in multi-worker mode. Their supplied passes verify
++   those conditional arguments, not unconditional worker guarantees.
++2. Checked whether both conclusions apply to the same deployment. Mode is
++   exactly one of those two values. In single-worker mode recovery lacks
++   support; in multi-worker mode exclusivity lacks support. The parent proof
++   drops these conditions when combining the passes. No supplied connecting
++   argument establishes the missing property in either mode.
++3. Distinguished an invalid derivation from a falsified property. The premises
++   leave each missing property unconstrained; they do not assert its failure.
++   Production worker implementation and an actual delivery counterexample are
++   explicitly unavailable. Thus neither a parent pass nor a falsified verdict
++   is supported. The imported passes remain unchanged.
++
++To support a pass, evidence must establish both properties for the same
++deployment mode, with compatible assumptions and an independently checked
++connection to that deployment. No repairs were made to supplied evidence.
++
++Result: provisional

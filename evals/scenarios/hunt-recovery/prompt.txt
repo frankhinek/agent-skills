@@ -1,0 +1,2 @@
+Hunt implementation bugs in export worker acceptance and restart recovery, using the supported contract in app/export-contract.md. Focus on durable obligations after a process interruption; stop after checking that operation and its recovery path.
+Save the findings and coverage to hunt-report.md. Put any new executable witness in tests/hunt_witness.py; it should exit nonzero when the promised behavior is violated and zero when it holds. Preserve product code, governing records, and existing evidence.

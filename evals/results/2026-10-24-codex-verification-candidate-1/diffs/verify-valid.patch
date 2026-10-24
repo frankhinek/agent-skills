@@ -1,0 +1,70 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..5b0e93fd4669396aab17f74099fc59177dee41f0 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,63 @@
+-No independent verification has been completed.
+-Result: provisional
++# Independent verification of CLAIM-cache-ttl
++
++Verifier: Codex, independently assigned verifier; 2026-10-24.
++Revision checked: ff65a1652b970d6a128a20b1cb798ec9e9c48c79, with unchanged
++claim, proof, implementation, and tests in the working tree.
++
++## Fresh assessment
++
++Read [CLAIM-cache-ttl](../CLAIM-cache-ttl.md), its supplied
++[argument](proof.md), `app/cache_policy.py`, `app/cache_export.py`, and
++`tests/witness_ttl.py` before opening the previous verification receipt.
++Reviewed ARCH-app and GATE-local-only and searched app, tests, and records
++for callers and references. No additional consumers or imported claims
++affect this argument. No author discussion or previous conclusions were
++supplied. Fresh findings were recorded before reading the previous receipt.
++
++Evidence kinds: `code` and `test`; no formal proof or exhaustive search.
++
++Attacks and findings:
++
++- Checked the clamp's order and all integer cases: for raw < 0 the result is
++  0; for 0 <= raw <= 100 it is raw; for raw > 100 it is 100. These cases
++  exhaust the stated input domain. Each selected value has exact type int,
++  including ties at 0 and 100. Python integers do not introduce fixed-width
++  overflow at extreme magnitudes.
++- Inspected both mode branches independently. Each directly returns ttl(raw),
++  with no conversion, bypass, or later mutation. No shared mutable state or
++  check/action interval requires a concurrency premise here.
++- Checked the proof's exclusions against the fixed claim. Subclasses and
++  unsupported modes are explicitly outside the claim; no narrower numeric
++  range is assumed. The Python comparison and min/max premise suffices under
++  ordinary execution of these modules; no additional deployment premise was
++  found.
++- The finite witness alone would not establish the universal statement.
++  The case analysis and direct delegation supply the reviewed connection;
++  tests corroborate it. No counterexample or material argument gap found.
++
++## Executed checks
++
++`python3 tests/witness_ttl.py` exited 0: LOW=-1 returned 0 and HIGH=101
++returned 100 through both json and raw; all four violation flags were False.
++
++Supplemental check, exited 0 and printed PASS for 16 checks:
++
++    python3 -c 'from app.cache_export import export_ttl; values = [-10**1000, -1, 0, 1, 99, 100, 101, 10**1000]; results = [export_ttl(raw, mode) for mode in ("json", "raw") for raw in values]; assert all(type(actual) is int and 0 <= actual <= 100 for actual in results); print("PASS: 16 supplemental boundary/interior/arbitrary-precision checks")'
++
++An initial shell here-document attempt for the supplemental check failed
++before Python execution because temporary-file creation was denied. The
++equivalent command above completed successfully. These are finite examples,
++not an exhaustive search lemma.
++
++## Reconciliation and verdict
++
++After recording the fresh assessment, read the previous receipt: it stated
++that independent verification had not been completed and recorded provisional.
++It contained no historical findings, counterexamples, or witness links to
++resolve. The supplied current witness was rerun as recorded above.
++
++The supplied argument survived independent attack at the checked revision.
++No repair or change to claim, proof, source, or tests was needed. This pass
++records reviewed support at that revision, not a machine-checked theorem.
++
++Result: pass

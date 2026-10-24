@@ -28,7 +28,7 @@ a transcription of the repository.
 4. Add to the project's `AGENTS.md` (create it if absent): "This project
    uses the assurance-records convention; read
    `.agents/skills/assurance-records/SKILL.md` before working with `specs/`
-   directories or code governed by their records." Vendor the three skill
+   directories or code governed by their records." Vendor the four skill
    directories into `.agents/skills/` when they are not already present.
 5. Finish with the lint pass below.
 
@@ -68,6 +68,13 @@ Then the checks that still need reading:
 - each permitted `SPEC-*` fence contains a diagram, not source code
 - each `CLAIM-*` contains only its property statement, with no disguised
   rationale, proof, verdict, status, or other metadata
+- claim evidence links executable artifacts in their project locations,
+  distinguishes checked scope from production correspondence, and follows the
+  claims skill's formal-evidence and composition rules; lint reports gaps,
+  while proof checks and verdict changes follow the claims workflow
+- claim residuals and assumptions respect the stated scope and cite existing
+  acceptance decisions where required; report unauthorized narrowing under
+  the claims skill's residuals-and-assumptions rules
 - no record functions as an implicit or euphemistic tombstone
 - `## Status` sections are current-state summaries, not progress logs
 - `## Alternatives` sections stay selective and current
@@ -100,7 +107,8 @@ exist.
 2. For each sampled record ask: would deleting it lose durable knowledge
    that should constrain future work? Does it still meet its type's
    threshold? Does it restate what code, types, tests, or comments already
-   show? Does another record own the same subject? Is drift visible against
+   show? Does executable verification fully own it? Does another record own
+   the same subject? Is drift visible against
    the record's governing authority?
 3. Apply the smallest corpus-preserving outcome: delete, merge into a
    canonical record, trim low-value sections, or keep unchanged. Prefer
@@ -115,6 +123,8 @@ exist.
    request naming the record; otherwise report it. Treat every `CLAIM-*` and
    its sibling evidence directory as read-only context. Any change to either
    belongs to `assurance-records-claims`, requires explicit user request, and
-   remains unapplied during grooming.
+   remains unapplied during grooming. When supporting reads reveal a claim
+   fully covered by executable evidence, recommend explicit retirement;
+   preserve the claim and its evidence until that request.
 5. Report: sampled IDs, each outcome with a concise reason, drift findings
    and escalations, and the net record and word-count change.

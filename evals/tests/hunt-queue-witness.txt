@@ -1,0 +1,43 @@
+from pathlib import Path
+import sys
+import tempfile
+import sqlite3
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.export_queue import Queue
+
+class Interrupted(Exception):
+    pass
+
+def interrupt():
+    raise Interrupted()
+
+with tempfile.TemporaryDirectory() as scratch:
+    path = str(Path(scratch) / "jobs.db")
+    worker = Queue(path)
+    assert worker.submit("job-1", "hello")["accepted"]
+    try:
+        worker.work(after_claim=interrupt)
+    except Interrupted:
+        pass
+    worker.close()
+    restarted = Queue(path)
+    restarted.work()
+    assert restarted.result("job-1") == "hello", "accepted work abandoned after restart"
+    # A temporary trigger injects a write failure at the real output boundary.
+    # Remove it before retrying; this checks rollback/retry, not physical I/O.
+    assert restarted.submit("job-2", "retry")["accepted"]
+    restarted.db.execute("""
+        CREATE TEMP TRIGGER fail_output BEFORE INSERT ON results
+        BEGIN SELECT RAISE(ABORT, 'injected output failure'); END
+    """)
+    try:
+        restarted.work()
+    except sqlite3.DatabaseError:
+        pass
+    else:
+        raise AssertionError("output failure was not reached")
+    restarted.db.execute("DROP TRIGGER fail_output")
+    restarted.work()
+    assert restarted.result("job-2") == "retry", "accepted work abandoned after write failure"
+    restarted.close()

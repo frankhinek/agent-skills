@@ -1,0 +1,82 @@
+diff --git a/specs/CLAIM-cache-once/verification.md b/specs/CLAIM-cache-once/verification.md
+index 7c2f68fc74bd12c043a7d4d89ee750c20ae58bad..bda1a58ca3ba81e985bbf9ab19d0b52a3e001a1f 100644
+--- a/specs/CLAIM-cache-once/verification.md
++++ b/specs/CLAIM-cache-once/verification.md
+@@ -1,2 +1,77 @@
+ Independent fixture review covers the supplied method and scope.
+ Result: provisional
++
++## Independent verification — 2026-10-24
++
++Verifier: Codex, assigned independent verification, with no author discussion
++or previous review conclusions in the fresh assessment context.
++Revision: `09b5f073f1594af504edf49d72d958f59deb6596`.
++Evidence kinds: `code`, `test`, and imported `claim` conclusions.
++Toolchain: Python 3.9.6.
++
++### Scope and fresh assessment
++
++Read the fixed [CLAIM-cache-once](../CLAIM-cache-once.md), its supplied
++[proof](proof.md), both imported claim statements and proofs, governing
++records, [Cache implementation](../../app/cache_updates.py), and
++[executable witness](../../tests/witness_retry.py). Targeted reference
++discovery found no additional cache consumers or importing claims.
++Earlier verification reports were excluded from initial reads and searches.
++The fresh counterexample and composition finding were recorded in the
++conversation before opening those reports.
++
++The sufficiency attack grants both imports exactly as stated:
++[CLAIM-cache-append](../CLAIM-cache-append.md) says each completed append
++adds one complete value; [CLAIM-cache-receipt](../CLAIM-cache-receipt.md)
++says receipts contain at most one instance of each identifier. Neither
++conclusion connects an appended value to receipt membership. The parent's
++description of the former as “atomic append” cannot supply atomicity across
++append and acknowledge.
++
++In `Cache.apply`, the receipt guard at lines 13–14 precedes append at line 15,
++the interruptible callback at line 16, and acknowledge at line 17. An
++exception from the callback leaves the appended value present and its receipt
++absent. No rollback or retry-time reconciliation bridges that interval.
++This is sequential execution on one live instance, with no process memory
++loss; neither stated residual excludes it. Both imported conclusions remain
++true throughout the violating execution.
++
++### Executable counterexample
++
++Command: `python3 tests/witness_retry.py`.
++Observed twice, including after historical reconciliation: exit status 1,
++`AssertionError: same command appended twice`, and
++`versions=['value', 'value'], receipts={'request-1'}`.
++
++Starting with a new Cache, call `apply("request-1", "value")` with an
++`after_append` callback that raises `RuntimeError`. Catch that exception and
++retry the same command and value on the same instance with the default
++callback. The first call appends and leaves receipts empty; the retry passes
++the guard, appends a second value, and adds one receipt. Expected: at most
++one appended value. Observed: two. The witness exercises production code
++directly, rather than a separate model or bounded search.
++
++Coverage fingerprints (SHA-256, reproduced with `shasum -a 256`):
++
++- `app/cache_updates.py`: `bc8a9b3fdcf09ac905d67500f21cfec77857a344f62c76367092d091b5bfdad3`
++- `tests/witness_retry.py`: `987aad205d58e49be2de3c23742b5c56fdcea39eaf5b35195c6bdd70fd29755d`
++
++### Historical reconciliation and verdict
++
++The prior parent receipt above was provisional and supplied no specific
++findings or counterexamples. The imported
++[append verdict](../CLAIM-cache-append/verification.md) and
++[receipt verdict](../CLAIM-cache-receipt/verification.md) are passes covering
++the same implementation SHA-256. Their stated limits agree with this review:
++append does not promise command deduplication, and receipt uniqueness does
++not establish a relationship to versions. They are compatible and current
++for the imported conclusions used here, but insufficient for the parent.
++No historical counterexample was omitted or reported repaired.
++
++The supplied composition fails at its connecting `code` step, and the direct
++production witness falsifies the fixed parent property. This is an unresolved
++in-scope violation, not an accepted residual or merely incomplete proof.
++No repair was requested or performed. Claims, proofs, imported verdicts,
++source, and tests are preserved; only this receipt is extended.
++
++Result: falsified

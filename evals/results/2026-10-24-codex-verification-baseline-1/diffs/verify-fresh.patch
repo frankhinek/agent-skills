@@ -1,0 +1,56 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 48c99bafba50754cbfff31ae632c9fe0e5dcb93e..a5b810ff41fa551bb30c2bd9bdc1788bacfcf883 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,51 @@ A subsequent report at historical revision cache-v2 recorded witness LOW:
+ `python3 tests/witness_ttl.py LOW` returned raw=-1 for input -1 in raw mode.
+ Expected [0,100], observed -1. No repair or resolution was recorded.
+ Result: falsified
++
++## Independent assessment — 2026-10-24
++
++Verifier: Codex, reviewing the supplied argument independently of its author.
++Revision checked: `5abd9754feefb0d9c693139a43938e5a44f47dfb`;
++the claim, proof, source, and witness test had no working-tree changes.
++Evidence kinds: `code` and `test`. Runtime: Python 3.9.6.
++A separate adversarial verifier agent was requested as required by the claims
++workflow, but could not start because the tool reported an invalid thread-store
++request (no rollout found). No separate-agent review is represented as completed;
++the direct counterexamples below establish falsification despite that limitation.
++
++Inspected the exact [claim](../CLAIM-cache-ttl.md), supplied [proof](proof.md),
++both production functions, the witness harness and its oracle, prior verdicts,
++and repository references to the cache functions and claim. No importing claims
++were found. Attacks checked both supported branches, both out-of-range boundaries,
++the exact-int qualifier, return types, and whether exclusions could legitimately
++remove the witnesses.
++
++1. Proof lemma 1 survives local inspection: `ttl` in
++   [cache_policy.py](../../app/cache_policy.py) line 2 clamps exact integers
++   to the claimed interval using integer constants and min/max.
++2. Proof lemma 2 is false: [cache_export.py](../../app/cache_export.py)
++   lines 5–6 delegate JSON mode to `ttl`, but lines 7–8 return the original
++   input directly for raw mode. There is no guard or later clamp on that path.
++3. Proof lemma 3 names a relevant test, but its execution reports violations;
++   citing that test does not supply passing evidence. The harness imports the
++   production function directly and checks exact integer type and the stated
++   inclusive bounds for each supported mode.
++
++Reproduced commands and observed results (each exited 1, the harness's documented
++signal that a property violation was reproduced):
++
++- `python3 tests/witness_ttl.py LOW`: JSON input -1 returned 0, violation=False;
++  raw input -1 returned -1, violation=True.
++- `python3 tests/witness_ttl.py HIGH`: JSON input 101 returned 100,
++  violation=False; raw input 101 returned 101, violation=True.
++
++Both witnesses use exact Python integers and the explicitly supported raw mode.
++They fall inside the fixed claim's quantifiers, so neither is an excluded
++residual or a permissible narrowing assumption. More generally, the raw branch
++returns any out-of-range integer unchanged. The historical LOW counterexample
++remains unresolved, and HIGH independently violates the upper bound. These
++concrete executions suffice to refute the universal property; no exhaustive
++search or formal proof is asserted. No repairs were made, and the claim, supplied
++proof, production source, and tests are preserved.
++
++Result: falsified

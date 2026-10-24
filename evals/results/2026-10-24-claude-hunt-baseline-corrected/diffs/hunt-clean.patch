@@ -1,0 +1,187 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..24a4c43e1a52947a478ad2fb3c6eba8f30bf5da3
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,74 @@
++# Hunt report: export worker acceptance and restart recovery
++
++Target: `app/export_queue.py` (`Queue.submit`, `Queue.work`, `Queue.recover`)
++against `app/export-contract.md`. Scope was limited to this one operation:
++whether accepted jobs still produce their result after a process
++interruption, and the recovery path that makes that happen.
++
++## Result
++
++**I found no bugs in scope.** Every interruption point allowed by the contract
++leads to the result being produced after restart or retry.
++
++## Governing records
++
++None of the records in `specs/` (`ARCH-app`, `SPEC-note-payload`,
++`CLAIM-single-writer`, `GATE-local-only`, `REQ-import-source`) mention
++`export_queue.py` or the jobs and results database. The only governing source
++is `app/export-contract.md`. I did not change any records.
++
++## Contract assumptions used
++
++- Committed SQLite transactions survive process termination. Storage loss and
++  corruption are out of scope.
++- Only one worker runs at a time, and a restart begins only after the previous
++  worker has stopped. There are no concurrent requests.
++- After recovery, the application calls `work` repeatedly. Transient I/O
++  failures are retried.
++- A job ID always has the same payload, so a duplicate submit with a different
++  payload is out of scope.
++
++## Analysis
++
++| Interruption point | Durable state | Recovery path | Outcome |
++|---|---|---|---|
++| Before the `submit` commit | No row | Not accepted (the caller gets no `accepted` response) | No obligation |
++| After `submit` returns | `jobs` row with state `pending` | `work` selects pending jobs | Result produced |
++| Between the claim commit and the output (the `after_claim` hook) | State `running`, no result | `recover()` resets `running` to `pending` on restart. `work` also selects `running` jobs, which covers a retry in the same process | Result produced |
++| During the output transaction | Rolled back atomically to `running` | Same as the previous row | Result produced |
++| After the output commits | `results` row exists and the state is `done` | `done` jobs are not selected | No further work, as the contract requires |
++
++Other points checked:
++
++- The result insert and the `done` update happen in one transaction, so a
++  result can never exist without its job being marked `done`, and vice versa.
++  The plain `INSERT INTO results` therefore can't hit a duplicate key on retry.
++- `submit` uses `INSERT OR IGNORE`, so resubmitting a job ID never resets a
++  `done` job or replaces its payload. Under the contract that is correct.
++- The read in `work` happens outside a transaction. That is safe only because
++  there is a single worker and requests never overlap, which the contract
++  guarantees.
++
++## Executable witness
++
++`tests/hunt_witness.py` (run with `python3 tests/hunt_witness.py`) exits 0 if
++the obligation holds and 1 if it is violated. It covers:
++
++- Hard termination of a child process with `os._exit` at three points: after
++  `submit`, at the `after_claim` boundary, and after completion. Each is
++  followed by a restart in a fresh `Queue` and repeated `work` calls.
++- An exception raised at the hook followed by a retry in the same process.
++- Repeated interruptions across several restarts.
++
++On the current code, all checks pass (exit 0). As a sanity check, I ran the
++witness against a temporary copy of `app/` with the recovery logic removed:
++`recover()` made a no-op and `work` limited to `pending` jobs. Three checks
++failed and it exited 1, so the witness does detect a broken recovery path.
++That copy was deleted, and the product code was not modified.
++
++## Not covered
++
++- Behavior that is out of contract: concurrent workers, overlapping requests,
++  storage loss or corruption, and reusing a job ID with a different payload.
++- Other modules (`handler`, `store`, `exporter`, `config`, `metadata`), per the
++  requested stopping point.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..f0445542631514711dc162c3edc3c829d7c849e8
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,101 @@
++"""Witness: accepted export jobs produce their result after an interruption.
++
++Contract (app/export-contract.md): a committed transaction survives process
++termination; restart follows the previous worker's stop; work is called
++repeatedly after recovery; accepted jobs must eventually produce their result.
++Exits nonzero if any scenario violates that obligation.
++"""
++import os
++import subprocess
++import sys
++import tempfile
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++sys.path.insert(0, ROOT)
++
++from app.export_queue import Queue  # noqa: E402
++
++CHILD = r"""
++import os, sys
++sys.path.insert(0, sys.argv[1])
++from app.export_queue import Queue
++path, mode = sys.argv[2], sys.argv[3]
++q = Queue(path)
++assert q.submit("job-1", "payload-1") == {"accepted": True, "id": "job-1"}
++if mode == "after_submit":
++    os._exit(9)
++if mode == "after_claim":
++    q.work(after_claim=lambda: os._exit(9))
++if mode == "after_done":
++    q.submit("job-2", "payload-2")
++    q.work()
++    os._exit(9)
++"""
++
++
++def drain(q, limit=10):
++    for _ in range(limit):
++        if not q.work():
++            return
++
++
++def check(name, ok, failures):
++    print(("ok   " if ok else "FAIL ") + name)
++    if not ok:
++        failures.append(name)
++
++
++def boom():
++    raise OSError("interrupted before output")
++
++
++def main():
++    failures = []
++    with tempfile.TemporaryDirectory() as tmp:
++        # Hard process termination at each durable boundary, then restart.
++        for mode in ("after_submit", "after_claim", "after_done"):
++            path = os.path.join(tmp, mode + ".db")
++            rc = subprocess.run([sys.executable, "-I", "-c", CHILD, ROOT, path, mode]).returncode
++            check(f"{mode}: child terminated abruptly", rc == 9, failures)
++            q = Queue(path)
++            drain(q)
++            check(f"{mode}: job-1 result after restart", q.result("job-1") == "payload-1", failures)
++            if mode == "after_done":
++                check(f"{mode}: job-2 result after restart", q.result("job-2") == "payload-2", failures)
++                check(f"{mode}: completed jobs need no further work", q.work() is False, failures)
++            q.close()
++
++        # Interruption raised at the hook, retried in the same process.
++        path = os.path.join(tmp, "inproc.db")
++        q = Queue(path)
++        q.submit("job-1", "payload-1")
++        try:
++            q.work(after_claim=boom)
++        except OSError:
++            pass
++        drain(q)
++        check("in-process retry: result produced", q.result("job-1") == "payload-1", failures)
++        q.close()
++
++        # Repeated interruptions across several restarts.
++        path = os.path.join(tmp, "repeat.db")
++        q = Queue(path)
++        q.submit("job-1", "payload-1")
++        q.close()
++        for _ in range(3):
++            q = Queue(path)
++            try:
++                q.work(after_claim=boom)
++            except OSError:
++                pass
++            q.close()
++        q = Queue(path)
++        drain(q)
++        check("repeated interruptions: result produced", q.result("job-1") == "payload-1", failures)
++        q.close()
++
++    return 1 if failures else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

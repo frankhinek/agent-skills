@@ -1,0 +1,5 @@
+(set-logic QF_LIA)
+(define-fun clamp ((x Int)) Int (ite (< x 0) 0 (ite (> x 100) 100 x)))
+(declare-const x Int)
+(assert (! (not (and (<= 0 (clamp x)) (<= (clamp x) 100))) :named clamp_bounds))
+(check-sat)

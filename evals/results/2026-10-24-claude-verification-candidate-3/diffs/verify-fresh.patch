@@ -1,0 +1,59 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 48c99bafba50754cbfff31ae632c9fe0e5dcb93e..ca56f36b85732de341f8348c32e45925a9fe186d 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,54 @@ A subsequent report at historical revision cache-v2 recorded witness LOW:
+ `python3 tests/witness_ttl.py LOW` returned raw=-1 for input -1 in raw mode.
+ Expected [0,100], observed -1. No repair or resolution was recorded.
+ Result: falsified
++
++# Verification at 742f9eea3bb53e788ff1e1063e3e037d7edc0e03
++
++Verifier: Claude (claude-opus-5-5) as independent verifier, 2026-10-24.
++Evidence kinds: `code` reading of app/cache_policy.py and app/cache_export.py;
++`test` witness tests/witness_ttl.py rerun; ad hoc `python3 -I -c` probes.
++
++Independence disclosure: the coordinating verifier read this file's
++historical entries together with the other inputs before forming its own
++assessment. To compensate, a separate fresh-context assessor received only
++the claim, proof.md, implementation, and witness, and was told not to read
++any verification.md. The fresh findings below come from that assessor and
++match the coordinator's own probes.
++
++## Fresh findings
++
++Attacks: per-mode call paths, guard semantics at boundaries and at ±10**30,
++case split across modes, unstated premises, residual filing, the `type(raw)
++is int` quantifier edge (bool excluded), and adequacy of the test lemma.
++
++- F1 (counterexample, in scope): app/cache_export.py:7-8 returns `raw`
++  unchanged in "raw" mode and never calls `ttl`. Inputs -1, 101, 10**30 and
++  -10**30 in "raw" mode return themselves, outside [0, 100]. Expected: an int
++  in [0, 100]. These inputs fall within the claim's quantifiers, so they are
++  counterexamples, not residuals.
++- F2 (argument defect): proof Lemma 2 ("delegates both modes to ttl") is
++  false at this revision.
++- F3 (argument defect): proof Lemma 3 cites tests/witness_ttl.py as support,
++  but that script reports violations and currently exits 1. It shows the
++  claim failing, not holding. Even if it passed, two finite boundary cases
++  could not establish the quantified property.
++- Lemma 1 holds: `max(0, min(100, raw))` clamps exact ints, and the "json"
++  path satisfies the claim at every probed input.
++
++## Reconciliation and reruns
++
++- `python3 -I tests/witness_ttl.py LOW`: exit 1; raw mode, input -1,
++  actual -1. The historical cache-v2 witness LOW still reproduces and
++  remains unresolved.
++- `python3 -I tests/witness_ttl.py HIGH`: exit 1; raw mode, input 101,
++  actual 101. This is an additional witness of the same mechanism, not
++  recorded at cache-v2.
++- `python3 -I tests/witness_ttl.py`: exit 1; json mode passes LOW and
++  HIGH, raw mode violates both.
++- The historical cache-v1 pass assumed both modes use the clamp. That
++  assumption does not hold at this revision.
++
++No repair was made. The claim, proof, source, and tests are unchanged. The
++claim stays falsified until the raw-mode path is fixed, after which LOW and
++HIGH must be rerun and the claim independently verified again.
++Result: falsified

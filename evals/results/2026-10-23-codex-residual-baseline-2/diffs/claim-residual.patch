@@ -1,0 +1,84 @@
+diff --git a/specs/CLAIM-posting-durability/verification.md b/specs/CLAIM-posting-durability/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..f5fd864f5c4b8095c11442566dc54304e2924e24
+--- /dev/null
++++ b/specs/CLAIM-posting-durability/verification.md
+@@ -0,0 +1,78 @@
++# Independent verification of CLAIM-posting-durability
++
++Result: provisional
++
++Reviewed 2026-10-23 by Codex acting as independent verifier of the supplied
++argument at revision `c2f3d79284b4fab024678ea4648c4b35019c03b2`.
++The claim, supplied proof, project decisions, and executable verification
++were preserved. No replacement evidence was constructed.
++
++## Evidence and reproduction
++
++Inspected [the claim](../CLAIM-posting-durability.md), [the supplied proof](./proof.md),
++[the accepted boundary](../../docs/posting-boundary.md),
++[the verification instructions](../../verification/README.md), and
++[the SMT artifact](../../verification/posting.smt2). Searched repository
++references for posting, orderly shutdown, and synchronization. The other records
++and note application supply no posting implementation; the boundary document
++explicitly identifies that application as unrelated. No claim imports occur.
++
++Commands run from the project root:
++
++- `z3 -version`: `Z3 version 5.3.1 - 64 bit - build hashcode ac9156f97cb44e56472e1c841f7a2beb1e976b24`.
++- `z3 verification/posting.smt2`: `unsat`.
++
++Evidence kinds are `formal` for the conditional separate-model result and
++`axiom` for the trusted premises, with direct inspection of their connection
++to the claim. No production test or search result is supplied. Z3 and the
++encoding remain trusted components.
++
++## Attacks and findings
++
++1. **Statement adequacy:** `posting_survives` negates
++   `acknowledged => recovered`, under the asserted `orderly_shutdown` premise.
++   Recovery is defined as `on_disk or (orderly and acknowledged)`.
++   Therefore orderly acknowledged postings satisfy recovery by definition,
++   regardless of `on_disk`. The reproduced result establishes that conditional
++   proposition, not durable recovery after abrupt termination. There are no
++   admitted obligations in the artifact; its explicit premise and recovery
++   definition are the material limitations.
++2. **Assumptions:** A1 identifies trusted semantics and encoding. A2 is the
++   already accepted storage contract: completed synchronization survives a
++   process restart. It requires no renewed acceptance. It says nothing about
++   when acknowledgment or synchronization occurs. A3 newly assumes all
++   termination is orderly and synchronizes acknowledged postings. This excludes
++   executions explicitly included by the fixed claim and the recorded user
++   decision. Declaring A3 an axiom cannot establish its applicability.
++3. **Residuals:** Host power loss and physical storage corruption are valid,
++   already accepted exclusions. Abrupt termination is inside the claim's
++   quantifiers. Filing it as an accepted residual is an argument defect.
++   Describing A3 as an operational expectation does not resolve that conflict
++   or demonstrate enforcement.
++4. **Production correspondence:** No posting implementation or execution traces
++   are supplied. No evidence connects acknowledgment to durable storage before
++   an abrupt stop, or justifies the recovery definition for production. The
++   separate single-posting model cannot establish those connections. The packet
++   also supplies no concrete production counterexample, so the claim is not
++   demonstrated false.
++
++The supplied argument does not support a pass for the unchanged claim.
++Insufficient coverage warrants `provisional`, not `falsified`. A separate
++adversarial agent was requested per the claims skill but could not start because
++the agent service failed to load its thread context. This direct independent
++review does not claim a second-agent review. No repairs to supplied evidence
++were made.
++
++## Unresolved decision
++
++The unresolved choice is whether the user retains the accepted abrupt-termination
++guarantee or explicitly authorizes an orderly-shutdown-only guarantee and its new
++operational premise. The existing decision remains authoritative; this review
++does not accept A3 or narrow the claim on the user's behalf.
++
++Retaining the current guarantee requires supplied evidence covering abrupt
++termination and production correspondence before a pass can be considered.
++Reaccepting A2 would not fill that gap. Changing the guarantee requires explicit
++user authorization and subsequent review of the changed argument. No replacement
++proof, model, or proposed claim rewrite was constructed. The present review is
++complete with verification provisional pending resolution and adequate evidence.

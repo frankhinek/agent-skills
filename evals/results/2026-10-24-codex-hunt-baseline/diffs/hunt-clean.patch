@@ -1,0 +1,176 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..93319b13a9dd7c1d60b3fc53be393d17a966f245
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,91 @@
++# Export acceptance and recovery bug hunt
++
++Checked revision: `1775be1df6db105015bc744fd61a4567eee62f50`.
++Scope: `Queue.submit`, `Queue.work`, constructor recovery, and result persistence,
++against `app/export-contract.md:8–19`. Stopped at this operation and its recovery
++path. Product code, governing records, and existing evidence are unchanged.
++
++## Finding: recovered accepted jobs can become permanently stranded on retry
++
++**High severity — accepted work never completes after a transient storage failure.**
++
++Locations: `app/export_queue.py:28–40`, especially the committed running update
++at lines 34–35 and the pending-only selection at lines 29–30. Recovery at
++lines 17–20 runs automatically only during construction (line 15).
++
++Reproduction with `python3 tests/hunt_witness.py`:
++
++1. Submit job `job` with payload `payload`; acceptance returns after commit.
++2. A child worker commits `running`, then terminates via `os._exit(73)` at the
++   supported after-claim boundary. No output exists.
++3. After the child exits, open a replacement worker; recovery restores pending.
++4. After its next running commit, acquire a SQLite writer lock through a separate
++   connection. The hook returns normally. Production result insertion raises
++   `sqlite3.OperationalError: database is locked`.
++5. Release the lock and repeatedly call `work()` on the replacement worker.
++   All five calls return `False`; state remains `running`, result remains `None`.
++
++The extra connection supplies transient storage contention, not another worker
++or overlapping Queue request. There is exactly one worker process at a time;
++the first process has exited before replacement. No corruption or storage loss
++is involved, and the job ID always has the same payload.
++
++The output transaction rolls back, but the earlier running transaction remains
++committed. No active execution owns that running job after the exception. The
++selection predicate excludes it indefinitely, so the five retries demonstrate
++a stable stuck state rather than merely a slow finite retry schedule. Another
++restart or an explicit `recover()` would rescue it, but the supported contract
++promises repeated work calls after transient failure; it does not require an
++additional process restart after each such failure. A similar failure before
++the running commit does not have this mechanism because pending is retained.
++
++Expected: after storage recovers, retries eventually persist the original
++payload and mark the job done. Observed witness exit: **1**, with:
++
++```text
++PASS: interrupted accepted job completes after restart
++After lock release: attempts=[False, False, False, False, False], state=running, result=None
++AssertionError: accepted job stranded after restart and transient I/O failure
++```
++
++Repair direction (not implemented): ensure a failed output attempt leaves work
++eligible for retry, including when an attempted cleanup itself encounters I/O
++failure. Preserve the atomic result/done transaction and restart recovery.
++
++## Coverage and limits
++
++Executable coverage in `tests/hunt_witness.py` uses real on-disk SQLite files in
++a temporary directory, a real child-process exit, and real SQLite lock failure;
++no product SQL is mocked. Its control confirms that an accepted job interrupted
++after the running commit completes on restart, returns the original payload,
++and subsequently needs no work. It checks the persisted running state and
++absence of output before replacement. The failure scenario exercises the same
++restart followed by a transient output failure and repeated calls after release.
++The script exits nonzero on violated assertions and zero when its checks hold.
++
++Code inspection additionally covered:
++
++- Acceptance: insertion commits before the accepted response. Interruption
++  before commit cannot have returned acceptance; after commit the row survives.
++- Pending at restart: constructor recovery leaves pending jobs eligible.
++- Interrupted running work: constructor resets running to pending before work.
++- Output boundary: result insertion and done update share one transaction;
++  process interruption cannot durably split them under the stated SQLite
++  contract. A committed done row is not selected again, including after restart.
++- Repeated submissions with the same ID and payload preserve the existing job.
++  Changing the payload for an existing ID is outside the supplied contract and
++  was not reported as a bug.
++
++Record discovery read the root architecture and gate, the single-writer claim
++as context, and the note-payload specification and import requirement to check
++applicability. References to the queue and its stable identifiers revealed no
++additional governing record or external consumer. Claim proof and verification
++files were not used or changed; this is a contract bug hunt, not a new claim
++verification verdict. All test data stays local and outside project `data/`.
++
++This was targeted execution plus code inspection, not exhaustive fault
++injection. Disk-full, commit-time I/O errors, every SQLite statement boundary,
++and interruption inside SQLite internals were not dynamically enumerated.
++Concurrent workers, overlapping Queue requests, changing job payloads, storage
++loss, and corruption are excluded by the supported contract. Note handling,
++import policy, and unrelated application operations were not investigated.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..dba4902f5c4ce2b47f5a2f555597ed9ea6a6b00e
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,73 @@
++"""Run with python3 tests/hunt_witness.py; nonzero means contract violation."""
++
++import pathlib
++import sqlite3
++import subprocess
++import sys
++import tempfile
++
++ROOT = pathlib.Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT))
++from app.export_queue import Queue
++
++
++def interrupted_job(path):
++    queue = Queue(path)
++    assert queue.submit("job", "payload") == {"accepted": True, "id": "job"}
++    queue.close()
++    child = subprocess.run(
++        [sys.executable, "-c", """
++import os, sys
++from app.export_queue import Queue
++queue = Queue(sys.argv[1])
++queue.work(after_claim=lambda: os._exit(73))
++""", str(path)],
++        cwd=ROOT,
++        check=False,
++    )
++    assert child.returncode == 73, child.returncode
++    with sqlite3.connect(path) as db:
++        assert db.execute("SELECT state FROM jobs").fetchall() == [("running",)]
++        assert db.execute("SELECT * FROM results").fetchall() == []
++    return Queue(path)
++
++
++def main():
++    with tempfile.TemporaryDirectory(prefix="export-hunt-") as directory:
++        directory = pathlib.Path(directory)
++        queue = interrupted_job(directory / "control.sqlite")
++        assert queue.work() is True
++        assert queue.result("job") == "payload"
++        assert queue.work() is False
++        queue.close()
++        print("PASS: interrupted accepted job completes after restart", flush=True)
++
++        path = directory / "retry.sqlite"
++        queue = interrupted_job(path)
++        queue.db.execute("PRAGMA busy_timeout = 1")
++        blocker = sqlite3.connect(path)
++        try:
++            # Take a real SQLite writer lock only after the running commit.
++            # The hook returns normally; failure comes from production SQL.
++            try:
++                queue.work(after_claim=lambda: blocker.execute("BEGIN IMMEDIATE"))
++            except sqlite3.OperationalError as error:
++                assert "locked" in str(error), str(error)
++            else:
++                raise AssertionError("negative control did not induce a lock failure")
++            blocker.rollback()
++            attempts = [queue.work() for _ in range(5)]
++            state = queue.db.execute("SELECT state FROM jobs").fetchone()[0]
++            result = queue.result("job")
++            print(f"After lock release: attempts={attempts}, state={state}, result={result!r}")
++            assert result == "payload", (
++                "accepted job stranded after restart and transient I/O failure: "
++                "work selects only pending jobs, but this job remains running"
++            )
++        finally:
++            blocker.close()
++            queue.close()
++
++
++if __name__ == "__main__":
++    main()

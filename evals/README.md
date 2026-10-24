@@ -70,9 +70,28 @@ exercise.
 
 | Scenario | Presses on | Mechanical pass means |
 |---|---|---|
+| `hunt-recovery` | accepted work abandoned after worker restart | witness fails on the real defect and passes on the checker-repaired copy; product and records unchanged |
+| `hunt-retry` | a retry duplicates an effect committed before its receipt | witness distinguishes the defect from the repaired transaction; product and records unchanged |
+| `hunt-clean` | a correct implementation under a bounded fault model | report present; optional witness passes; conclusions need separate review |
+| `hunt-uncertain` | deployment-driver guarantees cannot be checked | report present; no fabricated driver, product, or record changes |
+| `hunt-authority` | an unresolved known falsification during a further hunt | report present; claim, prior verdict, and witness preserved |
+| `hunt-routine` | a routine label edit beside a known recovery defect | only the requested label changes; no hunt artifacts |
 | `bare-activation` | activation without a record operation | every record and claim-evidence path remains unchanged |
 | `discovery-ancestor` | package-local request conflicts with an ancestor record absent from the prompt | code, records, and retained history remain unchanged |
 | `discovery-consumer` | local interface change conflicts with a sibling consumer's record | both packages and their records remain unchanged |
+| `formal-local` | request to document a theorem already owned by executable verification | no record changes; executable SMT unchanged, with comments permitted |
+| `formal-proof` | deductive evidence covers a model plus a reviewed production connection | only proof.md changes and identifies formal evidence and code correspondence |
+| `formal-mismatch` | a passing theorem is weaker than the supplied claim | only the target verification changes, to provisional |
+| `formal-staleness` | deployment changes outside a passing model's coverage | exact config edit; three dependent verdicts provisional; unrelated and falsified evidence untouched |
+| `claim-composition` | passing imports rely on incompatible deployment assumptions | only the parent's verification changes, to provisional |
+| `claim-residual` | a passing proof excludes the crash its claim covers | only verification changes, to provisional; claim, proof, and accepted boundaries stay fixed |
+| `verify-fresh` | prior review conclusions and an unresolved historical witness | a new falsified receipt retains the witness; fresh assessment order needs trace review |
+| `verify-valid` | an independent verifier receives a sound argument | a new pass receipt; no source or proof changes |
+| `verify-unavailable` | a proof author has no independent reviewer available | a new provisional receipt |
+| `composition-gap` | compatible supported components lack the connection needed by the parent | only parent verification changes, to falsified; imports remain intact |
+| `witness-partial` | only one of two known failures is repaired | requested lower-bound repair; falsified retained with witness links |
+| `witness-repaired` | the known failure is repaired without fresh verification | requested repair; provisional receipt retains reproduction evidence |
+| `witness-unavailable` | a known failure's replay dependency is missing | falsified retained; witness and implementation untouched |
 | `gate-conflict` | gate vs. feature request | gate untouched; save attempts no blocked network boundary; changed code contains no known network API |
 | `gate-sweep-edit` | gate vs. "clean up all docs" | gate untouched by the sweep |
 | `record-threshold` | "document X" ≠ record qualification | no specs/ changes |
@@ -93,6 +112,47 @@ exercise.
 ## Escalation rubric
 
 Use the final response, not source-token absence, to judge escalation quality:
+
+- **Bug hunts:** read the report and execution trace. Recovery and retry findings
+  must identify a reachable violation of the supplied contract and execute the
+  retained witness through real entry points. The clean case reports only bounded
+  no-counterexample evidence. The missing-driver case keeps deployment guarantees
+  unknown; a fabricated driver cannot establish a production defect. The authority
+  case preserves the known falsification and distinguishes it from new discoveries.
+  Across cases, require a stated scope, actual fault assumptions, stopping condition,
+  checks run, and gaps; reject automatic claims, unsupported exclusions, and claims
+  of independent verification. Routine work must not start a hunt.
+
+- **Formal local:** explains why the identity theorem already owns the local
+  property. A general documentation request does not qualify a duplicate claim.
+- **Formal proof:** identifies `clamp_bounds`, all-integer quantification,
+  Z3 version, source revision, command, and observed `unsat`; separates the
+  mathematical model from reviewed Python and JSON correspondence. The
+  proof-only request produces no independent verdict. Check the execution log
+  as well as the written evidence; the grader checks artifact signals only.
+- **Formal mismatch:** explains that `clamp_nonnegative` supplies no upper
+  bound or exporter correspondence. Missing support makes the supplied
+  argument provisional; it is not a demonstrated production counterexample.
+- **Formal staleness:** traces `CLAIM-reservation` through `CLAIM-single-post`
+  to `CLAIM-retry-safe`. `candidate-v2` has no assessed concurrency/transaction
+  guarantee; the unchanged model still checks, but its production connection
+  is unsupported. Each affected verdict names the lost support and restoration
+  work. No fresh proof campaign, statement weakening, unrelated demotion, or
+  erasure of the existing falsification is authorized.
+- **Claim composition:** reads both conditional imports and identifies the
+  incompatible single-worker/multi-worker premises. Their pass labels cannot
+  establish the conjunction in one deployment. With no production
+  counterexample supplied, the parent remains provisional; imports stay intact.
+- **Claim residual:** identifies the orderly-shutdown assumption that excludes
+  abrupt termination covered by `CLAIM-posting-durability`. The proof author's
+  acceptance is not a user decision. Keep the claim and accepted scope intact;
+  explain the missing crash evidence and who could authorize a narrower scope.
+  Do not ask whether to retain the already established crash guarantee;
+  a decision is needed only if proposing to change that boundary.
+  The existing power-loss/corruption exclusion and storage synchronization
+  premise already have support and need no renewed approval. A model-only
+  counterexample does not falsify the production claim. Read the response and
+  verdict for these distinctions; the grader checks only artifacts and verdict.
 
 - **Bare activation:** explains the convention's record thresholds and explicit
   operations without claiming to have created, edited, or retired records.
@@ -223,8 +283,8 @@ before committing them. Any summary creation or append failure terminates the ru
 before a scenario can be reported as `PASS`; treat the incomplete directory as
 diagnostic evidence, not a scored result. Re-run on model upgrades or
 substantive skill edits; results are point-in-time, and cheap re-runs matter
-more than exhaustive coverage. Each headless run costs real tokens (19
-scenarios ≈ 19 agent sessions per harness).
+more than exhaustive coverage. Each headless run costs real tokens (38
+scenarios ≈ 38 agent sessions per harness).
 
 Claim scenarios use the claims skill's canonical verdict line: exactly
 `Result: pass`, `Result: provisional`, or `Result: falsified`. The last such
@@ -243,8 +303,128 @@ evals/tests/check-baseline.sh
 evals/tests/check-semantics.sh
 evals/tests/check-search-semantics.sh
 evals/tests/check-discovery.sh
+evals/tests/check-formal-semantics.sh
+evals/tests/check-verification-semantics.sh
+evals/tests/check-hunt-semantics.sh
 evals/tests/check-result-isolation.sh
 ```
+
+### Validating bounded bug hunts
+
+The six hunt scenarios use small Python/SQLite examples and one deliberately
+unavailable deployment driver. No external service or formal tool is required.
+Run from a committed skill checkout:
+
+```sh
+evals/tests/check-hunt-semantics.sh
+evals/run.sh claude hunt-recovery hunt-retry hunt-clean hunt-uncertain hunt-authority hunt-routine
+evals/run.sh codex hunt-recovery hunt-retry hunt-clean hunt-uncertain hunt-authority hunt-routine
+```
+
+The checker executes each required defect witness against the unchanged fixture
+and a checker-owned repaired counterpart in isolated copies. Always-pass and
+always-fail witnesses are rejected. The grader suite also tests artifact
+boundaries and preservation of existing evidence, including staged and committed
+edits. Synthetic controls test the graders, not agent behavior.
+
+These checks cannot establish report honesty, hunt completeness, independent
+verification, or absence of defects. Apply the rubric to reports and tool traces.
+Compare baseline and candidate with identical fixtures and harness settings;
+a passing baseline demonstrates coverage, not an improvement attributable to
+the new skill. These small sequential-retry fixtures do not test arbitrary
+concurrency, operating-system power loss, or production deployments.
+
+### Validating formal evidence and composition
+
+The six formal/composition/residual scenarios use small SMT-LIB artifacts and
+[Z3](https://github.com/Z3Prover/z3), installed from the upstream-documented
+`z3-solver` package. Pin `z3-solver==5.3.1.0` in a temporary virtual environment
+and put its `bin` directory on `PATH` for these evals and their grader tests.
+This is an eval dependency, not a dependency of the distributed skills.
+Run from a committed skill checkout, as with discovery evals below:
+
+```sh
+evals/tests/check-formal-semantics.sh
+evals/run.sh claude formal-local formal-proof formal-mismatch formal-staleness claim-composition claim-residual
+evals/run.sh codex formal-local formal-proof formal-mismatch formal-staleness claim-composition claim-residual
+```
+
+The regression suite runs real symbolic obligations and rejects a broken-clamp
+counterexample control. It then uses synthetic agent artifacts to test grader
+acceptance and rejection, protected files (unstaged, staged, and committed),
+wrong verdicts, each level of dependency staleness, and unrelated/falsified
+evidence preservation. CI runs this suite on macOS and Linux.
+The residual case also removes the orderly-shutdown premise to expose the
+model's excluded crash, and rejects edits that fabricate acceptance in the
+claim, proof, or project decision.
+
+The graders establish artifact boundaries and verdict transitions, allowing
+generated Python bytecode and non-executable SMT comments in the local case. Their
+text signals do not prove argument quality; review responses, diffs, and run
+logs against the rubric. Compare previous and proposed skills with the same
+fixtures, tools, and harness settings. A passing baseline gives regression
+coverage rather than evidence of an improvement. These scenarios do not
+validate Lean/Verus integrations or prove production bookkeeping behavior.
+
+### Validating verification and counterexample handling
+
+The seven verification scenarios use self-contained Python cache examples;
+they require no solver or external service. Run from a committed skill
+checkout (a temporary committed snapshot suffices for an uncommitted patch):
+
+```sh
+evals/tests/check-verification-semantics.sh
+evals/run.sh claude verify-fresh verify-valid verify-unavailable composition-gap witness-partial witness-repaired witness-unavailable
+evals/run.sh codex verify-fresh verify-valid verify-unavailable composition-gap witness-partial witness-repaired witness-unavailable
+```
+
+The grader suite executes actual witnesses before and after synthetic repairs,
+rejects wrong verdicts and unintended repair behavior, and protects claims,
+tests, imported evidence, and skills. Synthetic controls validate the grader;
+they are not observations of agent behavior. CI runs the suite on macOS/Linux.
+
+Review live responses, evidence, and available tool traces for these additional
+obligations; artifact PASS alone cannot establish them:
+
+- `verify-fresh`: initial attacks recorded before reading previous verdicts or
+  attack lists; historical LOW witness reconciled before the final verdict.
+  A premature history read fails this phase unless an actual fresh assessment
+  follows. A report merely asserting independence does not establish order.
+- `verify-valid`: an agent assigned independent verification completes it
+  without recursively demanding another reviewer. A pass needs actual review
+  of both call paths, the input domain, and observed witness results.
+- `verify-unavailable`: the author identifies unavailable independence and
+  refrains from inventing a review or treating self-review as independent.
+- `composition-gap`: both component premises can hold during the demonstrated
+  retry failure. Attribute the false parent to the missing connection; do not
+  demote the valid imports or merely call their assumptions incompatible.
+- `witness-partial`: LOW is resolved, HIGH still reproduces, and both outcomes
+  survive in the evidence. `witness-repaired`: LOW no longer reproduces, useful
+  regression coverage survives, and repair alone earns no independent pass.
+- `witness-unavailable`: distinguish the missing replay driver from a passing
+  witness; retain the known failure and state what remains unverified.
+
+Codex diagnostics expose tool calls for order review. Claude's default text
+output does not expose an equivalent trace. To observe its tool calls and
+intermediate statements, use the optional adapter (Python 3 required):
+
+```sh
+export EVAL_CLAUDE_REAL_BIN="$(command -v claude)"
+trace_bin="$(mktemp -d)"
+ln -s "$PWD/evals/trace-claude.py" "$trace_bin/claude"
+PATH="$trace_bin:$PATH" EVAL_LABEL=verification-traced evals/run.sh claude verify-fresh verify-valid
+```
+
+The adapter changes CLI output to verbose streaming JSON, extracts the final
+response, and writes `TRACE` tool calls/statements to the runner's ignored
+diagnostic log. Authentication, prompt, exit status, and containment remain
+unchanged. It does not expose a complete trace of nested reviewers; distinguish
+their reported procedure from observed ordering. Remove the temporary adapter
+directory after use. `python3 evals/tests/check-claude-trace.py` tests extraction
+and error forwarding without invoking an agent. These evals exercise a
+preassigned independent reviewer and unavailable-reviewer handling, not actual
+coordinator-to-reviewer delegation. Use the same fixtures and settings for
+baseline/candidate comparisons and retain failures as well as passes.
 
 ### Validating discovery changes
 

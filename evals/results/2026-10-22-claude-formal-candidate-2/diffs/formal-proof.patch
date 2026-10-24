@@ -1,0 +1,100 @@
+diff --git a/specs/CLAIM-score-export/proof.md b/specs/CLAIM-score-export/proof.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..b6b5549a5bc95108c9a54cee3d4feb6c0d0d6eb0
+--- /dev/null
++++ b/specs/CLAIM-score-export/proof.md
+@@ -0,0 +1,94 @@
++Property: [CLAIM-score-export](../CLAIM-score-export.md) — for every `raw`
++with `type(raw) is int`, when `export_score(raw)` returns, the `score` field
++of `json.loads` of its result has `type(score) is int` and `0 <= score <= 100`.
++
++Derived at revision `62f1bda60a01ef61e92c8ffbed6a14b357ff3c97`.
++
++## Scope
++
++- `app/score.py` — `clamp_score(raw)`: `min(100, max(0, raw))`.
++- `app/score_export.py` — `export_score(raw)`:
++  `json.dumps({"score": clamp_score(raw)})`, with `clamp_score` bound by
++  `from .score import clamp_score` at import time.
++- `verification/clamp.smt2` and `verification/README.md` — the SMT model of
++  the clamp and its reproduction instructions.
++- `export_score` and `clamp_score` have no other callers or definitions in
++  the repository (`git grep -n -e score -e clamp`).
++
++## Model and quantifiers
++
++- Input: any `raw` with `type(raw) is int` (exact type; `bool` and other
++  `int` subclasses excluded by the claim). Python `int` is unbounded, so the
++  domain is the mathematical integers.
++- Single synchronous call; no shared state, I/O, or concurrency in scope.
++- Only returning executions are quantified; a raising call is outside the
++  property by its wording.
++- Durable predicate: `s = json.loads(export_score(raw))["score"]` satisfies
++  `type(s) is int and 0 <= s <= 100`.
++
++## Axioms
++
++- A1 — CPython builtins `min`/`max` on two exact `int` arguments return one
++  of the arguments (the first maximal/minimal one) under the usual integer
++  order, and the names `min`, `max`, `json`, and `app.score_export.clamp_score`
++  are not shadowed or monkeypatched at runtime.
++- A2 — CPython `json.dumps` serializes an exact `int` as its decimal
++  `int.__repr__` literal, and `json.loads` parses a JSON integer literal
++  without fraction or exponent back to an exact `int` of equal value.
++- A3 — Z3 5.3.1 is sound for `QF_LIA`, and `verification/clamp.smt2` is part
++  of the trusted base (per `verification/README.md`).
++
++## Argument
++
++1. `formal` — obligation `clamp_bounds` in `verification/clamp.smt2`: the
++   negation of `0 <= clamp(x) <= 100`, with
++   `clamp(x) = ite(x < 0, 0, ite(x > 100, 100, x))` over unbounded `Int`, is
++   unsatisfiable. Hence `0 <= clamp(x) <= 100` for every mathematical
++   integer `x`. This is a separate model, not production code; lemma 2
++   supplies the correspondence. No `declare-fun` axioms or extra assertions
++   beyond the negated goal are present.
++   - Artifact: `verification/clamp.smt2` at the revision above.
++   - Checker: `Z3 version 5.3.1 - 64 bit - build hashcode
++     ac9156f97cb44e56472e1c841f7a2beb1e976b24` (z3-solver 5.3.1.0).
++   - Command (project root): `z3 -version`, then
++     `z3 verification/clamp.smt2`. Observed: `unsat` (2026-10-22).
++   - Non-vacuity control: replacing the upper bound `100` with `99` in a
++     scratch copy yields `sat`, so the obligation is sensitive to the bound.
++2. `code` + A1 — correspondence: for exact `int` `raw`,
++   `min(100, max(0, raw))` equals the SMT `clamp(raw)` by case split:
++   `raw < 0` → `max` gives `0`, `min` gives `0`; `0 <= raw <= 100` →
++   `max` gives `raw`, `min` gives `raw`; `raw > 100` → `max` gives `raw`,
++   `min` gives `100`. The splits are exhaustive and agree with the `ite`
++   guards (`raw = 0` and `raw = 100` fall in the middle case in both).
++   Python `int` matches SMT `Int` (both unbounded).
++3. `code` + A1 — `clamp_score(raw)` returns one of `0`, `100`, or `raw`, all
++   of exact type `int`; with lemmas 1–2 its value lies in `[0, 100]`.
++4. `code` + A2 — `export_score` places that value under key `"score"` in a
++   fresh dict and returns `json.dumps` of it; `json.loads` of the result
++   yields a dict whose `"score"` is an exact `int` equal to the clamped
++   value. The digit-count limit on `int`/`str` conversion cannot trigger,
++   since the value has at most three digits.
++5. Lemmas 3–4 give the durable predicate for every in-domain `raw`.
++
++## Residuals
++
++- `bool` and other `int` subclasses, and non-`int` inputs (`float`, `nan`,
++  `Decimal`, …): excluded by the claim's input domain.
++- Runtime monkeypatching of builtins, `json`, or the module-level
++  `clamp_score` binding: outside the stated code; assumed absent by A1.
++- Non-CPython interpreters: not in the deployment model considered; A1/A2
++  are stated for CPython.
++
++## Weakest links
++
++- Lemma 2 (SMT↔Python correspondence) is a hand reading; the SMT model is a
++  translation, not extracted from `app/score.py`. A test asserting
++  `clamp_score` against the SMT `ite` definition at boundaries
++  (`-1, 0, 100, 101`, large magnitudes), or a property-based test, would
++  promote it toward `test`/`search`.
++- Lemmas 3–4 (type preservation and the JSON round trip) rest on `code`
++  reading plus stdlib axioms; a focused test of
++  `type(json.loads(export_score(raw))["score"]) is int` would pin them.
++- The formal check is reproduced manually; no CI step runs `z3` and asserts
++  `unsat`, so drift between `clamp.smt2` and `app/score.py` is not detected
++  mechanically.

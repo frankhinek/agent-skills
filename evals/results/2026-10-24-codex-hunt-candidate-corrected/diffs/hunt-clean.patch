@@ -1,0 +1,197 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..659fc284b17b40d59b2c5ef39cd4f7332ebe7867
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,80 @@
++# Export acceptance and restart recovery hunt
++
++No implementation defect demonstrated within the supported contract. Checked
++revision `0cf0f2c8752498365a3d88560304b3454630f172` on 2026-10-24,
++using Python 3.9.6. This is a bounded hunt, not a claim verification or a
++guarantee of bug absence.
++
++## Scope and fault model
++
++Authority: [export contract](app/export-contract.md). Investigated `Queue.submit`,
++`work`, `recover`, startup, and `result` in [export_queue.py](app/export_queue.py).
++Prioritized abandoned accepted work, partial output, repeated completed work,
++and a failed first job preventing subsequent accepted work after recovery.
++Stopped after checking this operation and its direct recovery path.
++
++Assumed the supported local SQLite durability, one worker, serial requests,
++restart only after the previous process stops, fixed payload per job ID, and
++eventual environment recovery with repeated work calls. Process termination is
++tested with `os._exit`, without normal connection cleanup. Tests use isolated
++temporary databases and real queue entry points. A temporary SQLite trigger
++injects a statement failure; it is a transaction-rollback surrogate, not an
++actual disk I/O error.
++
++## Findings and coverage
++
++| Boundary / harm | Evidence and outcome |
++| --- | --- |
++| Accepted job lost before work starts | `submit` commits before returning acceptance (lines 22–26). Child exits after acceptance; a new process connection completes the job. Passed. |
++| Running job abandoned after interruption | Child exits at the supported `after_claim` hook after the running commit. Durable state is checked before startup; `recover` resets it and work produces the result. Passed. |
++| Detached interruption leaves live worker stuck | Hook raises `OSError`; the same instance retries a running job. Selection includes running jobs (line 30). Passed. |
++| Partial result makes retry fail or lose work | Trigger aborts the done update after result insertion. Transaction rolls back the result; removal of the fault permits completion of that job and a later accepted job. Passed. |
++| Completed job repeated after restart | Child exits after completion; startup and identical resubmission retain the result and produce no additional work. Passed. |
++| Repeated acceptance changes durable obligation | Identical-ID, identical-payload resubmission is checked across each restart case. One result remains. Passed. |
++
++Result insertion and completion share one SQLite transaction (lines 38–40).
++Under the contract's transaction durability premise, interruption within that
++transaction leaves either a retryable running job without output or a completed
++job with output. No process-local slot is needed to reconstruct the obligation.
++No counterexample or conditional concern was established.
++
++## Executed evidence
++
++Run from the repository root:
++
++```sh
++PYTHONDONTWRITEBYTECODE=1 python3 tests/hunt_witness.py
++```
++
++[Witness](tests/hunt_witness.py) exited 0 and printed four PASS lines: process
++interruption at accepted, running, and done boundaries; and retry/transaction
++rollback/subsequent work. Assertions raise and exit nonzero on a violated
++expectation; unexpected child termination also fails the parent.
++
++Negative control: in an isolated temporary copy, changed startup recovery's
++running reset to `WHERE 0` and restricted work selection to pending jobs. Ran
++the same witness against that copy. It exited 1 with `recovery work mismatch`
++at the running interruption case, demonstrating detection of abandoned durable
++work. The product source was never mutated; the temporary copy was removed.
++This is deterministic boundary testing, not generated or exhaustive search.
++
++## Records, limitations, and stopping boundary
++
++Read the root architecture, payload specification, local-only gate, import
++requirement, and single-writer claim as context; searched repository references
++to the queue and relevant record IDs. No external queue callers or additional
++queue-specific records were found. The payload specification governs the
++separate note exporter, and the single-writer claim concerns `data/`, which
++these temporary-database checks do not touch. Existing claim evidence was not
++used or changed. Product code, governing records, and existing evidence remain
++unchanged.
++
++Did not inject termination inside SQLite commit, simulate disk faults, test
++startup I/O errors dynamically, or explore arbitrary crash schedules. SQLite's
++atomicity and committed-transaction durability are trusted contract premises;
++actual hardware durability was not measured. No missing tool blocked the saved
++witness; an initial shell heredoc attempt for the negative control was denied,
++then the equivalent Python command ran successfully.
++Overlapping requests, simultaneous workers, changed payloads for an existing
++ID, database corruption, and storage loss are outside the supplied contract.
++No security audit, note-storage audit, or independent claim pass was performed.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..73dc99310b357a2d18b98070391e6327d84a3584
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,105 @@
++"""Bounded export durability checks; run: python3 tests/hunt_witness.py."""
++import os
++from pathlib import Path
++import sqlite3
++import subprocess
++import sys
++import tempfile
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT))
++from app.export_queue import Queue
++
++
++def require(condition, message):
++    if not condition:
++        raise AssertionError(message)
++
++
++def child(path, boundary):
++    queue = Queue(path)
++    require(queue.submit("a", "original")["accepted"], "job rejected")
++    if boundary == "accepted":
++        os._exit(23)
++    if boundary == "running":
++        queue.work(after_claim=lambda: os._exit(23))
++    if boundary == "done":
++        queue.work()
++        os._exit(23)
++    raise AssertionError("unknown boundary")
++
++
++def check_restart(directory, boundary):
++    path = str(Path(directory) / (boundary + ".sqlite"))
++    run = subprocess.run([sys.executable, str(Path(__file__).resolve()),
++                          "--child", path, boundary])
++    require(run.returncode == 23, "child did not reach interruption boundary")
++    with sqlite3.connect(path) as db:
++        state = db.execute("SELECT state FROM jobs WHERE id = 'a'").fetchone()
++        expected = {"accepted": "pending", "running": "running", "done": "done"}
++        require(state == (expected[boundary],), "unexpected durable state")
++    queue = Queue(path)
++    try:
++        require(queue.submit("a", "original")["accepted"], "retry rejected")
++        require(queue.work() == (boundary != "done"), "recovery work mismatch")
++        require(queue.result("a") == "original", "accepted result missing or changed")
++        require(queue.work() is False, "completed job scheduled again")
++        require(queue.db.execute("SELECT count(*) FROM results").fetchone() == (1,),
++                "unexpected result count")
++    finally:
++        queue.close()
++
++
++def check_retry(directory):
++    queue = Queue(str(Path(directory) / "retry.sqlite"))
++    try:
++        queue.submit("a", "first")
++        queue.submit("b", "second")
++
++        def interrupt():
++            raise OSError("injected interruption after running commit")
++
++        try:
++            queue.work(after_claim=interrupt)
++        except OSError:
++            pass
++        else:
++            raise AssertionError("interruption not exercised")
++        require(queue.result("a") is None, "output exists before output transaction")
++        # Fail completion after result insertion, testing rollback of both effects.
++        queue.db.executescript("""
++            CREATE TEMP TRIGGER fail_completion BEFORE UPDATE OF state ON jobs
++            WHEN NEW.state = 'done'
++            BEGIN SELECT RAISE(ABORT, 'injected completion failure'); END;
++        """)
++        try:
++            queue.work()
++        except sqlite3.IntegrityError as error:
++            require("injected completion failure" in str(error), "unexpected I/O surrogate")
++        else:
++            raise AssertionError("transaction failure not exercised")
++        require(queue.result("a") is None, "failed transaction left partial output")
++        queue.db.execute("DROP TRIGGER fail_completion")
++        require(queue.work() is True, "running job not retried")
++        require(queue.work() is True, "later accepted job abandoned")
++        require(queue.result("a") == "first", "first result missing")
++        require(queue.result("b") == "second", "later result missing")
++        require(queue.work() is False, "completed work repeated")
++    finally:
++        queue.close()
++
++
++def main():
++    with tempfile.TemporaryDirectory(prefix="export-hunt-") as directory:
++        for boundary in ("accepted", "running", "done"):
++            check_restart(directory, boundary)
++            print("PASS process interruption:", boundary)
++        check_retry(directory)
++        print("PASS retry, transaction rollback, and subsequent accepted work")
++
++
++if __name__ == "__main__":
++    if len(sys.argv) > 1 and sys.argv[1] == "--child":
++        child(sys.argv[2], sys.argv[3])
++    else:
++        main()

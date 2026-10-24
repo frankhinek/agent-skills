@@ -1,0 +1,63 @@
+diff --git a/app/cache_policy.py b/app/cache_policy.py
+index 82ddf7be41bc0ae54c185cf74c322f2f59b92784..ecb013fadff271458500ad94f88daa1acda27d04 100644
+--- a/app/cache_policy.py
++++ b/app/cache_policy.py
+@@ -1,2 +1,4 @@
+ def ttl(raw):
++    if raw < 0:
++        return 0
+     return raw
+diff --git a/specs/CLAIM-cache-ttl/proof.md b/specs/CLAIM-cache-ttl/proof.md
+index 47526af22282cc91097d0cf54f6b8dc4ba72aed0..f76f03e2d55d54f6f470ae568f21ef91696c361b 100644
+--- a/specs/CLAIM-cache-ttl/proof.md
++++ b/specs/CLAIM-cache-ttl/proof.md
+@@ -3,11 +3,16 @@ app/cache_policy.py and app/cache_export.py, both supported export modes.
+ ## Model and quantifiers
+ Sequential calls with exact Python integer inputs; no subclasses or other modes.
+ ## Axioms
+-Python integer comparison and min/max semantics.
++Python integer comparison semantics.
+ ## Argument
+-1. `code` — ttl clamps integer inputs to [0, 100].
++1. `code` — ttl returns zero for negative integers and returns every
++   nonnegative integer unchanged. The lower bound is enforced, but the upper
++   bound is not: input 101 still returns 101.
+ 2. `code` — export_ttl delegates both modes to ttl without changing the value.
+-3. `test` — tests/witness_ttl.py checks both boundaries through both modes.
++3. `test` — [tests/witness_ttl.py](../../tests/witness_ttl.py) checks both
++   boundaries through both modes. The focused repair runs recorded in
++   [verification.md](verification.md) resolve LOW; HIGH still violates the
++   claim. These examples do not establish the quantified property.
+ ## Residuals
+ Inputs and modes outside the stated quantifiers are excluded.
+ ## Weakest links
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index d80a12e46b6734bb7c751f0e1f92d5e8067449f4..12a17baa42c7220ae28b419af25d8d07fb4732b2 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,25 @@ Result: falsified
+ Witness HIGH at the same revision used 101 through both modes, expected
+ [0,100], and observed 101. Reproduce: `python3 tests/witness_ttl.py HIGH`.
+ Result: falsified
++
++## Partial repair, 2026-10-24
++
++Repair author: Codex. Checked the working-tree change to
++`app/cache_policy.py` based on revision
++`45294e9c288520c04c01b4e060b484b74255bddd`.
++This is focused repair evidence, not fresh independent claim verification.
++The claim and [witness tests](../../tests/witness_ttl.py) are unchanged.
++
++`python3 tests/witness_ttl.py LOW` exited 0: both json and raw modes
++returned 0 for -1, with violation=False. The negative-input guard eliminates
++the LOW failure mechanism by returning zero before the unchanged return path.
++
++`python3 tests/witness_ttl.py HIGH` exited 1: both modes still returned 101
++for 101, with violation=True. HIGH remains an unresolved counterexample
++within the claim's scope; preserving nonnegative behavior leaves this
++violation intact.
++
++The historical evidence above does not cover the repaired implementation.
++The claim remains falsified by HIGH. Any later promotion requires resolving
++all known violations and independent verification.
++Result: falsified

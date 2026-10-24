@@ -1,0 +1,1 @@
+Repair negative TTL handling in app/cache_policy.py so it returns zero for negative integers. Preserve the existing behavior for every nonnegative integer. Update affected evidence for CLAIM-cache-ttl. Preserve the claim and witness tests; do not perform a fresh claim verification.

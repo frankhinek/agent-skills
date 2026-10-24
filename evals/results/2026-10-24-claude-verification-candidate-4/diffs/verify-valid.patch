@@ -1,0 +1,52 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..96208df6324c0397885fcb02cdb82b7b17d54786 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,45 @@
+-No independent verification has been completed.
+-Result: provisional
++## History
++Before 2026-10-24: no independent verification had been completed (verdict
++provisional). No prior findings, attacks, or counterexamples were recorded.
++
++## Verification 2026-10-24
++Revision: b4ff049 (working tree clean for app/, tests/, specs/).
++Verifier: independent agent (Claude Opus 5.5), fresh context; claim, proof,
++implementation, and witness assessed before this file was opened.
++Evidence kinds: `code` (lemmas 1–2), `test` (lemma 3), plus an uncited
++sampled `search` run as a supplementary check.
++
++### Inspected
++- specs/CLAIM-cache-ttl.md, specs/CLAIM-cache-ttl/proof.md
++- app/cache_policy.py (`ttl`), app/cache_export.py (`export_ttl`)
++- tests/witness_ttl.py
++- Repository-wide search for `ttl`/`cache_` references: no rebinding or
++  monkeypatching of `ttl` or `export_ttl` outside these files.
++
++### Commands and observed results (Python 3.9.6)
++- `python3 -I tests/witness_ttl.py` — exit 0; LOW (-1) → 0 and HIGH (101) →
++  100 in both `json` and `raw` modes, no violation.
++- Sampled search (not a cited lemma): every int in [-1000, 1000] plus
++  ±10**100 and ±2**63, both modes, oracle `type(r) is int and 0 <= r <= 100`
++  — 0 violations. Sampled, not exhaustive.
++
++### Attacks
++- Lemma 1 guard: `max(0, min(100, raw))` returns one of `0`, `100`, or
++  `raw`; each is an exact int under the `type(raw) is int` quantifier, and
++  the clamp ordering gives [0, 100]. bool is excluded by the exact-type
++  quantifier; Python ints are unbounded, so no overflow path.
++- Lemma 2 case split: both supported modes return `ttl(raw)` unmodified;
++  other modes raise `ValueError` and lie outside the claim's quantifier.
++- Residual filing: residuals exclude only non-int-typed inputs and
++  unsupported modes, both already outside the claim's quantifiers; no
++  narrowing of the fixed claim.
++- Smuggled premises: none found beyond the stated Python comparison and
++  min/max axiom; no concurrency or shared state involved.
++
++### Findings
++- Minor (not material): the witness checks out-of-range neighbours (-1,
++  101) but not the in-range boundaries 0 and 100; the property rests on the
++  `code` lemmas, as the proof's weakest-links section states.
++- No counterexamples. No repairs made.
++
++Result: pass

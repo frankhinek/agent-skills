@@ -1,0 +1,134 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..ad346c06afeaa38a11243a9bf20ccb551e6003b9
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,66 @@
++# Hunt report: export worker acceptance and restart recovery
++
++Scope: `app/export_queue.py` (`Queue.submit`, `Queue.work`, `Queue.recover`)
++checked against `app/export-contract.md`. I looked only at what must still
++happen after a process is interrupted. The hunt stopped once that operation and
++its recovery path had been checked.
++
++## Finding 1 — An interrupted job stays stuck in `running` and never produces its result (confirmed)
++
++**Contract obligation:** "Accepted jobs must eventually produce their result
++after recovery." The contract says the `after_claim` hook "represents
++interruption before output", and committed transactions survive termination.
++
++**Defect:** `Queue.work` commits `state = 'running'` in its own transaction.
++Only after that does it call the hook and write the output. If the process dies
++between those two steps, the database keeps the job as `running` and has no
++`results` row. On restart, `Queue.recover` does nothing; its comment says "the
++process-local worker slot starts empty". `Queue.work` only picks up
++`state = 'pending'` rows. So no code path ever selects the job again. `work()`
++returns `False` (nothing to do), and `result(job_id)` returns `None` forever.
++`submit` still returned `{"accepted": True}` for that job.
++
++**Witness:** `tests/hunt_witness.py` submits `job-1`, interrupts at
++`after_claim`, closes the connection, reopens the queue (restart), and calls
++`work()` repeatedly. It exits 1 with the current code:
++
++```text
++FAIL: accepted job-1 has result None after recovery (job state 'running'); expected 'payload-1'
++```
++
++To show the witness is sound, I ran it against an in-memory patch only (no
++product change). With `recover` putting `running` rows back to `pending`, it
++exits 0. This is safe under the contract: exactly one worker is active, and a
++restart only happens after the previous worker has stopped. So on startup any
++`running` row is an orphan. Also, the output insert and the `done` update are
++one transaction, so re-running a reset job cannot create a duplicate result.
++Product code was not changed.
++
++## Coverage (checked, no defect found under the contract)
++
++- **Acceptance durability:** `submit` commits the `pending` row before it
++  returns `accepted`, so an accepted job survives termination.
++- **Duplicate submit:** `INSERT OR IGNORE` keeps the original row. This is fine
++  because the contract says a job ID has one payload for its whole lifetime. A
++  re-submit after completion is a no-op ("Completed jobs need no further
++  work").
++- **Interruption after output:** the `results` insert and the `done` update
++  happen in one transaction. An interruption leaves either both or neither, so
++  there is no half-completed state.
++- **Interruption before claim:** the `SELECT` holds no durable state, so the job
++  stays `pending` and is picked up again.
++- **Transient I/O failure inside `work`:** an exception during the claim or
++  output transaction rolls back that transaction. The `running` claim, though,
++  is already committed. If the failure happens after the claim and the process
++  stays alive, the job is stranded in exactly the same way as Finding 1, because
++  `work` never retries `running` rows. The fix belongs in the same place.
++- **Not examined:** concurrent workers and overlapping requests (the contract
++  excludes them), storage loss or corruption (excluded), and `exporter.py` and
++  the note store (not part of the export worker queue).
++
++## Records
++
++No `specs/` record governs `app/export_queue.py` or the export contract. The
++existing records (`ARCH-app`, `SPEC-note-payload`, `CLAIM-single-writer`,
++`GATE-local-only`, `REQ-import-source`) cover the note handlers and the store.
++No records or existing evidence were modified.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d44871f1bb03ce220fc95cd0c3b2c4cd59fa05d9
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,56 @@
++"""Witness: an accepted export job must eventually produce its result after a
++process interruption at the post-claim boundary (app/export-contract.md).
++
++Exits 0 when the promise holds, 1 when it is violated.
++"""
++import os
++import sys
++import tempfile
++
++sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
++
++from app.export_queue import Queue  # noqa: E402
++
++
++class Interrupted(Exception):
++    pass
++
++
++def interrupt():
++    raise Interrupted()
++
++
++def main():
++    with tempfile.TemporaryDirectory() as tmp:
++        path = os.path.join(tmp, "jobs.db")
++
++        q = Queue(path)
++        if not q.submit("job-1", "payload-1").get("accepted"):
++            print("FAIL: submit did not accept job-1")
++            return 1
++        try:
++            q.work(after_claim=interrupt)
++        except Interrupted:
++            pass
++        q.close()  # process terminates; only committed state survives
++
++        # Restart after the previous worker stopped; the application keeps
++        # calling work once the environment recovers.
++        q = Queue(path)
++        for _ in range(10):
++            if not q.work():
++                break
++        result = q.result("job-1")
++        state = q.db.execute("SELECT state FROM jobs WHERE id = 'job-1'").fetchone()
++        q.close()
++
++    if result != "payload-1":
++        print(f"FAIL: accepted job-1 has result {result!r} after recovery "
++              f"(job state {state[0] if state else None!r}); expected 'payload-1'")
++        return 1
++    print("OK: accepted job-1 produced its result after interruption and restart")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

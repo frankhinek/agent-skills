@@ -1,0 +1,85 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..652348e40304758a8f147a2bd9fe82fed8b5414b 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,80 @@
+ No independent verification has been completed.
+ Result: provisional
++
++## Independent verification — 2026-10-24
++
++Revision checked: 8f343fb922d1b7d060210c9b224e1a6701d5c272 (clean tree apart
++from untracked `.eval-runtime/`). Verifier: Claude (claude-opus-5-5), assigned
++as independent verifier; fresh context with no author discussion. Exposure
++disclosure: the prior `verification.md` was read during file discovery before
++the assessment. It holds only the provisional line above, with no findings or
++attacks, so it could not have shaped this assessment.
++
++Inspected: the claim record, `proof.md`, `app/cache_policy.py`,
++`app/cache_export.py`, `tests/witness_ttl.py`, and every reference to
++`ttl`/`export_ttl`/`cache_policy`/`cache_export` under `app/`, `tests/`,
++`specs/`. The only definitions are the ones the proof cites. Nothing rebinds
++`min`, `max` or `ttl`, and no other module or caller touches them.
++
++Evidence kinds: `code` (lemmas 1–2), `test` (lemma 3), `axiom` (Python int
++comparison and builtin `min`/`max`).
++
++### Fresh attacks and findings
++
++1. Guard misreading (lemma 1). `max(0, min(100, raw))`: `min` returns 100 or
++   `raw`, so the inner value is ≤ 100. `max` then returns 0 or that value, so
++   the result is ≥ 0 and still ≤ 100. Holds for all exact ints, including very
++   large magnitudes (Python ints are unbounded; no overflow case).
++2. Result type. The claim requires an *integer* result. Builtin `min`/`max`
++   return one of their arguments unchanged. The arguments are the int
++   literals 0 and 100 and `raw`, which has exact type `int` by the claim's
++   quantifier. So the result is an exact `int`. Lemma 1 does not say this
++   explicitly; the "min/max semantics" axiom covers it. Minor clarity gap,
++   not a defect.
++3. Case split (lemma 2). `"json"` and `"raw"` both return `ttl(raw)`
++   unchanged. Any other mode raises `ValueError`. The claim quantifies only
++   over the two supported modes, so the raise is not a counterexample. The
++   split is exhaustive over the claimed domain.
++4. Residual and assumption filing. The model excludes int subclasses
++   (including `bool`) and other modes. Both are already outside the claim
++   (`type(raw) is int`, "either supported mode"), so the claim is not
++   narrowed. The residual section files nothing inside scope.
++5. Smuggled premises. The argument relies on the builtins `min`/`max` and
++   on `app.cache_export` importing the `ttl` from `app/cache_policy.py`.
++   `app/` has no `__init__.py`, so it is a namespace package: another `app`
++   package earlier on `sys.path` could in principle supply different modules.
++   That is a deployment/import-environment premise, not a counterexample.
++   It is outside the code in scope, and the claim names this `export_ttl`.
++   Noted as a minor unstated axiom, not material.
++6. Lemma 3 rung. `tests/witness_ttl.py` is a standalone witness script, not
++   wired into any test runner or CI in this repository. So its `test` label
++   means "a named check that fails when run", not "CI fails". It checks only
++   two points per mode (−1, 101). As the proof's weakest-links section
++   already says, it does not support the quantified property; lemmas 1–2
++   carry that. Not material to the verdict.
++
++### Checks run (Python 3.9.6, `python3 -I`)
++
++- `python3 -I tests/witness_ttl.py` → LOW json/raw: −1 → 0; HIGH json/raw:
++  101 → 100; all `violation=False`; exit 0.
++- Ad hoc sampled `search` (not retained as evidence): 20,679 inputs × 2
++  modes. It covered all ints in [−300, 300], ±10^k for k = 1..39, and 20,000
++  uniform random ints in [−10^30, 10^30]. The oracle was
++  `type(r) is int and 0 <= r <= 100`, and it found 0 violations. Spot values:
++  −1 → 0, 0 → 0, 100 → 100, 101 → 100 in both modes. This was sampled, not
++  exhaustive, and it only corroborates the code reading.
++
++### Reconciliation
++
++The prior report had no findings, counterexamples or witnesses to reconcile.
++The existing witness was rerun at this revision (above) and does not
++reproduce. There are no unresolved findings.
++
++### Result
++
++The argument survived attack at 8f343fb: lemmas 1–2 (code reading under the
++stated builtin axiom) establish the quantified property for both supported
++modes. Lemma 3 and the sampled search corroborate it at finite points only.
++Possible strengthening: state the exact-`int` result explicitly in lemma 1,
++and add the namespace-package import premise to the axioms.
++Result: pass

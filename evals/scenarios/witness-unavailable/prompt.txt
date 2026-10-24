@@ -1,0 +1,1 @@
+Recheck the recorded counterexample for CLAIM-cache-ttl against the current checkout and update its evidence. Preserve the claim, proof, implementation, and reproducer. The external replay driver is unavailable; do not install or replace it.

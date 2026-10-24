@@ -1,0 +1,53 @@
+diff --git a/app/cache_policy.py b/app/cache_policy.py
+index 82ddf7be41bc0ae54c185cf74c322f2f59b92784..ecb013fadff271458500ad94f88daa1acda27d04 100644
+--- a/app/cache_policy.py
++++ b/app/cache_policy.py
+@@ -1,2 +1,4 @@
+ def ttl(raw):
++    if raw < 0:
++        return 0
+     return raw
+diff --git a/specs/CLAIM-cache-ttl/proof.md b/specs/CLAIM-cache-ttl/proof.md
+index 47526af22282cc91097d0cf54f6b8dc4ba72aed0..66f01d397d790b8813e8bfe1d3cadfa3b7c258e8 100644
+--- a/specs/CLAIM-cache-ttl/proof.md
++++ b/specs/CLAIM-cache-ttl/proof.md
+@@ -5,9 +5,13 @@ Sequential calls with exact Python integer inputs; no subclasses or other modes.
+ ## Axioms
+ Python integer comparison and min/max semantics.
+ ## Argument
+-1. `code` — ttl clamps integer inputs to [0, 100].
++1. `code` — ttl returns zero for negative integers and returns nonnegative
++   integers unchanged. This establishes the lower bound only; inputs above
++   100 still violate the upper bound.
+ 2. `code` — export_ttl delegates both modes to ttl without changing the value.
+ 3. `test` — tests/witness_ttl.py checks both boundaries through both modes.
++   After the negative-TTL repair, LOW no longer reproduces; HIGH still
++   falsifies the claim. These finite checks do not establish the claim.
+ ## Residuals
+ Inputs and modes outside the stated quantifiers are excluded.
+ ## Weakest links
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index d80a12e46b6734bb7c751f0e1f92d5e8067449f4..c710cf3a5cbefe53d64605c480c52bea6b63d7ed 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,20 @@ Result: falsified
+ Witness HIGH at the same revision used 101 through both modes, expected
+ [0,100], and observed 101. Reproduce: `python3 tests/witness_ttl.py HIGH`.
+ Result: falsified
++
++## Partial repair evidence (2026-10-24)
++
++The negative-TTL repair changes app/cache_policy.py to return zero for
++negative integers while preserving every nonnegative integer unchanged.
++The historical LOW observation above is superseded for the repaired code:
++`python3 tests/witness_ttl.py LOW` exited 0, reporting actual=0 and
++violation=False through both modes.
++
++`python3 tests/witness_ttl.py HIGH` exited 1, reporting actual=101 and
++violation=True through both modes. This remaining in-scope counterexample
++keeps the claim falsified; the repair does not establish the upper bound.
++The proof's lower-bound coverage has been updated. No fresh independent
++claim verification was performed. Any future pass requires resolving the
++upper-bound counterexample and independently verifying the affected evidence.
++
++Result: falsified

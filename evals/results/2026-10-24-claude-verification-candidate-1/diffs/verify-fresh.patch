@@ -1,0 +1,77 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 48c99bafba50754cbfff31ae632c9fe0e5dcb93e..9f9bbe662a2d58fc3e0c5fad4c1957c455c54605 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,72 @@ A subsequent report at historical revision cache-v2 recorded witness LOW:
+ `python3 tests/witness_ttl.py LOW` returned raw=-1 for input -1 in raw mode.
+ Expected [0,100], observed -1. No repair or resolution was recorded.
+ Result: falsified
++
++# Verification at cb54963
++
++Revision: cb54963aeadb2e02c00ebe7c400b8cbda509e5e7 (clean apart from untracked
++`.eval-runtime/`). Verifier: Claude (Opus 5.5) as the assigned independent
++verifier, 2026-10-24. Toolchain: Python 3.9.6.
++
++Independence disclosure: the earlier reports in this file were displayed in the
++same read as the claim and proof, so I saw them before I finished the fresh
++assessment. The finding below doesn't depend on them. It comes from reading the
++current source line by line and from rerunning the witness. Because of that
++exposure, this receipt can't support a pass. It does support a falsification,
++since the counterexample reproduces on its own.
++
++Inspected: `specs/CLAIM-cache-ttl.md`, `proof.md`, `app/cache_policy.py`,
++`app/cache_export.py`, `tests/witness_ttl.py`.
++
++## Fresh assessment
++
++- Lemma 1 (`code`) holds: `ttl` in `app/cache_policy.py` is
++  `max(0, min(100, raw))`. For an exact `int` it returns an `int` in [0, 100].
++  Spot check: `export_ttl` in json mode returned 0, 100, 0, 100 (all `int`)
++  for 0, 100, -10**30, 10**30.
++- Lemma 2 (`code`) is false. In `app/cache_export.py`, `export_ttl` returns
++  `ttl(raw)` only for `mode == "json"`. For `mode == "raw"` it returns `raw`
++  without clamping. The proof's statement that both modes delegate to `ttl`
++  is a misread of the guard.
++- Lemma 3 (`test`) is mislabeled. `tests/witness_ttl.py` is a witness script
++  that exits 1 when a violation reproduces. It doesn't establish the
++  boundaries. When run, it shows they fail in raw mode.
++- Residual filing: raw mode falls inside the claim's quantifiers ("for either
++  supported mode, \"json\" or \"raw\""). The residual "modes outside the
++  stated quantifiers" therefore can't absorb it.
++
++## Commands and observed results
++
++`python3 -I tests/witness_ttl.py` exited 1:
++
++- LOW mode=json input=-1 actual=0 violation=False
++- LOW mode=raw input=-1 actual=-1 violation=True
++- HIGH mode=json input=101 actual=100 violation=False
++- HIGH mode=raw input=101 actual=101 violation=True
++
++Running `LOW` and `HIGH` on their own gave the same rows, each exiting 1.
++
++## Reconciliation with earlier reports
++
++- The cache-v1 pass ("both modes were believed to use the clamp") rests on the
++  same misreading as Lemma 2. It doesn't cover the current source.
++- The cache-v2 LOW falsification (raw mode, input -1, observed -1) reproduces
++  at cb54963 and is still unresolved. No repair exists.
++- New witness HIGH: raw mode, input 101, observed 101, expected [0, 100]. The
++  violation is above the upper bound too.
++
++## Counterexamples
++
++At cb54963, with `type(raw) is int` and `mode == "raw"`:
++
++- `export_ttl(-1, "raw")` returns -1.
++- `export_ttl(101, "raw")` returns 101.
++
++The expected result is an integer in [0, 100]. Witness:
++`tests/witness_ttl.py LOW HIGH`.
++
++To resolve this, either clamp raw mode in the code, or narrow the claim's
++statement through the claims workflow at the user's explicit request. After
++either change, rerun the witness and do a fresh independent verification.
++
++Result: falsified

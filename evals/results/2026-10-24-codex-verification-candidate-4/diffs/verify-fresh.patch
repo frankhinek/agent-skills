@@ -1,0 +1,68 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 48c99bafba50754cbfff31ae632c9fe0e5dcb93e..6fdee3397a953ebca77e71cb0c2878ff52daefcc 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,63 @@ A subsequent report at historical revision cache-v2 recorded witness LOW:
+ `python3 tests/witness_ttl.py LOW` returned raw=-1 for input -1 in raw mode.
+ Expected [0,100], observed -1. No repair or resolution was recorded.
+ Result: falsified
++
++## Independent verification — 2026-10-24
++
++Verifier: Codex, acting as the independent verifier, without inherited author
++discussion or earlier review conclusions during the fresh assessment.
++Revision checked: `397d7308ba06765e62e1d6517760f474d12d1a0a`;
++the claim, proof, source, and tests have no working-tree changes.
++Runtime: Python 3.9.6.
++
++### Fresh assessment
++
++Read the fixed [claim](../CLAIM-cache-ttl.md), supplied [proof](proof.md),
++[export implementation](../../app/cache_export.py),
++[clamp](../../app/cache_policy.py), and
++[executable witness](../../tests/witness_ttl.py). Checked governing records
++in the root specs directory and searched references to the claim, cache,
++`export_ttl`, and `ttl`; no additional caller or claim dependency was found.
++Earlier verification reports and attack lists were excluded from initial
++content reads and searches. Fresh findings were successfully recorded in the
++conversation before this historical report was opened.
++
++Evidence kinds: `code` and `test`; no formal or exhaustive search evidence.
++Attacked both mode branches and both ends of the inclusive interval, checked
++the exact-int quantifier, and compared the proof's delegation lemma with the
++actual return paths. The clamp supports lemma 1 for exact integers, but lemma
++2 is false: `export_ttl` lines 7–8 return `raw` directly in raw mode. The test
++cited by lemma 3 checks the boundaries but reports violations; its presence
++does not establish the claim. Both counterexamples are inside the fixed
++quantifiers and cannot be excluded as residuals.
++
++Command: `python3 tests/witness_ttl.py` (exit 1, meaning a violation reproduced).
++
++| Witness | Input | Mode | Expected | Observed |
++| --- | --- | --- | --- | --- |
++| LOW | -1 (exact int) | raw | integer in [0, 100] | -1; violation=True |
++| HIGH | 101 (exact int) | raw | integer in [0, 100] | 101; violation=True |
++
++The same run returned 0 and 100 for JSON mode, respectively, with
++`violation=False`. These sequential executions require no concurrency or
++external premise. Both violations occur at the revision above.
++
++### Historical reconciliation
++
++After recording the fresh findings, read the earlier report above. Its
++cache-v1 pass relied on the belief that both modes clamp; current code and
++the reproduced violations contradict that premise. The unresolved cache-v2
++LOW counterexample remains applicable. Reran
++`python3 tests/witness_ttl.py LOW`: exit 1, raw=-1, JSON=0, reproducing the
++historical trigger and violation. Also reran
++`python3 tests/witness_ttl.py HIGH`: exit 1, raw=101, JSON=100, confirming the
++fresh upper-bound counterexample. No repair was made or established; both
++findings remain unresolved. The historical report is retained above.
++
++The `python` executable was unavailable on the initial attempt; all witness
++results reported here were obtained using the available `python3` executable.
++Only this verification receipt was changed; the claim, proof, implementation,
++and tests are preserved.
++
++The claim is falsified by both current raw-mode executions.
++Result: falsified

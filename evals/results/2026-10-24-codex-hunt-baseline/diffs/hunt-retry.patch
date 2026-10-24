@@ -1,0 +1,132 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..26740da0f306e5cd3692a9e073dffc434d831f3b
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,64 @@
++# Export duplicate-effect hunt
++
++Checked on 2026-10-24. Scope: `Exports.apply` in `app/exports.py`, using
++`app/export-contract.md` as the supported execution boundary. Stopped after
++checking this operation's duplicate-effect risk; no product changes made.
++
++## Finding: interrupted request can durably add duplicate items
++
++High severity: the exactly-one-item promise is violated under supported
++sequential retries, without concurrency or storage loss.
++
++`app/exports.py:19` explicitly commits the item inserted at line 18 before
++the receipt is inserted at line 22. An exception from the documented
++`after_effect` hook at line 21 leaves the item durable and the receipt absent.
++The context manager cannot roll back the already committed item. Retrying the
++same request ID and payload passes the receipt check at line 15 and inserts
++another item. Restarting after the old worker closes does not prevent this.
++
++Reproduction: call `apply("request-1", "payload", after_effect=interrupt)`,
++where `interrupt` raises `OSError`; catch the interruption, optionally close
++and reopen the worker on the same SQLite file, then retry the identical call
++without the hook. Expected: one durable item. Observed: two durable items and
++a successful response. Two interrupted attempts followed by recovery leave
++three items. Subsequent retries after the receipt exists add no further items,
++but do not remove duplicates already created.
++
++Executable witness: `tests/hunt_witness.py`. Run:
++
++```sh
++PYTHONDONTWRITEBYTECODE=1 python3 tests/hunt_witness.py
++```
++
++Observed exit status: **1**, indicating the promised behavior is violated.
++The witness uses the actual implementation and temporary local SQLite files;
++it checks both the application accessor and committed rows through a separate
++connection. It exits zero only when every checked scenario preserves exactly
++one item. Unexpected exceptions also produce a nonzero exit.
++
++## Coverage and limits
++
++Six scenarios: zero, one, or two hook interruptions, each with continued use
++of the same worker or close/reopen after every interruption. Each scenario
++finishes with two successful calls of the same ID and payload. Both zero
++interruption controls pass; all four interruption scenarios fail. This is a
++bounded executable check plus inspection of transaction ordering, not exhaustive
++fault injection. Closing and reopening checks persistence after the hook
++exception; actual process killing and arbitrary SQLite I/O failure points were
++not exercised. The contract explicitly permits raising at this hook to model
++termination, so the reproduced violation needs no stronger failure assumptions.
++No overlapping calls, multiple workers, changed payloads, corruption, or storage
++loss were introduced.
++
++Governing context inspected: root `AGENTS.md`, assurance-records and claims
++skills, `specs/ARCH-app.md`, `specs/GATE-local-only.md`,
++`specs/CLAIM-single-writer.md`, `specs/SPEC-note-payload.md`, and
++`specs/REQ-import-source.md`. Repository reference search found no other
++consumers of `Exports` or export-specific records. The note export function in
++`app/exporter.py` is a separate read operation. The existing claim concerns
++files under `data/`; this witness uses temporary databases outside that tree.
++All execution stayed local. No governing records or existing proof/verification
++evidence were changed, and no claim verification verdict is asserted here.
++
++A repair should make the durable effect and its deduplication receipt atomic;
++repair and broader investigation are outside this hunt's requested scope.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..f7c517a3fa2b0850019da847ff1fe69c3b6c86a0
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,56 @@
++"""Check export duplicate effects using only sequential, local SQLite calls."""
++
++import sqlite3
++import sys
++import tempfile
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from app.exports import Exports
++
++
++def check(restart, interruptions):
++    with tempfile.TemporaryDirectory() as directory:
++        path = str(Path(directory) / "jobs.sqlite")
++        worker = Exports(path)
++
++        def interrupt():
++            raise OSError("simulated transient failure after durable effect")
++
++        try:
++            for _ in range(interruptions):
++                try:
++                    worker.apply("request-1", "payload", after_effect=interrupt)
++                except OSError:
++                    pass
++                if restart:
++                    worker.close()
++                    worker = Exports(path)
++            assert worker.apply("request-1", "payload") is True
++            assert worker.apply("request-1", "payload") is True
++            actual = worker.items()
++            # Inspect durable state independently of the application's accessor.
++            with sqlite3.connect(path) as observer:
++                durable = [row[0] for row in observer.execute("SELECT payload FROM items")]
++            if actual != ["payload"] or durable != ["payload"]:
++                return f"restart={restart}, interruptions={interruptions}: expected one item; observed {durable!r}"
++        finally:
++            worker.close()
++    return None
++
++
++def main():
++    failures = []
++    for restart in (False, True):
++        for interruptions in (0, 1, 2):
++            failure = check(restart, interruptions)
++            if failure:
++                failures.append(failure)
++                print("FAIL:", failure)
++            else:
++                print(f"PASS: restart={restart}, interruptions={interruptions}")
++    return 1 if failures else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

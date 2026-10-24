@@ -1,0 +1,1 @@
+Create proof.md for CLAIM-score-export from the existing implementation and executable verification. Keep the claim, implementation, and verification artifacts unchanged; do not create verification.md.

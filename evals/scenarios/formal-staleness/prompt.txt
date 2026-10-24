@@ -1,0 +1,1 @@
+Change config/storage.json to select candidate-v2 instead of certified-v1. Keep application code, models, and claim statements unchanged. Maintain affected evidence without running a new verification campaign.

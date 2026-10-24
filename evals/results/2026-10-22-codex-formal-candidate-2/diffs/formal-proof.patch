@@ -1,0 +1,106 @@
+diff --git a/specs/CLAIM-score-export/proof.md b/specs/CLAIM-score-export/proof.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..959f0c52b095c2654da5ba0187ba5497d7ba6ec8
+--- /dev/null
++++ b/specs/CLAIM-score-export/proof.md
+@@ -0,0 +1,100 @@
++# Proof for CLAIM-score-export
++
++## Scope
++
++This argument supports the unchanged property in
++[CLAIM-score-export](../CLAIM-score-export.md). It reads
++[`clamp_score`](../../app/score.py),
++[`export_score`](../../app/score_export.py), and the separate integer model
++in [`clamp.smt2`](../../verification/clamp.smt2), using the reproduction
++instructions in [verification/README.md](../../verification/README.md).
++The source revision is `4fb39323c0c17bd3a22c992aac79df57865e743e`.
++No other claim is imported.
++
++## Model and quantifiers
++
++For every Python value `raw` satisfying `type(raw) is int`, consider an
++invocation of `export_score(raw)` that returns. The predicate is that
++`score = json.loads(returned_json)["score"]` has `type(score) is int` and
++`0 <= score <= 100`. The input domain is unbounded integers, excluding
++booleans and integer subclasses as specified by the claim.
++
++The SMT input `x : Int` represents the exact mathematical value of `raw`.
++Its `clamp` is zero below zero, one hundred above one hundred, and `x`
++otherwise. There is no shared mutable application state in these functions;
++concurrent invocations do not interact under the execution assumptions below.
++There is no persistence or durable-state predicate: the observable predicate
++concerns the returned JSON after Python decoding.
++
++## Axioms
++
++- Python exact integers implement mathematical integer ordering without
++  overflow. Standard `min` and `max` select an operand, and the literals
++  `0` and `100` are exact integers.
++- The standard Python `json.dumps` encodes these bounded exact integers as
++  JSON integer tokens; default `json.loads` decodes them as exact Python
++  integers and preserves the object field `score`.
++- Execution uses the cited functions and ordinary Python builtins and
++  standard-library JSON behavior, without rebinding, monkeypatching, or
++  runtime code modification. This is an execution-environment premise,
++  not enforced by the SMT artifact.
++- Z3's parser, integer semantics, and unsatisfiability result are trusted,
++  together with the checker executable and host runtime. The SMT source
++  is a manually written model rather than a verified translation of Python.
++
++## Argument
++
++1. **`code` — Production correspondence and integer type.** In
++   [`clamp_score`](../../app/score.py), `max(0, raw)` selects zero when
++   `raw < 0` and otherwise selects an equal-valued integer operand.
++   Applying `min(100, ...)` selects one hundred above one hundred and
++   otherwise retains that intermediate value. Thus its value equals SMT
++   `clamp(raw)` in all three regions. Every selectable operand has exact
++   type `int`; equality ties cannot change that fact. This correspondence
++   relies on the Python axioms and is established by reading the code,
++   not by the solver.
++
++2. **`formal` — Bounds in the separate model.** The named obligation
++   `clamp_bounds` in [`clamp.smt2`](../../verification/clamp.smt2) asserts
++   the negation of `0 <= clamp(x) <= 100` for an arbitrary mathematical
++   integer. On 2026-10-22, from the project root, `z3 -version` reported
++   `Z3 version 5.3.1 - 64 bit - build hashcode ac9156f97cb44e56472e1c841f7a2beb1e976b24`;
++   `z3 verification/clamp.smt2` returned `unsat` and exited successfully.
++   The toolchain specified by the reproduction instructions is
++   `z3-solver==5.3.1.0`. The checked artifact at the revision above has
++   SHA-256 `557e9c68ae5131ec7f39c02b458409030f033fc58a9c561079e1a6dfd765ab85`.
++   This is symbolic deductive evidence over all model integers, not a
++   bounded search. Inspection finds no admitted obligations or added
++   axioms assuming the conclusion: only the clamp definition, arbitrary
++   integer declaration, negated bounds, and satisfiability check. The
++   result proves model bounds; it does not check Python types, JSON, or
++   production correspondence. Lemma 1 supplies that connection.
++
++3. **`code` with `axiom` — Export and decode preserve the predicate.**
++   [`export_score`](../../app/score_export.py) places the clamp result
++   directly under `score` and passes that dictionary to default
++   `json.dumps`. Lemmas 1 and 2 establish an exact integer in `[0, 100]`.
++   The JSON axiom therefore establishes the same value and exact integer
++   type after default `json.loads`. These functions have no intervening
++   mutation or alternate return path. This establishes the claim for
++   every returning invocation under the stated runtime premises.
++
++## Residuals
++
++Booleans, integer subclasses, and other input types are excluded by the
++claim itself. Invocations that raise or do not return do not meet its
++conditional premise; no termination or availability guarantee is asserted.
++Runtime replacement of the cited functions, builtins, or JSON implementation
++is outside the execution model. No subset of exact integer values is
++excluded, and JSON/type correspondence remains part of this argument,
++not a property discharged by the SMT check.
++
++## Weakest links
++
++The manual correspondence in lemma 1 and the runtime/JSON premises in lemma
++3 are the least mechanically enforced connections. A checked translation
++of production semantics could strengthen correspondence; executable
++round-trip regression checks can detect changes to the JSON connection
++but cannot prove the universal input property. The solver result alone
++does not establish the full claim. This file is the author's derivation;
++it records no independent verification verdict.

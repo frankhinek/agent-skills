@@ -1,0 +1,112 @@
+diff --git a/specs/CLAIM-score-export/proof.md b/specs/CLAIM-score-export/proof.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..05973f9f778c30a38beba3f44211e3f12ae69968
+--- /dev/null
++++ b/specs/CLAIM-score-export/proof.md
+@@ -0,0 +1,106 @@
++# Proof for CLAIM-score-export
++
++## Scope
++
++This argument supports the unchanged [CLAIM-score-export](../CLAIM-score-export.md)
++using [clamp_score](../../app/score.py),
++[export_score](../../app/score_export.py), and the separate mathematical model
++in [clamp.smt2](../../verification/clamp.smt2). Execution instructions are in
++[verification/README.md](../../verification/README.md). No other claim is imported.
++
++Inspected revision: `7b15f192d0a14cc5b4f9cb1999d84610855f7076`.
++Evidence was reproduced on 2026-10-22. SHA-256 of the checked SMT artifact:
++`557e9c68ae5131ec7f39c02b458409030f033fc58a9c561079e1a6dfd765ab85`.
++SHA-256 of `app/score.py`:
++`30c2e24bfca7b1915357fbd22c17b3d6de3c8dfb94c00eb13f3bca98170a3dc9`;
++of `app/score_export.py`:
++`42ddaea6a0659ee0794b9fb4a66d68c6db5ba3081ee6dfb01880623477b4a60d`.
++
++## Model and quantifiers
++
++The SMT input `x` ranges over all mathematical integers, without a magnitude
++bound. For ordinary Python integers, map `raw` to the same mathematical value.
++The output predicate is that decoding the returned JSON yields a `score`
++whose value is an integer in the closed interval [0, 100]. There is no durable
++state: this is a return-value property. Calls share no mutable application
++state, so concurrent calls introduce no additional ordering obligation.
++
++Python's `bool` is an `int` subclass. If “Python integer” includes booleans,
++`True` produces JSON `true`, decoded by Python as `True`; it satisfies
++`isinstance(value, int)` and the numeric bounds, but not `type(value) is int`
++or a JSON-number requirement. The argument below establishes the latter
++stronger typing property for ordinary built-in `int` inputs only. The claim
++does not specify a decoder or resolve this terminology; no strict JSON-number
++conclusion for boolean inputs is supplied by the SMT check.
++
++## Axioms
++
++- Trust the installed Z3 executable and its SMT-LIB integer semantics, parser,
++  and decision procedure. The source obligation is also part of the trusted
++  base. There are no explicit additional axioms or admitted obligations in it.
++- Trust Python's built-in integer ordering, arbitrary-precision values,
++  `min`/`max`, dictionary construction, and normal module binding behavior.
++  No monkey-patching, rebinding, or adversarial integer subclass methods are
++  modeled. Such behavior would require a separate argument if included in
++  “Python integer.”
++- Trust standard-library `json.dumps` and `json.loads` to preserve bounded
++  integer values as JSON numbers and decoded Python integers. For another
++  decoder, require equivalent integer-number semantics.
++- Execution has sufficient resources to complete; interpreter failure and
++  resource exhaustion are not modeled. These premises limit an unconditional
++  interpretation asserting successful return in every physical execution.
++
++## Argument
++
++1. **formal — mathematical bounds.** The obligation named `clamp_bounds`
++   asserts the negation of `0 <= clamp(x) <= 100` for an arbitrary integer
++   `x`. Running `z3 -version` reported
++   `Z3 version 5.3.1 - 64 bit - build hashcode ac9156f97cb44e56472e1c841f7a2beb1e976b24`.
++   Running `z3 verification/clamp.smt2` from the repository root returned
++   exactly `unsat` (successful exit). Thus no mathematical integer violates
++   these bounds under the solver semantics. This is a symbolic deductive
++   result for a separate model, not finite exploration or a checked theorem
++   about Python or JSON. The file contains one definition, a free integer
++   constant, and one negated obligation; the desired conclusion is not
++   introduced as an assumption.
++2. **code — production correspondence.** In `clamp_score`, for `raw < 0`,
++   `max(0, raw)` is 0 and the outer minimum is 0. For `0 <= raw <= 100`,
++   both operations preserve its value. For `raw > 100`, the outer minimum
++   returns 100. These cases exhaust ordinary integers and match the nested
++   `ite` in the SMT definition exactly. Python's integer operations here do
++   not overflow. This correspondence is a source reading under the Python
++   axioms, not an obligation discharged by Z3.
++3. **code / axiom — exported value and decoding.** `export_score` invokes
++   that imported clamp and places its result directly under `score` in the
++   dictionary passed to `json.dumps`. For ordinary `int` inputs each selected
++   value is an `int`; the JSON premise preserves that integer on decoding.
++   Together with lemmas 1 and 2, this establishes the claimed bounds for
++   ordinary integer inputs under the stated runtime premises. The SMT model
++   contains no serialization or decoding and cannot establish this step.
++4. **test — supplementary observed round trips.** With Python 3.12.12,
++   the following command succeeded and printed `8 round trips passed`:
++   `PYTHONDONTWRITEBYTECODE=1 python3 -c 'import json; from app.score_export import export_score; values = [-10**10000, -1, 0, 1, 99, 100, 101, 10**10000]; results = [json.loads(export_score(x))["score"] for x in values]; assert all(type(x) is int and 0 <= x <= 100 for x in results); print("8 round trips passed")'`.
++   This finite smoke check supports the inspected Python/JSON connection; it
++   supplies no universal guarantee. A separate direct check observed
++   `export_score(False)` decoding to `{"score": 0}` and `export_score(True)`
++   decoding to `{"score": True}`, exposing the typing qualification above.
++
++## Residuals
++
++Non-integer inputs are outside the stated quantifier. The formal artifact
++does not cover production correspondence, JSON, subclasses, or runtime
++completion. Boolean and subclass interpretation and decoder choice are
++coverage qualifications, not proven exclusions from the unchanged claim.
++In particular, if the claim requires a JSON number for every `int` subclass,
++the `True` execution is a counterexample to that interpretation, not a
++residual that can be dismissed. No independent verification verdict is made
++by this author's derivation.
++
++## Weakest links
++
++The least mechanically enforced steps are model-to-Python correspondence and
++JSON preservation. A checked translation tied to the production functions
++would strengthen the former; focused executable boundary and serialization
++checks would strengthen regression coverage for the latter. Neither would
++resolve the claim's input/decoder terminology without an explicit decision.
++The current solver result remains confined to mathematical clamp bounds.

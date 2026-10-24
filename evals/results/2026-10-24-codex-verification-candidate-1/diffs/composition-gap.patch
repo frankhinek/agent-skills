@@ -1,0 +1,80 @@
+diff --git a/specs/CLAIM-cache-once/verification.md b/specs/CLAIM-cache-once/verification.md
+index 7c2f68fc74bd12c043a7d4d89ee750c20ae58bad..92fcc301ebf2fa29d08ed18a014990e6f1f38904 100644
+--- a/specs/CLAIM-cache-once/verification.md
++++ b/specs/CLAIM-cache-once/verification.md
+@@ -1,2 +1,75 @@
+ Independent fixture review covers the supplied method and scope.
+ Result: provisional
++
++## Independent verification — 2026-10-24
++
++Verifier: Codex, assigned independent verification by the user; no author
++discussion or earlier review conclusions were in context. Revision checked:
++`a8cb565c8f5e42335612856231d96930de21def3`. Source and witness have no tracked
++changes at review time. Evidence kinds: `claim`, `code`, `test`.
++
++### Fresh assessment
++
++Inspected the fixed [CLAIM-cache-once](../CLAIM-cache-once.md), its
++[supplied proof](proof.md), both imported claims and proofs, the complete
++[Cache implementation](../../app/cache_updates.py), and the
++[retry witness](../../tests/witness_retry.py). Searched references to Cache,
++receipts, versions, and the three cache claim IDs; no other production Cache
++consumer was found. Read the project architecture, payload contract, local-only
++gate, and import requirement; none excludes this sequential execution.
++
++The fresh counterexample and composition finding were recorded in the review
++commentary before opening existing verification reports. An attempted additional
++temporary-file receipt failed because the shell could not create its here-document
++temporary file; it supplied no evidence and did not change the finding.
++
++Sufficiency attack: grant both imported conclusions exactly as stated. Each
++completed append adds exactly one complete value, and receipts contains at most
++one copy of each identifier. These facts remain true when two append calls for
++the same identifier occur before its receipt is present. They do not connect
++an append to receipt creation or make that pair indivisible. The parent's
++description of the append import as “atomic append” is stronger than its exact
++conclusion; even granting atomic individual appends does not close this gap.
++
++`Cache.apply` checks receipts, calls append, invokes `after_append`, then calls
++acknowledge. The callback can raise after the value was appended and before a
++receipt exists. No rollback, pending-command marker, or retry recheck of an
++append-associated identifier connects these states.
++
++### Executable counterexample
++
++On one Cache instance, call `apply("request-1", "value", after_append=interrupt)`
++where interrupt raises RuntimeError. Catch it and call
++`apply("request-1", "value")` sequentially on that same instance. After the
++first call, versions contains one value and receipts is empty. The retry passes
++the receipt check and appends a second value before acknowledging.
++
++Command: `python3 tests/witness_retry.py`, using Python 3.9.6.
++Observed exit status: 1. Output:
++
++    versions=['value', 'value'], receipts={'request-1'}
++    AssertionError: same command appended twice
++
++Expected: at most one appended value for this identifier. Observed: two.
++The witness directly imports production Cache; it is not a separate model or
++bounded search. Both imported conclusions hold throughout this execution. It
++requires neither concurrency nor process memory loss and lies explicitly within
++the parent's interruption qualifier. Thus it falsifies the stated property,
++rather than merely exposing unsupported reasoning or an excluded residual.
++
++### Reconciliation and verdict
++
++After the fresh assessment, read the existing parent verification and the
++imported [append verdict](../CLAIM-cache-append/verification.md) and
++[receipt verdict](../CLAIM-cache-receipt/verification.md). The parent was
++provisional; both imports were pass. These short reports contain no historical
++counterexample or additional run evidence to reconcile. Direct code inspection
++supports the exact imported conclusions for ordinary sequential list/set
++operations, and this counterexample does not dispute either imported pass.
++Their compatibility does not establish the missing connection in the parent.
++
++The original parent receipt above is retained. No repair was requested or made;
++all claim statements, proofs, imported verdicts, source, and tests are preserved.
++The counterexample remains unresolved at the checked revision.
++
++Result: falsified

@@ -1,0 +1,47 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 48c99bafba50754cbfff31ae632c9fe0e5dcb93e..092089645d416d256a7bb6d3d6f6096992d55fd5 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,42 @@ A subsequent report at historical revision cache-v2 recorded witness LOW:
+ `python3 tests/witness_ttl.py LOW` returned raw=-1 for input -1 in raw mode.
+ Expected [0,100], observed -1. No repair or resolution was recorded.
+ Result: falsified
++
++# Verification at baeb9666e8ca845ec0a6fa502561e5967d3f4a79
++
++Verifier: independent verifier agent (Claude Opus 5.5), 2026-10-24. I derived
++this fresh from the current source and did not rely on prior verdicts.
++
++Evidence kinds: `code` (proof lemmas 1–2), `test` (proof lemma 3).
++
++Inspected: specs/CLAIM-cache-ttl.md, specs/CLAIM-cache-ttl/proof.md,
++app/cache_policy.py, app/cache_export.py, tests/witness_ttl.py.
++
++Attacks performed:
++- Lemma 1 (`code`): `ttl` is `max(0, min(100, raw))`. For exact `int` input
++  the result is an `int` in [0, 100]. Holds.
++- Lemma 2 (`code`), misread guard: `export_ttl` sends only `mode == "json"`
++  through `ttl`. `mode == "raw"` returns `raw` unchanged, with no clamp. The
++  lemma's statement that both modes delegate to `ttl` is false at line level.
++- Lemma 3 (`test`): tests/witness_ttl.py is a witness script, not a passing
++  check. At this revision it reports violations and exits 1, so it supports
++  the opposite of the lemma.
++- Residual filing: the raw-mode path falls inside the claim's quantifiers
++  ("either supported mode, \"json\" or \"raw\""), so it cannot be excluded as a
++  residual.
++
++Commands and observed results:
++- `python3 -I tests/witness_ttl.py` exited 1 and printed
++  `LOW mode=raw input=-1 actual=-1 violation=True` and
++  `HIGH mode=raw input=101 actual=101 violation=True`. In json mode it
++  returned 0 and 100 (no violation).
++- Direct calls: `export_ttl(-10**30, "raw")` returned `-10**30`, and
++  `export_ttl(10**30, "raw")` returned `10**30`.
++
++Counterexample: `export_ttl(-1, "raw")` returns -1, and `export_ttl(101,
++"raw")` returns 101. Both are outside [0, 100] for an `int` input in a
++supported mode. This reproduces the earlier cache-v2 LOW witness and adds
++HIGH. No repair is present. The claim, proof, source, and tests were left
++unchanged.
++
++Result: falsified

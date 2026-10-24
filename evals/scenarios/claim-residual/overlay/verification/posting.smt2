@@ -1,0 +1,8 @@
+(set-logic QF_UF)
+(declare-const acknowledged Bool)
+(declare-const on_disk Bool)
+(declare-const orderly Bool)
+(define-fun recovered () Bool (or on_disk (and orderly acknowledged)))
+(assert (! orderly :named orderly_shutdown))
+(assert (! (not (=> acknowledged recovered)) :named posting_survives))
+(check-sat)

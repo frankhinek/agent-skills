@@ -1,0 +1,116 @@
+diff --git a/specs/CLAIM-score-export/proof.md b/specs/CLAIM-score-export/proof.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..a976839a4ba928a3859ef9c85ba7bdec8876ba92
+--- /dev/null
++++ b/specs/CLAIM-score-export/proof.md
+@@ -0,0 +1,110 @@
++# Proof for CLAIM-score-export
++
++## Scope
++
++This author's derivation supports the unchanged property in
++[CLAIM-score-export](../CLAIM-score-export.md). It reads
++[`clamp_score`](../../app/score.py),
++[`export_score`](../../app/score_export.py), the symbolic obligation in
++[`clamp.smt2`](../../verification/clamp.smt2), and its
++[execution instructions](../../verification/README.md). The execution path is
++`export_score(raw)` → `clamp_score(raw)` → `json.dumps` → JSON decoding.
++No configuration or persistence participates in this path.
++
++## Model and quantifiers
++
++Let x range over every mathematical integer, representing the value of a
++Python built-in integer `raw`. Define C(x) as 0 when x < 0, 100 when x > 100,
++and x otherwise. The required predicate is that decoding the returned JSON
++object yields a `score` whose type is integer and whose value lies in
++[0, 100]. This path has no durable state or inter-call invariant.
++
++The SMT variable has unbounded `Int` sort: this is universal symbolic
++reasoning, not a finite enumeration or sampled search. Ordinary calls have
++no shared mutable state. Concurrent replacement of module bindings or
++runtime functions is outside the execution model. No integer subclasses
++with adversarial comparison methods are modeled; Python `bool` inputs, if
++included as integers, are covered separately below.
++
++## Axioms
++
++- Python built-in integer comparisons and `min`/`max` implement exact integer
++  ordering without overflow; the ordinary interpreter executes the shown
++  source and imports the shown `clamp_score`, without monkeypatching.
++- The standard-library `json.dumps` encodes built-in integers as JSON
++  numbers, and standard-library `json.loads` with default options decodes
++  these integer tokens as Python integers, preserving their values and
++  object keys. The claim's integer interpretation uses this ordinary JSON
++  decoding; custom decoder hooks can deliberately change types.
++- Z3 correctly implements SMT-LIB `QF_LIA`, `Int`, and `ite`, and its
++  `unsat` answer is sound. The checked SMT source faithfully states the
++  displayed obligation. The solver is trusted; no independently checked
++  proof certificate is supplied.
++- Calls and decoding complete under normal runtime operation, with enough
++  resources and without process termination or interpreter failure. These
++  premises concern execution, not a restriction to small integer inputs.
++
++## Argument
++
++1. **`code` — Python-to-model correspondence.** In
++   [`clamp_score`](../../app/score.py), `max(0, raw)` is 0 for x < 0 and x
++   otherwise. Applying `min(100, ...)` returns 100 for x > 100 and leaves
++   the other cases unchanged. Thus the returned value equals C(x), the
++   `clamp` definition in [the SMT source](../../verification/clamp.smt2).
++   Both operands are built-in integers, so the selected result is also a
++   built-in integer. This correspondence is a source-reading lemma, not
++   something the solver checks against Python.
++
++2. **`axiom` (solver-backed formal obligation) — Model bounds.** The SMT
++   file asserts the negation of `0 <= clamp(x) <= 100` for an unconstrained
++   integer x. An unsatisfiable result excludes a violating integer in this
++   model. On 2026-10-22, from the project root, `z3 -version` reported
++   `Z3 version 5.3.1 - 64 bit`, and `z3 verification/clamp.smt2` returned
++   `unsat`, discharging the named `clamp_bounds` obligation. This matches
++   the version requested by the execution instructions. The rung is
++   `axiom` because this vocabulary has no formal-solver rung and solver
++   soundness is trusted; it is not a `search` result. Independently, the
++   three branches produce 0, 100, or x with 0 <= x <= 100 respectively.
++
++3. **`code` — Serialization bridge.**
++   [`export_score`](../../app/score_export.py) places precisely the clamp
++   result under `score` and passes that dictionary directly to `json.dumps`.
++   Lemmas 1–2 give a built-in integer between 0 and 100. The JSON axioms
++   preserve its value and integer type through decoding. The SMT file
++   does not model this wrapper, Python types, or JSON semantics.
++
++4. **`code` — Conclusion and boolean edge.** Composing lemmas 1–3 proves
++   the exact property for every built-in integer input in the stated
++   runtime model. If `bool` is included because it subclasses `int`,
++   `max(0, False)` selects the first equal operand, the integer 0;
++   `max(0, True)` selects `True`, and `min(100, True)` preserves it.
++   JSON therefore decodes the latter as a boolean, not an integer under
++   a strict type interpretation. The argument's universal domain is
++   built-in integers, not arbitrary subclasses; an interpretation of
++   the claim requiring every `isinstance(raw, int)` value would need
++   separate resolution and is not established here.
++
++As supplementary executable evidence, eight JSON round-trip spot checks
++on Python 3.12.12 passed for inputs -10**1000, -1, 0, 1, 99, 100, 101,
++and 10**1000, asserting `type(score) is int` and the inclusive bounds.
++These checks are samples, not universal evidence or a committed regression
++test. The symbolic obligation supplies the unbounded numeric argument.
++
++## Residuals
++
++Non-integer inputs are outside the stated property. Resource exhaustion,
++process interruption, runtime tampering, custom JSON decoders, and
++adversarial subclasses are outside the explicit runtime axioms/model.
++There is no numeric magnitude bound and no concurrency restriction on
++ordinary independent calls. The `bool` interpretation issue above is a
++material qualification, not a proved residual of a broader subclass claim.
++
++## Weakest links
++
++The SMT-to-Python correspondence and JSON bridge are source readings backed
++by runtime axioms, not compiler or CI enforcement. The SMT obligation proves
++only mathematical clamp bounds. A maintained wrapper test checking strict
++decoded type and values, plus an automated correspondence check, would
++strengthen these links. The claim's meaning of “Python integer” needs
++clarification if subclasses, especially `bool`, are intended. This document
++is an author's derivation; it records no independent verification verdict.

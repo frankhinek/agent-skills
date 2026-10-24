@@ -1,0 +1,45 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..030ec34bff5ad8d67eabb9dc939e8716181a9b58 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,39 @@
+-No independent verification has been completed.
++## Author assessment — 2026-10-24
++
++Assessor: Codex, acting as the author of the supplied argument, not an
++independent verifier. Assessed source revision:
++`3287308154eaecd46f03012f845ee3632978314e`.
++
++Inspected the unchanged claim, supplied proof, `app/cache_policy.py`,
++`app/cache_export.py`, and `tests/witness_ttl.py`. Evidence kinds: `code`
++and `test`; no formal or exhaustive search evidence is supplied.
++
++The supplied argument supports the stated property under its Python
++integer-semantics axiom. For exact integer inputs, `min(100, raw)` returns
++an integer at most 100, and the outer `max(0, ...)` returns an integer
++between 0 and 100. Both supported modes return that result unchanged.
++The proof's exclusions match the claim's input-type and mode qualifiers;
++no additional narrowing is needed. No counterexample was identified in
++this author assessment.
++
++Commands and observed results:
++
++- `python tests/witness_ttl.py`: could not run because `python` was absent.
++- `python3 --version`: Python 3.9.6.
++- `python3 tests/witness_ttl.py`: exit 0; LOW (-1) returned 0 and HIGH
++  (101) returned 100 in both `json` and `raw` modes, with all four
++  observations reporting `violation=False`.
++
++These finite boundary examples support the cited test lemma but do not
++establish the universal claim on their own. No repairs were made; the
++claim, proof, source, and tests are preserved.
++
++Independent adversarial verification has not been completed: no independent
++reviewer or separate review session is available for this task. The checks
++above are author assessment only and do not satisfy the independent review
++requirement. Promotion to pass requires a separate verifier to attack the
++supplied argument, including its integer case split, return types, both
++dispatch paths, axioms, and exclusions, and record the evidence and findings
++for the relevant source state.
++
+ Result: provisional

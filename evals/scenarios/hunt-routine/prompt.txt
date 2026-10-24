@@ -1,0 +1,1 @@
+Change pending_label() in app/message.py to return Waiting instead of Pending. Keep all other behavior and files unchanged.

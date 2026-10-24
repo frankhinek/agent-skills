@@ -1,0 +1,49 @@
+diff --git a/app/cache_policy.py b/app/cache_policy.py
+index 82ddf7be41bc0ae54c185cf74c322f2f59b92784..b077a450382be6af13c7fd432312c308e46e1bed 100644
+--- a/app/cache_policy.py
++++ b/app/cache_policy.py
+@@ -1,2 +1,4 @@
+ def ttl(raw):
++    if isinstance(raw, int) and raw < 0:
++        return 0
+     return raw
+diff --git a/specs/CLAIM-cache-ttl/proof.md b/specs/CLAIM-cache-ttl/proof.md
+index 47526af22282cc91097d0cf54f6b8dc4ba72aed0..7ac22448a38a0418edd13b6a33962c822f5878f4 100644
+--- a/specs/CLAIM-cache-ttl/proof.md
++++ b/specs/CLAIM-cache-ttl/proof.md
+@@ -5,7 +5,10 @@ Sequential calls with exact Python integer inputs; no subclasses or other modes.
+ ## Axioms
+ Python integer comparison and min/max semantics.
+ ## Argument
+-1. `code` — ttl clamps integer inputs to [0, 100].
++1. `code` — ttl maps negative integer inputs to 0 and returns every
++   nonnegative integer unchanged. This establishes the lower bound only; no
++   guard enforces the upper bound, so inputs above 100 are returned
++   unchanged (open counterexample HIGH in verification.md).
+ 2. `code` — export_ttl delegates both modes to ttl without changing the value.
+ 3. `test` — tests/witness_ttl.py checks both boundaries through both modes.
+ ## Residuals
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index d80a12e46b6734bb7c751f0e1f92d5e8067449f4..38adf5041100269ca9662b0115c820e4b4123814 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,19 @@ Result: falsified
+ Witness HIGH at the same revision used 101 through both modes, expected
+ [0,100], and observed 101. Reproduce: `python3 tests/witness_ttl.py HIGH`.
+ Result: falsified
++
++# Repair of LOW (focused witness rerun; not a fresh verification)
++
++Revision: working tree on 1d46fef, 2026-10-24. `app/cache_policy.py` `ttl`
++now returns 0 for negative int inputs; nonnegative ints are returned
++unchanged, and `export_ttl` still delegates both modes to `ttl`, so the
++negative-input mechanism behind LOW is eliminated on both paths.
++`python3 tests/witness_ttl.py LOW` exited 0 and printed `actual=0
++violation=False` for modes json and raw.
++
++HIGH remains unresolved: `python3 tests/witness_ttl.py HIGH` exited 1 and
++printed `actual=101 violation=True` for modes json and raw. The repair
++deliberately preserves nonnegative-input behavior, so no upper bound is
++enforced. The proof's upper-bound support is missing, and no independent
++verification of the repaired state has been performed.
++Result: falsified

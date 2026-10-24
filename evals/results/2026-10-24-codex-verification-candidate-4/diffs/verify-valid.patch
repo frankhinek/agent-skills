@@ -1,0 +1,61 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..9051bd720280fed8dd3221b1e58e96ec8ae7ed2b 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,54 @@
+-No independent verification has been completed.
+-Result: provisional
++# Independent verification of CLAIM-cache-ttl
++
++Verified by Codex acting as independent verifier on 2026-10-24 against revision
++`be35a4ec2e1df230bccede15087c95c8c340b347`. The claim, supplied proof,
++implementation, and tests were unchanged. No author discussion or earlier
++review conclusions were supplied to this verifier.
++
++## Fresh assessment
++
++Inspected [CLAIM-cache-ttl](../CLAIM-cache-ttl.md), [the supplied argument](proof.md),
++`app/cache_policy.py`, `app/cache_export.py`, and `tests/witness_ttl.py`.
++Checked the root architecture and local-only gate and searched implementation
++and records for TTL references; no additional callers or imported claims were
++found. Evidence kinds are `code` and `test`; there is no formal or exhaustive
++search result.
++
++Attacked the argument by checking both export branches, boundary equality,
++negative inputs, arbitrary-precision integers, return type, and the exclusions
++in the proof. For exact integers, `min(100, raw)` returns an integer at most
++100. Applying `max(0, ...)` preserves that upper bound and establishes the
++lower bound. Concretely, inputs below zero return 0, inputs from 0 through
++100 return themselves, and inputs above 100 return 100. Both supported
++branches return this value without conversion or bypass. Python integers do
++not overflow at a fixed machine width. No additional assumption narrowing
++the claim is needed; excluded subclasses and unsupported modes are outside
++its explicit quantifiers.
++
++Commands and observed results with Python 3.9.6:
++
++- `python3 tests/witness_ttl.py`: exit 0; LOW (-1) and HIGH (101) returned
++  0 and 100 respectively in both modes, with every violation flag false.
++- An inline `python3 -c` check evaluated inputs
++  `[-10**1000, -1, 0, 1, 99, 100, 101, 10**1000]` through both modes and
++  asserted `type(result) is int and 0 <= result <= 100`: all 16 checks passed.
++  An initial here-document invocation of this supplemental check was blocked
++  by shell temporary-file creation; the inline invocation completed successfully.
++
++The finite checks corroborate the branch and clamp reading; they do not
++establish the universal quantifier by themselves. No material argument gap
++or in-scope counterexample was found. Fresh findings were recorded in the
++conversation before opening the historical verification file.
++
++## Historical reconciliation and verdict
++
++After the fresh assessment, inspected the previous `verification.md`: it
++contained only “No independent verification has been completed” and a
++provisional verdict. There were no historical findings or counterexamples
++to resolve. The supplied boundary witnesses were rerun as described above.
++
++The supplied argument survived independent attack at the checked revision.
++This verdict relies on the reviewed code and Python integer/min/max semantics,
++with finite tests as supporting evidence; it is not a machine-checked proof.
++
++Result: pass

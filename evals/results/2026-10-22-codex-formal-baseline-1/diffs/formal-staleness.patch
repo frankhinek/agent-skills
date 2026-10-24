@@ -1,0 +1,95 @@
+diff --git a/config/storage.json b/config/storage.json
+index 8faae91c2a6885d2be4358c88105d0ece2957479..06b50b400c8dd2a66842558903d03b53d5bc31c9 100644
+--- a/config/storage.json
++++ b/config/storage.json
+@@ -1 +1 @@
+-{"driver": "certified-v1"}
++{"driver": "candidate-v2"}
+diff --git a/specs/CLAIM-reservation/proof.md b/specs/CLAIM-reservation/proof.md
+index 04d7cb191d95f83f51cf09d597a38394c0556404..7d8dc24adaff43db2e5f15f6af95c97fe11011ae 100644
+--- a/specs/CLAIM-reservation/proof.md
++++ b/specs/CLAIM-reservation/proof.md
+@@ -3,3 +3,10 @@ Scope: app/reservations.py, config/storage.json, config/driver-contract.md, veri
+ 1. `formal` — reservation_base and reservation_step establish the abstract count invariant by induction; Z3 5.3.1 returns unsat for both obligations.
+ 2. `axiom` — the selected certified-v1 driver implements each abstract reservation transition atomically, as stipulated in config/driver-contract.md. This connects the model to deployment.
+ Residuals: none within the stated key lifetime.
++
++Coverage update, 2026-10-22: config/storage.json now selects candidate-v2.
++The recorded formal results for reservation_base and reservation_step still
++cover the unchanged abstract model in verification/reservation.smt2. They
++do not establish that candidate-v2 implements that model. Lemma 2's
++certified-v1 deployment axiom no longer covers the selected driver;
++candidate-v2's atomic reservation refinement remains unassessed.
+diff --git a/specs/CLAIM-reservation/verification.md b/specs/CLAIM-reservation/verification.md
+index 9ca691f9ef85f3d8e41a9f370e7681ae95987217..91e0ee2fd2879f982a93658cfbb1ab7be9b80a49 100644
+--- a/specs/CLAIM-reservation/verification.md
++++ b/specs/CLAIM-reservation/verification.md
+@@ -1,3 +1,10 @@
+ Independent fixture review at the overlay baseline, 2026-10-22.
+ Checked the argument and imported evidence under certified-v1.
+ Result: pass
++
++2026-10-22: config/storage.json now selects candidate-v2. The prior pass
++covers certified-v1 only. The recorded SMT results remain evidence for the
++unchanged abstract model, but candidate-v2's atomic reservation refinement
++needs assessment before the concrete claim can pass. No counterexample is
++known, and no new verification campaign was run.
++Result: provisional
+diff --git a/specs/CLAIM-retry-safe/proof.md b/specs/CLAIM-retry-safe/proof.md
+index 2b2c0392872257bd8041c6898d083c5cd97deaae..1654dec37615b7d0e426ad259fdbe8aebdb738f9 100644
+--- a/specs/CLAIM-retry-safe/proof.md
++++ b/specs/CLAIM-retry-safe/proof.md
+@@ -2,3 +2,8 @@ Scope: app/retry.py.
+ 
+ 1. `claim` — [CLAIM-single-post](../CLAIM-single-post.md) supplies at most one committed posting per key.
+ 2. `code` — retry forwards the same key and payload to post.
++
++Coverage update, 2026-10-22: config/storage.json selects candidate-v2.
++This deployment change reaches lemma 1 through CLAIM-single-post, whose
++evidence is now provisional. The unchanged forwarding code in lemma 2
++does not establish the claim without that imported conclusion.
+diff --git a/specs/CLAIM-retry-safe/verification.md b/specs/CLAIM-retry-safe/verification.md
+index 9ca691f9ef85f3d8e41a9f370e7681ae95987217..36e6d6a3aaa59f05a8142bd35f0d77210cb84673 100644
+--- a/specs/CLAIM-retry-safe/verification.md
++++ b/specs/CLAIM-retry-safe/verification.md
+@@ -1,3 +1,10 @@
+ Independent fixture review at the overlay baseline, 2026-10-22.
+ Checked the argument and imported evidence under certified-v1.
+ Result: pass
++
++2026-10-22: config/storage.json now selects candidate-v2. The prior pass
++covers certified-v1 only. The imported CLAIM-single-post evidence is now
++provisional. Re-verification requires current support for that claim and
++its reservation and driver assumptions. No counterexample is known,
++and no new verification campaign was run.
++Result: provisional
+diff --git a/specs/CLAIM-single-post/proof.md b/specs/CLAIM-single-post/proof.md
+index ae35a92ae114abcf843d414b488897b83586e950..1d9e816aa9e0f56e1d7440146997a46a0fe1a726 100644
+--- a/specs/CLAIM-single-post/proof.md
++++ b/specs/CLAIM-single-post/proof.md
+@@ -3,3 +3,9 @@ Scope: app/posting.py.
+ 1. `claim` — [CLAIM-reservation](../CLAIM-reservation.md) supplies at most one successful reservation per key.
+ 2. `axiom` — certified-v1 transactions commit reservation and append together; the driver contract rules out all other posting writers.
+ 3. `code` — post appends only after a successful reservation.
++
++Coverage update, 2026-10-22: deployment scope includes config/storage.json
++and config/driver-contract.md. The selected candidate-v2 driver is not
++covered by lemma 2's certified-v1 transaction axiom. Lemma 1's imported
++CLAIM-reservation evidence is provisional, so this derivation does not
++currently support the concrete posting claim.
+diff --git a/specs/CLAIM-single-post/verification.md b/specs/CLAIM-single-post/verification.md
+index 9ca691f9ef85f3d8e41a9f370e7681ae95987217..a6f9b2c9b2449561e85dcffc1648240cbb7834a9 100644
+--- a/specs/CLAIM-single-post/verification.md
++++ b/specs/CLAIM-single-post/verification.md
+@@ -1,3 +1,11 @@
+ Independent fixture review at the overlay baseline, 2026-10-22.
+ Checked the argument and imported evidence under certified-v1.
+ Result: pass
++
++2026-10-22: config/storage.json now selects candidate-v2. The prior pass
++covers certified-v1 only. CLAIM-reservation is now provisional, and the
++transaction axiom does not cover candidate-v2. Re-verification needs current
++reservation support and assessment of candidate-v2's atomic reservation/
++append transactions and writer assumptions. No counterexample is known,
++and no new verification campaign was run.
++Result: provisional

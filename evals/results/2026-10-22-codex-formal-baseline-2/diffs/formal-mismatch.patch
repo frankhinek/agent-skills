@@ -1,0 +1,54 @@
+diff --git a/specs/CLAIM-score-export/verification.md b/specs/CLAIM-score-export/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..59c61177162bed813624c86fc9790f8c943e236e
+--- /dev/null
++++ b/specs/CLAIM-score-export/verification.md
+@@ -0,0 +1,48 @@
++# Verification of CLAIM-score-export
++
++Result: falsified
++
++Verified by Codex acting as the independent verifier, 2026-10-22, against
++revision ae4bf868c6fcfe5e486c8f847d6d6cec4569b53e. This verdict rejects the
++supplied argument's inference; it does not report a counterexample to the
++implementation's behavior.
++
++Inspected the exact claim, supplied proof, `app/score.py`,
++`app/score_export.py`, `verification/lower.smt2`, and the reproduction
++instructions in `verification/README.md`. Checked repository references
++and applicable records for additional supporting lemmas; none supplies the
++missing obligations for this argument.
++
++Reproduced the existing executable verification without modification:
++`z3 -version` reports Z3 5.3.1, and `z3 verification/lower.smt2` returns
++`unsat`.
++
++Attacks and material findings:
++
++- Compared the actual assertion with the conclusion of lemma 1. The sole
++  assertion negates `0 <= clamp(x)`. Its unsatisfiability establishes only
++  nonnegativity for the encoded mathematical function over all integers.
++  There is no asserted obligation for `clamp(x) <= 100`. The definition
++  contains an upper clamp, but that does not make the reported solver result
++  a check of the upper bound.
++- Checked the boundary between the formal model and the claimed observable
++  behavior. The SMT file models neither `export_score` nor Python
++  `json.dumps`/`json.loads`, and does not establish `type(score) is int`.
++  The supplied argument provides no correspondence lemma connecting its
++  mathematical function to `clamp_score` and the exporter, or covering the
++  exact built-in-integer input domain and conditional-return qualifier.
++- Challenged the implication used by lemma 1: nonnegativity alone permits
++  a score of 101, which violates the claimed upper bound. This is a
++  counterexample to the inference from the checked predicate, not an
++  execution of the supplied clamp. The claim is therefore not established
++  by the formal result, even though that result is reproducible.
++
++No claim, proof, implementation, or executable verification was changed;
++no replacement evidence was constructed. Resolving the discrepancy requires
++support for the omitted obligations and correspondence, followed by fresh
++verification of that supplied argument.
++
++Process limitation: the claims skill requests a separate adversarial agent.
++An attempt to start that agent failed because the agent service could not
++load its thread context. The inspection above was performed directly by
++this verifier; no successful separate-agent review is represented here.

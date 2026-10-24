@@ -1,0 +1,41 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 00d5da12032e79f5ed7d959d2c575f4b70113c55..85a3f65a8630d950ebbc2a07e84b54875bae6b04 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -5,3 +5,36 @@ through the production adapter and observed 101, outside [0,100].
+ Reproducer: `python3 tests/replay_ttl.py`. No repair is recorded. The current
+ local functions do not establish which adapter code the capture exercised.
+ Result: falsified
++
++## Recheck against current checkout
++
++Checked 2026-10-24 by Codex at revision
++`33f30e8a728309a9a610b8bd4e38988095c99540`.
++Evidence kinds: `code`, `test`, and the historical counterexample above.
++
++- `python3 tests/replay_ttl.py` exited 1 with
++  `ModuleNotFoundError: No module named 'cache_replay_driver'` at the import.
++  The captured adapter execution did not run; this is unavailable evidence,
++  not a reproduced violation or evidence of repair. The driver was neither
++  installed nor replaced.
++- `python3 tests/witness_ttl.py` exited 0: LOW (-1) returned 0 and HIGH (101)
++  returned 100 in both json and raw modes; all four reported
++  `violation=False`.
++- Inspected `app/cache_policy.py`, `app/cache_export.py`, both test scripts,
++  and `proof.md`. The local clamp and both delegation paths agree with these
++  four observations. These calls do not establish correspondence to the
++  production adapter exercised by the historical capture. Passing local
++  boundary examples therefore do not resolve the recorded counterexample.
++
++Independent adversarial verification was attempted, but the verifier agent
++could not start because its thread context could not be loaded. No independent
++verification result is claimed.
++
++The historical HIGH counterexample remains unresolved. Rechecking it requires
++the original external replay driver and evidence connecting the captured
++adapter execution to the current checkout, followed by a successful replay
++and an explanation of the discrepancy. The unavailable replay does not erase
++the existing falsification. Claim, proof, implementation, and reproducer are
++unchanged.
++
++Result: falsified

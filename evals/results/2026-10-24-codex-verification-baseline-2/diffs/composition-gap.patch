@@ -1,0 +1,62 @@
+diff --git a/specs/CLAIM-cache-once/verification.md b/specs/CLAIM-cache-once/verification.md
+index 7c2f68fc74bd12c043a7d4d89ee750c20ae58bad..51db0f3b9ed8253dc6f6247c3de20fed262ea3fd 100644
+--- a/specs/CLAIM-cache-once/verification.md
++++ b/specs/CLAIM-cache-once/verification.md
+@@ -1,2 +1,57 @@
+ Independent fixture review covers the supplied method and scope.
+ Result: provisional
++
++## Independent composition verification — 2026-10-24
++
++Verifier: Codex, acting as independent verifier of the supplied derivation.
++Revision checked: `123967e628a7b84d09a619a18cd2afb2bdf91a8a`.
++Implementation SHA-256: `bc8a9b3fdcf09ac905d67500f21cfec77857a344f62c76367092d091b5bfdad3`
++(`app/cache_updates.py`), matching both imported verification receipts.
++
++Inspected the fixed [CLAIM-cache-once](../CLAIM-cache-once.md), its
++[composition](./proof.md), the records, proofs and verdicts for
++[CLAIM-cache-append](../CLAIM-cache-append.md) and
++[CLAIM-cache-receipt](../CLAIM-cache-receipt.md), the complete implementation,
++and [the supplied executable witness](../../tests/witness_retry.py).
++Repository reference discovery found no further importing claims.
++Evidence kinds: `claim` for imported conclusions, `code` for the connecting
++execution path, and `test` for a reproduced counterexample; no formal proof
++or exhaustive search is asserted.
++
++The imported passes remain applicable to their exact conclusions: each
++completed append adds one complete value, and repeated acknowledgement keeps
++unique receipt membership. Their sequential execution models and ordinary
++Python collection assumptions are compatible. Neither conclusion establishes
++a relationship between receipt membership and values already appended.
++The parent's description of the append import as “atomic append” must not be
++read as atomicity of append together with acknowledgement.
++
++Attack: interrupt between the guarded action and receipt creation, then retry
++on the same instance. In `Cache.apply`, the membership check at line 13
++precedes append at line 15; `after_append` at line 16 can raise before
++acknowledgement at line 17. The first call therefore leaves
++`versions=['value']` and `receipts=set()`. A sequential retry of `request-1`
++passes the same guard, appends again, and then acknowledges. Final state:
++`versions=['value', 'value']`, `receipts={'request-1'}`.
++
++Reproduction: `python3 tests/witness_retry.py` exited **1**, printed that
++final state, and raised `AssertionError: same command appended twice`.
++`shasum -a 256 app/cache_updates.py` reproduced the hash above.
++
++This execution is explicitly included by the claim's interruption qualifier;
++it uses no concurrency, process memory loss, or unsupported collection
++semantics. It cannot be filed under the proof's residuals. Both imported
++properties hold throughout this counterexample. The unsupported step is the
++parent's final `code` inference that these component properties jointly imply
++retry deduplication: the path between their scopes is not protected against
++interruption. The supplied composition fails to establish the parent, and
++the executable witness directly falsifies its stated property.
++
++A separate adversarial agent was requested as required by the claims skill,
++but spawning failed with a thread-store/model-context tool error before that
++review ran. No second-agent review is claimed; the verdict rests on direct
++implementation inspection and the reproduced executable counterexample.
++No repair was made. Claims, proofs, imported verdicts, source and tests are
++preserved; only this verification record was extended.
++
++Result: falsified

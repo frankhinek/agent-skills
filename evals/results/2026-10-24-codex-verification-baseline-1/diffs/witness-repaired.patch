@@ -1,0 +1,50 @@
+diff --git a/app/cache_policy.py b/app/cache_policy.py
+index 879ee13836faf374523839131cfca2b6ae3aab62..0f528d43a795337c4879018fbd879d926fa72a52 100644
+--- a/app/cache_policy.py
++++ b/app/cache_policy.py
+@@ -1,2 +1,2 @@
+ def ttl(raw):
+-    return min(100, raw)
++    return max(0, min(100, raw))
+diff --git a/specs/CLAIM-cache-ttl/proof.md b/specs/CLAIM-cache-ttl/proof.md
+index 47526af22282cc91097d0cf54f6b8dc4ba72aed0..dc1e4e16c3d2bb83d441e959339e15dc3f30e0a3 100644
+--- a/specs/CLAIM-cache-ttl/proof.md
++++ b/specs/CLAIM-cache-ttl/proof.md
+@@ -5,7 +5,10 @@ Sequential calls with exact Python integer inputs; no subclasses or other modes.
+ ## Axioms
+ Python integer comparison and min/max semantics.
+ ## Argument
+-1. `code` — ttl clamps integer inputs to [0, 100].
++1. `code` — `ttl` in `app/cache_policy.py` now applies `max(0, min(100, raw))`:
++   negative integers return zero; for nonnegative integers, the outer maximum
++   preserves the previous `min(100, raw)` result. This repairs the recorded LOW
++   counterexample; independent review of the changed source remains pending.
+ 2. `code` — export_ttl delegates both modes to ttl without changing the value.
+ 3. `test` — tests/witness_ttl.py checks both boundaries through both modes.
+ ## Residuals
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 854d629a85f1157c5fb73aeffab4f6b838c5eb48..a2bb45c650d863ad19c129f8aa381d7cc0f9b45c 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -4,3 +4,21 @@ At historical revision cache-v2, witness LOW used integer -1 through both
+ modes, expected [0,100], and observed -1. Reproduce:
+ `python3 tests/witness_ttl.py LOW`.
+ Result: falsified
++
++## Repair evidence (2026-10-24)
++
++The working-tree repair in `app/cache_policy.py` adds the lower clamp. The
++historical counterexample above is retained; its reproduction command no
++longer reproduces the violation in this source state.
++
++Ran the unchanged `python3 tests/witness_ttl.py`: exit 0. LOW returned 0
++and HIGH returned 100 through both json and raw modes; all four observations
++reported `violation=False`. Focused regression assertions also passed for
++negative inputs -10**100, -101, and -1, and preserved the previous
++`min(100, raw)` result for nonnegative inputs 0 through 10000 and 10**100.
++These are finite regression checks, not fresh claim verification.
++
++The repaired source and updated argument have not received independent
++adversarial verification. Re-verification of the clamp and both export paths
++is required before recording a pass for the repaired state.
++Result: provisional

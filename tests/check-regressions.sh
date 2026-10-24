@@ -18,6 +18,7 @@ SUITES=(
   tests/check-vendor-staleness.sh
   tests/check-vendor-state.sh
   tests/check-vendor-transaction.sh
+  tests/check-vendor-upgrade.sh
   tests/check-install.sh
   skills/assurance-records-upkeep/tests/check-lint.sh
 )

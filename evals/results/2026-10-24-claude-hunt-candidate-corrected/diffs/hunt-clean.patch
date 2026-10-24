@@ -1,0 +1,272 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..54b648713d6750c1e55d00ca441a77e9053028df
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,98 @@
++# Hunt report: export worker acceptance and restart recovery
++
++Revision: `85d33b3` (Python 3.9.6, SQLite 3.43.2, macOS).
++
++## Result
++
++**No implementation defect found in the bounded coverage below.** Every
++accepted job produced its result after the interruptions checked, and
++completed jobs got no further work. This is a clean bounded hunt. It does
++not show that no bugs exist, and it is not an independent claim verification.
++
++## Scope and stopping condition
++
++- Operation: `Queue.submit` (acceptance), `Queue.work`, and the restart path
++  `Queue.__init__` → `Queue.recover` in `app/export_queue.py`.
++- Contract: `app/export-contract.md`. No `specs/` record governs the export
++  queue. `ARCH-app`, `SPEC-note-payload`, and `CLAIM-single-writer` cover the
++  note `Store`/`data/` path, not the queue's SQLite file. Nothing else in the
++  repo references `export_queue`/`Queue`, so there are no consumers to trace.
++- Harms checked, in priority order: (1) accepted jobs abandoned after an
++  interruption; (2) a false acceptance report, where `submit` says accepted
++  but the job isn't durable; (3) jobs stuck in `running` permanently;
++  (4) completed jobs being redone or their results lost.
++- Stop: after these cases and their recovery path were checked.
++
++## Fault model (from the contract)
++
++- Committed SQLite transactions survive termination. Storage loss and
++  corruption are excluded.
++- There is exactly one worker. A restart begins only after the previous
++  worker has stopped. Requests never overlap.
++- The application retries `work` after transient failures and calls it again
++  once the environment recovers. This is the eventual-recovery assumption.
++- A job ID always has one payload.
++- An exception raised from the `after_claim` hook stands for an interruption
++  after `running` commits and before output is written.
++
++## Code-reading argument
++
++- `submit` commits the `INSERT OR IGNORE` inside `with self.db` before it
++  returns `accepted`, so acceptance always reflects a durable row.
++- `work` commits `running` in its own transaction. The result `INSERT` and
++  the `done` update share a second transaction. That makes "result exists"
++  and "state = done" atomic together, so the plain `INSERT INTO results`
++  (no `OR IGNORE`) can't hit an existing row for a job that isn't done.
++- If the process is interrupted between the two transactions, the row stays
++  in `running`:
++  - On restart, `recover()` runs in the constructor and resets `running` to
++    `pending`.
++  - With no restart (a transient failure), `work` still selects
++    `state IN ('pending','running')`.
++
++  Either way the job is picked up again. Because only one worker exists, a
++  `running` row can't belong to a live peer.
++- A completed job is never selected again. A resubmit with the same ID is a
++  no-op (`INSERT OR IGNORE`), and `recover()` only touches `running` rows.
++
++## Checks run
++
++`python3 tests/hunt_witness.py` exits 0 on this revision (18/18 checks pass).
++It calls the real `Queue` entry points on temporary SQLite files:
++
++| Scenario | Interruption | Expected / observed |
++|---|---|---|
++| kill | child process calls `os._exit` in the `after_claim` hook (after `running` commits) | the row is left `running` on disk; after restart, `work` produces the result and the state is `done` |
++| repeat | three successive killed workers over three jobs | all three results are produced after restart |
++| accept | child process exits right after `submit` returns `accepted` | the job survives and its result is produced after restart |
++| transient | hook raises in-process, then `work` is retried without a restart | the interrupted job and a second job both finish |
++| done | resubmit the same ID/payload after completion, then restart | `work` returns `False` both times and the result is unchanged |
++
++To check that the oracle catches real violations, I ran the witness (via
++`HUNT_APP_ROOT`) against broken copies of `export_queue.py` in a temporary
++directory. Each variant exited 1:
++
++- `recover` disabled and `work` selecting only `pending`: kill, repeat, and
++  transient fail (jobs stuck in `running`).
++- `work` selecting only `pending` (recover intact): transient fails.
++- `submit` without a commit: kill, repeat, and accept fail (acceptance not
++  durable).
++- `recover` marking `running` as `done`: kill and repeat fail (result never
++  produced).
++
++I deleted the scratch mutation script and the copies afterwards. Product
++code, records, and existing evidence are unchanged.
++
++## Gaps and untested conditions
++
++- Interruptions were injected only at the contract's hook boundary and right
++  after `submit`. I did not kill the process inside an SQLite commit. That
++  case depends on SQLite's atomic commit, which the contract assumes.
++- I did not test anything outside the contract: concurrent workers or
++  overlapping requests, a job ID resubmitted with a different payload (the
++  first payload is silently kept), storage loss, or a payload whose export
++  always fails. That last case would block later jobs through
++  `ORDER BY id LIMIT 1`, but the contract's eventual-recovery assumption
++  rules it out.
++- Only one platform and interpreter were tested: Python 3.9.6 and SQLite
++  3.43.2.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a993b7345b897958b4d72cd0e9d6a44b132090be
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,162 @@
++"""Witness: export worker acceptance and restart recovery (app/export-contract.md).
++
++Exits 0 when every accepted job produces its result after interruption and
++recovery, and nonzero when any scenario violates that obligation.
++
++Run from the project root:  python3 tests/hunt_witness.py
++Set HUNT_APP_ROOT to point at another copy of the project (mutation checks).
++"""
++import os
++import sqlite3
++import subprocess
++import sys
++import tempfile
++
++ROOT = os.environ.get(
++    "HUNT_APP_ROOT", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
++)
++sys.path.insert(0, ROOT)
++from app.export_queue import Queue  # noqa: E402
++
++# Child process: open the queue, run one script step, and terminate abruptly
++# (os._exit skips cleanup, like a killed worker) at the hook boundary.
++CHILD = r"""
++import os, sys
++sys.path.insert(0, sys.argv[1])
++from app.export_queue import Queue
++q = Queue(sys.argv[2])
++mode = sys.argv[3]
++if mode == "submit_then_die":
++    r = q.submit(sys.argv[4], sys.argv[5])
++    assert r == {"accepted": True, "id": sys.argv[4]}, r
++    os._exit(0)
++elif mode == "die_after_claim":
++    q.work(after_claim=lambda: os._exit(9))
++    os._exit(1)  # hook was never reached
++"""
++
++FAILURES = []
++
++
++def check(name, cond, detail=""):
++    print(("ok   " if cond else "FAIL ") + name + ((": " + detail) if detail else ""))
++    if not cond:
++        FAILURES.append(name)
++
++
++def child(db, *args):
++    return subprocess.run([sys.executable, "-c", CHILD, ROOT, db, *args]).returncode
++
++
++def drain(q, limit=50):
++    """The application calls work repeatedly once the environment recovers."""
++    for _ in range(limit):
++        if not q.work():
++            return True
++    return False
++
++
++def states(db):
++    # Raw read: opening a Queue would run recover() and hide the crash state.
++    conn = sqlite3.connect(db)
++    rows = dict(conn.execute("SELECT id, state FROM jobs").fetchall())
++    conn.close()
++    return rows
++
++
++class Interrupt(Exception):
++    pass
++
++
++def raise_interrupt():
++    raise Interrupt()
++
++
++def scenario_kill_after_claim(tmp):
++    db = os.path.join(tmp, "kill.db")
++    q = Queue(db)
++    q.submit("job-a", "payload-a")
++    q.close()
++    rc = child(db, "die_after_claim")
++    check("kill: worker died at post-claim hook", rc == 9, "rc=%d" % rc)
++    check("kill: job left running", states(db).get("job-a") == "running", str(states(db)))
++    q = Queue(db)  # restart
++    check("kill: drains after restart", drain(q))
++    check("kill: result produced", q.result("job-a") == "payload-a", repr(q.result("job-a")))
++    q.close()
++    check("kill: job done", states(db).get("job-a") == "done", str(states(db)))
++
++
++def scenario_repeated_kills(tmp):
++    db = os.path.join(tmp, "repeat.db")
++    q = Queue(db)
++    for i in range(3):
++        q.submit("job-%d" % i, "p%d" % i)
++    q.close()
++    for _ in range(3):
++        child(db, "die_after_claim")
++    q = Queue(db)
++    check("repeat: drains after restarts", drain(q))
++    got = {j: q.result(j) for j in ("job-0", "job-1", "job-2")}
++    check("repeat: all results", got == {"job-0": "p0", "job-1": "p1", "job-2": "p2"}, str(got))
++    q.close()
++
++
++def scenario_acceptance_survives_kill(tmp):
++    db = os.path.join(tmp, "accept.db")
++    rc = child(db, "submit_then_die", "job-x", "payload-x")
++    check("accept: submit child exited", rc == 0, "rc=%d" % rc)
++    q = Queue(db)
++    check("accept: drains after restart", drain(q))
++    check("accept: result produced", q.result("job-x") == "payload-x", repr(q.result("job-x")))
++    q.close()
++
++
++def scenario_transient_retry_no_restart(tmp):
++    db = os.path.join(tmp, "transient.db")
++    q = Queue(db)
++    q.submit("job-t", "payload-t")
++    q.submit("job-u", "payload-u")
++    try:
++        q.work(after_claim=raise_interrupt)
++        check("transient: hook raised", False)
++    except Interrupt:
++        pass
++    # Same process retries work after the transient failure.
++    check("transient: drains on retry", drain(q))
++    check("transient: interrupted job result", q.result("job-t") == "payload-t", repr(q.result("job-t")))
++    check("transient: other job result", q.result("job-u") == "payload-u", repr(q.result("job-u")))
++    q.close()
++
++
++def scenario_completed_needs_no_work(tmp):
++    db = os.path.join(tmp, "done.db")
++    q = Queue(db)
++    q.submit("job-d", "payload-d")
++    check("done: drains", drain(q))
++    r = q.submit("job-d", "payload-d")  # same ID, same payload (contract)
++    check("done: resubmit accepted", r == {"accepted": True, "id": "job-d"}, str(r))
++    check("done: no further work", q.work() is False)
++    q.close()
++    q = Queue(db)  # restart must not resurrect completed jobs
++    check("done: no work after restart", q.work() is False)
++    check("done: result kept", q.result("job-d") == "payload-d", repr(q.result("job-d")))
++    q.close()
++
++
++def main():
++    with tempfile.TemporaryDirectory() as tmp:
++        scenario_kill_after_claim(tmp)
++        scenario_repeated_kills(tmp)
++        scenario_acceptance_survives_kill(tmp)
++        scenario_transient_retry_no_restart(tmp)
++        scenario_completed_needs_no_work(tmp)
++    if FAILURES:
++        print("VIOLATED: %d check(s) failed" % len(FAILURES))
++        return 1
++    print("HOLDS: all checks passed")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

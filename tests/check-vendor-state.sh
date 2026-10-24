@@ -15,7 +15,7 @@ SNAPSHOTS="$TEST_ROOT/snapshots"
 SPY_BIN="$TEST_ROOT/git-spy-bin"
 COMPARISON_SPY_BIN="$TEST_ROOT/comparison-spy-bin"
 GIT_SPY_LOG="$TEST_ROOT/git-calls"
-SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
+SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep assurance-records-bug-hunt)
 
 unset BASH_ENV ENV
 unset -f rm 2>/dev/null || true

@@ -1,0 +1,76 @@
+diff --git a/specs/CLAIM-cache-once/verification.md b/specs/CLAIM-cache-once/verification.md
+index 7c2f68fc74bd12c043a7d4d89ee750c20ae58bad..aa82adef7af43b682b0ca111ccf4640294a363f3 100644
+--- a/specs/CLAIM-cache-once/verification.md
++++ b/specs/CLAIM-cache-once/verification.md
+@@ -1,2 +1,71 @@
+ Independent fixture review covers the supplied method and scope.
+ Result: provisional
++
++# Independent verification — 2026-10-24
++
++Verifier: independent verifier agent (Claude Opus 5.5), 2026-10-24.
++Revision checked: `ff91424cc2362a6344045811ecc2fc911f016ad2`; app/cache_updates.py SHA-256
++`bc8a9b3fdcf09ac905d67500f21cfec77857a344f62c76367092d091b5bfdad3`; tests/witness_retry.py SHA-256
++`987aad205d58e49be2de3c23742b5c56fdcea39eaf5b35195c6bdd70fd29755d`.
++Evidence kinds: `claim` imports (reviewed), `code` reading at line level, executable witness script.
++
++Independence disclosure: the coordinating verifier read the historical verification
++reports (this file and both imported receipts) before the fresh phase. The fresh
++assessment was therefore delegated to a separate agent in a clean context that opened no
++`verification.md`; its findings were recorded in the coordinating conversation (its
++`/tmp` scratch write was refused by the sandbox) before reconciliation.
++
++## Fresh findings
++
++Inspected: this claim and proof, CLAIM-cache-append and CLAIM-cache-receipt with their
++proofs, app/cache_updates.py, tests/witness_retry.py.
++
++Sufficiency attack (imports granted exactly as stated) yields a counterexample within the
++claim's scope — one Cache instance, sequential calls, same command identifier,
++interruption between append and acknowledge:
++
++1. `apply("request-1", "value", after_append=interrupt)`: line 13 sees no receipt;
++   line 15 appends (`versions=['value']`); line 16 raises; line 17 `acknowledge` never runs.
++2. Retry `apply("request-1", "value")`: line 13 still sees no receipt; line 15 appends
++   again; line 17 records the receipt.
++
++Expected: at most one value appended for `request-1`. Observed:
++`versions=['value', 'value'], receipts={'request-1'}`. Both imported conclusions hold
++throughout; the parent fails.
++
++Witness: [tests/witness_retry.py](../../tests/witness_retry.py). `python3 -I
++tests/witness_retry.py` from the repo root printed the line above and exited 1 with
++`AssertionError: same command appended twice`. Reproduced by both the fresh-context
++agent and the coordinating verifier at this revision.
++
++Argument defects:
++
++- The connecting step (proof.md, third Argument line) is labeled `code` but cites no
++  guard or ordering; it is an unsupported inference from the imports.
++- Smuggled premise: "a value appended for command c implies c is in receipts" (append
++  and acknowledge are atomic). Production ordering check → append → hook → acknowledge
++  contradicts it under the named interruption.
++- The guard at line 13 is a one-time check with no durable record of an in-flight or
++  completed append; `versions` is not keyed by command, so no recheck is possible.
++- Neither import relates `receipts` to `versions`; CLAIM-cache-receipt's receipt states
++  it establishes no such relationship. The proof's Weakest links concede "Cross-method
++  ordering requires inspection", and no lemma performs it.
++- Residuals (parallel execution, process memory loss) do not exclude this execution;
++  it is not a residual.
++
++## Reconciliation
++
++- Historical entry above: `provisional` with no recorded findings or witnesses; nothing
++  to reconcile beyond superseding the verdict.
++- Imported support: CLAIM-cache-append and CLAIM-cache-receipt both record `pass` at the
++  same app/cache_updates.py SHA-256 as checked here, so imports are current. Their
++  passes do not cover the cross-method state the parent relies on; the failure is in
++  the composition, not in either import.
++- No repairs made; claim, proofs, imported verdicts, source, and tests left unchanged.
++
++Unresolved finding: the counterexample above stands until the implementation changes
++(e.g. a durable per-command record checked before append, or the receipt recorded
++atomically with the append) or, on explicit user request, the claim changes — and the
++witness is rerun.
++
++Result: falsified

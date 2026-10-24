@@ -1,0 +1,37 @@
+diff --git a/specs/CLAIM-cache-once/verification.md b/specs/CLAIM-cache-once/verification.md
+index 7c2f68fc74bd12c043a7d4d89ee750c20ae58bad..2452f5db0b28756b513f4f559f9aa67d2719ee6f 100644
+--- a/specs/CLAIM-cache-once/verification.md
++++ b/specs/CLAIM-cache-once/verification.md
+@@ -1,2 +1,32 @@
+ Independent fixture review covers the supplied method and scope.
+ Result: provisional
++
++## Independent verification — 2026-10-24
++
++- Revision: `c9118c2431ff5c874e59fbc7654732172468da99` (clean tree apart from untracked `.eval-runtime/`).
++- Verifier: Claude (claude-opus-5-5), acting as the assigned independent verifier.
++- Exposure: the prior entry above (a one-line note with `Result: provisional`, no attacks or findings) was read alongside the claim and proof before the fresh assessment. It has no attack list or rationale that could steer the assessment, so the exposure is immaterial.
++- Evidence kinds checked: `claim` (imports), `code` (connecting step), executable witness `tests/witness_retry.py`.
++- Inspected: [CLAIM-cache-once](../CLAIM-cache-once.md), [proof.md](proof.md), imported [CLAIM-cache-append](../CLAIM-cache-append.md) and [CLAIM-cache-receipt](../CLAIM-cache-receipt.md) with their evidence, `app/cache_updates.py`, `tests/witness_retry.py`.
++
++### Fresh findings
++
++1. **Counterexample within the claim's scope (falsifies).** `Cache.apply` (`app/cache_updates.py:12-17`) checks `command in self.receipts`, then calls `append`, then `after_append()`, and only then `acknowledge`. If execution is interrupted after `append` and before `acknowledge`, no receipt is recorded. A retry of the same command passes the guard and appends again.
++   - Conditions: one `Cache` instance, sequential calls, interruption between append and acknowledge. The claim names this case explicitly ("including after interruption between append and acknowledge").
++   - Schedule: `apply("request-1", "value", after_append=<raise RuntimeError>)` → exception caught → `apply("request-1", "value")`.
++   - Expected: at most one value appended for `request-1`.
++   - Observed: `versions=['value', 'value'], receipts={'request-1'}`.
++   - Command: `python3 -I tests/witness_retry.py` → `AssertionError: same command appended twice`, exit 1.
++   - Residual filing check: the proof's residuals exclude parallel execution and process memory loss. This witness uses neither. It is sequential, and the interruption is an in-process exception with the `Cache` state intact. Neither residual covers it, and the claim's own wording includes it.
++2. **Composition gap (argument defect).** Sufficiency attack: grant both imports exactly as stated. In the witness, each completed `append` adds exactly one complete value ([CLAIM-cache-append](../CLAIM-cache-append.md) holds), and `receipts` holds `request-1` once ([CLAIM-cache-receipt](../CLAIM-cache-receipt.md) holds). The parent still fails. The connecting `code` lemma ("these conclusions together establish that retries cannot append twice") is the unsupported step. Neither import says anything about the order of append and acknowledge within `apply`, about atomicity across the two calls, or about the guard. The proof itself admits this under "Weakest links": "Cross-method ordering requires inspection".
++3. **Thin import support (noted, not decisive).** Both imported `pass` verdicts rest on a one-line note with no revision, attacks, or commands. This verification relies on no imported conclusion to reach its verdict, so the gap does not affect the result. It would need fixing before either import could support a future parent pass.
++
++### Reconciliation
++
++The prior entry recorded `provisional` and gave no findings or witnesses to reconcile. `tests/witness_retry.py` was rerun against the revision above and reproduces the violation (finding 1).
++
++### Result
++
++The claim, proof, imported records and verdicts, source, and tests are unchanged. The counterexample stands until `Cache.apply` is repaired, or until the claim is changed through the claims workflow at the user's explicit request. After a repair, rerun `tests/witness_retry.py`, rewrite the connecting lemma to cover the append/acknowledge ordering (or the guard's recheck), and run a fresh independent verification before recording any pass.
++
++Result: falsified

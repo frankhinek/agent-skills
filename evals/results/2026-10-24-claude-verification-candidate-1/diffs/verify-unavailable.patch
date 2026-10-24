@@ -1,0 +1,36 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..c0aafa519469c2a283fde954496f85af6119303a 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,31 @@
+ No independent verification has been completed.
+ Result: provisional
++
++## Author assessment — 2026-10-24, revision efda0b1
++
++Assessor: the proof's author (Claude Opus 5.5). This is not independent
++verification: no independent verifier or fresh review session was available,
++so this assessment cannot yield a pass.
++
++Inspected: specs/CLAIM-cache-ttl.md, proof.md, app/cache_policy.py,
++app/cache_export.py, tests/witness_ttl.py.
++
++Command and observed result (Python 3.9.6):
++`python3 -I tests/witness_ttl.py` printed `violation=False` for LOW (-1)
++and HIGH (101) in both modes and exited 0.
++
++Author-side attacks and findings:
++- Lemma 1: for `type(raw) is int`, `min(100, raw)` returns 100 or raw, and
++  `max(0, ·)` returns 0 or that value, so the result is an int in [0, 100].
++  No local rebinding of `min`/`max` in app/cache_policy.py. No gap found.
++- Lemma 2: both `"json"` and `"raw"` branches return `ttl(raw)` unchanged;
++  other modes raise and are outside the claim. No gap found.
++- Lemma 3 (finding, not repaired): tests/witness_ttl.py is a standalone
++  script, not wired into a test runner or CI, so the `test` rung overstates
++  its enforcement. It checks only -1 and 101, not 0, 100, or interior values.
++  It is supporting evidence; the quantified property rests on lemmas 1–2.
++- No counterexample within the claim's quantifiers was found.
++
++Outstanding: independent verification in a fresh context, per the claims
++skill, before any pass can be recorded.
++Result: provisional

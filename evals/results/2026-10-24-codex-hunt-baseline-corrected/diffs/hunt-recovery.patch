@@ -1,0 +1,146 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..6de5d237ec486f4fa0be14a3c51fb7f3e3a260b8
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,74 @@
++# Export acceptance and restart recovery hunt
++
++Checked 2026-10-24 at base revision `46f70d674f5d11275ab1644941f59cb57c6aeb46`.
++Scope: `Queue.submit`, the durable transitions in `Queue.work`, and recovery
++through `Queue.__init__` / `Queue.recover`. Oracle: `app/export-contract.md`,
++especially the obligation that accepted jobs eventually produce their result
++after recovery. This hunt stops at that operation and its recovery path.
++
++## Finding: accepted jobs become permanently stranded after interruption
++
++High severity: an ordinary supported process interruption loses progress on
++accepted work indefinitely, despite the database retaining the job and payload.
++
++`app/export_queue.py:33` commits `state = 'running'` before output is written.
++If the process stops at the documented post-commit hook, no result exists.
++On restart, `Queue.recover` (`app/export_queue.py:17`) does nothing, and
++`Queue.work` (`app/export_queue.py:29`) selects only pending rows. The durable
++running row can therefore never be selected again. Retrying submission with
++the same ID also cannot reset it: `submit` uses `INSERT OR IGNORE`.
++
++Reproduction uses one worker at a time, a local SQLite file, one stable payload,
++and a real subprocess exit at the supported hook. After that process exits,
++the witness opens a new Queue and calls work five times. The result remains
++absent and the durable row remains `('job', 'payload', 'running')`.
++Five calls are an executable sample; the permanent failure follows from the
++pending-only selection and absence of any transition out of running on restart.
++No storage loss, corruption, concurrency, or overlapping request is needed.
++
++The same ordering also strands work if the output transaction fails after the
++running commit: rolling back output does not roll back the earlier transaction.
++This is the same root cause, identified by code inspection rather than a
++separate injected-I/O witness. Recovery must make unfinished durable running
++jobs eligible again under the contract's single-worker restart model; this
++report does not change the implementation.
++
++## Executable coverage
++
++Run `python3 -B tests/hunt_witness.py`. Observed exit status: **1**.
++
++| Restart boundary | Observed result |
++| --- | --- |
++| Accepted pending job, before work | PASS: payload produced after reopening |
++| Running commit, before output | FAIL: accepted job remains running without result |
++| Result and done state committed | PASS: payload retained, no further work scheduled |
++
++The successful paths also check same-ID/same-payload resubmission after completion
++and that completed jobs remain idle. The witness exits zero only when all these
++checks hold. It uses temporary databases and does not edit existing evidence.
++
++Additional code coverage: acceptance returns only after the pending insertion
++transaction commits (`submit`, lines 21–25); output insertion and done marking
++share one transaction (`work`, lines 37–39). Given the contract's committed
++transaction durability, interruption before the running commit leaves pending
++work, and interruption within the output transaction leaves the previously
++committed running obligation unless output and done both commit. These internal
++transaction cuts were inspected, not separately killed in the witness.
++
++## Boundaries and governing context
++
++Read the root assurance-records guidance and claim handling guidance, root
++architecture, local-only gate, note payload specification, import requirement,
++and single-writer claim statement. Targeted reference discovery found no queue
++consumers or queue-specific governing records outside `app/export-contract.md`.
++The note payload and import records concern other operations. The single-writer
++claim concerns files under `data/`; the witness uses temporary SQLite files
++outside that directory and does not assess or alter its proof or verdict.
++All execution stayed local, consistent with the local-only gate.
++
++Not explored: concurrent workers or overlapping requests, storage loss,
++database corruption (excluded by the contract), unrelated note operations,
++and inconsistent payloads for a reused ID (outside the stable-payload scenario).
++This is a focused implementation hunt, not a claim verification or exhaustive
++fault-injection campaign. Product code, governing records, and existing evidence
++are preserved.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..eaba4ea702ee6abac5c793024d09b993332095a5
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,60 @@
++"""Acceptance/restart checks: exit nonzero if the contract is violated."""
++from pathlib import Path
++import subprocess
++import sys
++import tempfile
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT))
++from app.export_queue import Queue
++
++
++def check(path, boundary):
++    if boundary == 'running':
++        child = """
++import os, sys
++from app.export_queue import Queue
++q = Queue(sys.argv[1])
++assert q.submit('job', 'payload')['accepted']
++q.work(after_claim=lambda: os._exit(73))
++"""
++        run = subprocess.run([sys.executable, '-B', '-c', child, str(path)], cwd=ROOT)
++        assert run.returncode == 73, f'hook not reached: {run.returncode}'
++    else:
++        q = Queue(path)
++        assert q.submit('job', 'payload')['accepted']
++        if boundary == 'done':
++            assert q.work()
++        q.close()
++    q = Queue(path)
++    try:
++        for _ in range(5):
++            q.work()
++        assert q.result('job') == 'payload', (
++            'accepted job has no result after restart; durable jobs='
++            + repr(q.db.execute('SELECT * FROM jobs').fetchall())
++        )
++        assert q.work() is False, 'completed job scheduled again'
++        assert q.submit('job', 'payload')['accepted']
++        assert q.work() is False
++        assert q.result('job') == 'payload'
++    finally:
++        q.close()
++
++
++def main():
++    failures = 0
++    for boundary in ('pending', 'running', 'done'):
++        with tempfile.TemporaryDirectory() as directory:
++            try:
++                check(Path(directory) / 'jobs.sqlite', boundary)
++            except AssertionError as exc:
++                failures += 1
++                print(f'FAIL {boundary}: {exc}')
++            else:
++                print(f'PASS {boundary}')
++    return int(failures != 0)
++
++
++if __name__ == '__main__':
++    sys.exit(main())

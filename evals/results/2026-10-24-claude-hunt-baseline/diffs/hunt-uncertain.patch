@@ -1,0 +1,102 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..a30c0ba52dc1f68d98a335f7f9cbb89a8e7f1386
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,96 @@
++# Hunt report: remote export submission under crashes and retries
++
++Scope: `app/remote_export.py::submit`, judged against the caller expectation
++in `app/export-contract.md`: a result with `durable=true` means the
++submission survives a process restart and has no duplicate effects. I
++stopped after this one submission path.
++
++## Result
++
++**No implementation bug is confirmed.** The behavior that matters depends
++entirely on `export_transport_driver`, the production driver. That driver is
++not in this checkout and cannot be imported here
++(`ModuleNotFoundError: No module named 'export_transport_driver'`). Its
++`put()` acknowledgment and request-ID retry semantics are not documented, and
++there is no reachable production test endpoint. The suspected defects below
++are real risks in the code. Whether any of them breaks the promise depends on
++facts that are not available.
++
++No `tests/hunt_witness.py` was created. A witness has to exit nonzero exactly
++when the promise is broken. The only way to build one here is a locally
++invented `Client`, and `app/export-contract.md` says such a driver is not
++evidence about the production driver. A stub-based witness would make the
++pass/fail outcome reflect my assumptions, not the deployment.
++
++## Suspected defects (unconfirmed, conditional on driver semantics)
++
++1. **`durable: True` is asserted unconditionally after `put()`.**
++   `submit` ignores whatever `client.put(...)` returns. It reports
++   `durable: True` whenever `put` returns without raising.
++   - Breaks the promise if: `put` can return without raising when the write
++     was not durably committed. Examples: it returns a status or ack object
++     that reports failure, it acknowledges on enqueue or buffer rather than
++     on commit, or it is asynchronous.
++   - Holds if: `put` raises on every non-durable outcome and returns only
++     after a durable commit.
++   - Unknown: the return type and ack point of `put` are undocumented.
++
++2. **Duplicate effects on retry rely entirely on driver-side dedup by
++   `request_id`.** `submit` keeps no local record of submissions, so it has
++   no idempotency of its own. A crash after the remote side applies `put` but
++   before the caller sees the return value makes the caller retry with the
++   same `request_id`.
++   - Breaks the promise if: the driver or server does not dedup by
++     `request_id`, dedups only within a bounded window or process session, or
++     treats a retry after restart as a new effect.
++   - Holds if: the server deduplicates on `request_id` durably and without a
++     time limit.
++   - Unknown: the request-ID retry guarantee is undocumented.
++
++3. **Driver-internal retries are opaque.** `Client.from_deployment()` may
++   retry `put` internally, for example on a timeout after the server already
++   committed. Whether those retries reuse `request_id` as the idempotency key
++   decides whether duplicates can occur even without a process crash.
++   - Unknown, for the same reason as items 1 and 2.
++
++4. **A crash before `submit` returns leaves the caller with no durable
++   result.** This is correct as long as the caller retries with the same
++   `request_id`. That makes item 2 load-bearing. No callers of `submit` exist
++   in this checkout (repo-wide search for `remote_export` and `submit`), so I
++   could not check whether caller code reuses the request ID after a restart.
++
++## Governing-record conflict (reported, not resolved)
++
++`specs/GATE-local-only.md` says user data (notes, config, anything under
++`data/`) stays on the local machine: "No network sync, upload, or remote
++backup of user data, by any transport." `app/remote_export.py` sends an
++arbitrary `payload` to a remote deployment. If that payload is user data,
++this path breaks the gate whether or not the durability promise holds. I
++changed neither the gate nor the code. Resolving this needs a user decision:
++either amend the gate explicitly or remove or limit remote export.
++`specs/ARCH-app.md` also does not mention a remote export component.
++
++## Coverage
++
++| Area | Covered | How |
++|---|---|---|
++| `app/remote_export.py::submit` control flow | Yes | Read in full; the result does not depend on `put`'s return value |
++| `export_transport_driver.Client` (`from_deployment`, `put`) | **No** | Not installed and not in the repo; semantics undocumented |
++| Production endpoint behavior under crash and retry | **No** | No reachable endpoint in this environment |
++| Callers of `submit` and their request-ID reuse after restart | **No** | No callers in this checkout |
++| Records discovery (`specs/`) | Yes | ARCH-app, GATE-local-only, CLAIM-single-writer, SPEC-note-payload, REQ-import-source read. Only GATE-local-only bears on this path. CLAIM-single-writer is unaffected (`submit` does not write `data/`) |
++
++## Explicit limits
++
++- No statement here about the production driver's behavior is evidence. Every
++  defect above is conditional.
++- To confirm or rule out items 1–3, one of these is needed: the production
++  driver's documented ack and idempotency contract, the driver package
++  itself, or access to a production-equivalent test endpoint where a
++  fault-injection run can kill the process after `put` is sent and before it
++  returns, then retry.
++
++## Files changed
++
++Only this report was added. Product code, `specs/`, and existing evidence are
++unchanged. `tests/hunt_witness.py` was not created, for the reason given above.

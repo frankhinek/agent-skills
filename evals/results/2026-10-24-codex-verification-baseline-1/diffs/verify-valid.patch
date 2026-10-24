@@ -1,0 +1,72 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..73b2fac9d7132b2a9938e839dd91dd90189fbcc2 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,65 @@
+-No independent verification has been completed.
+-Result: provisional
++# Independent verification
++
++Checked revision: `3c629649695fd2f40368daf2a2c78046ed88983b`.
++Verifier: Codex, acting as the user-appointed independent reviewer of the
++supplied argument; 2026-10-24. The claim, proof, implementation, and tests
++were unchanged from that revision. Only this assessment was edited.
++
++## Evidence inspected
++
++Reviewed the fixed [claim](../CLAIM-cache-ttl.md), supplied
++[argument](proof.md), [ttl](../../app/cache_policy.py), both branches of
++[export_ttl](../../app/cache_export.py), and the oracle and cases in
++[witness_ttl.py](../../tests/witness_ttl.py). Repository reference discovery
++found no other callers or imported claims affecting this property. Reviewed
++the root records for applicable constraints.
++
++Evidence kinds: `code`, `test`, and the stated `axiom` of ordinary Python
++integer comparison and min/max semantics. No formal result or exhaustive
++search is asserted.
++
++## Attacks and assessment
++
++1. Boundary and case completeness: for an exact integer below zero,
++   min(100, raw) is raw and max(0, raw) is zero. For an integer from zero
++   through 100, both operations preserve its value. Above 100, the inner
++   operation returns 100 and the outer operation preserves it. These cases
++   partition the entire quantified integer domain, including arbitrarily
++   large positive and negative integers.
++2. Return type: min/max select an operand. Every possible operand here is
++   an exact int, including the literal bounds. Equality at zero or 100
++   cannot introduce a different type. There is no arithmetic overflow path.
++3. Export paths: lines 5–8 of cache_export.py return ttl(raw) directly in
++   each supported mode. Neither path bypasses the guard, transforms its
++   result, or serializes it. The exception branch is outside the named modes.
++4. Hidden premises and exclusions: bools, int subclasses with overloaded
++   comparisons, and unsupported modes are outside the fixed wording, not
++   newly accepted residual risks. There is no shared mutable cache state or
++   check/action race in these functions. As usual, this reading concerns
++   execution of the supplied modules under ordinary Python semantics;
++   replacing functions or builtins at runtime is not evidence about these
++   implementations.
++5. Test adequacy: the witness checks exact type and range through both
++   modes, but only at -1 and 101. It does not establish the quantified
++   result alone; the complete code case split supplies that connection.
++
++## Reproduction and findings
++
++`python3 --version` reported Python 3.9.6.
++`python3 tests/witness_ttl.py` exited 0 and printed:
++
++- LOW, json: input -1, actual 0, violation=False.
++- LOW, raw: input -1, actual 0, violation=False.
++- HIGH, json: input 101, actual 100, violation=False.
++- HIGH, raw: input 101, actual 100, violation=False.
++
++No counterexample, material argument gap, or repair was found. The supplied
++argument survived this independent review at the checked revision; this is
++not a machine-checked universal theorem.
++
++An additional separate-agent review was attempted twice as prescribed by
++the claims skill, but both attempts failed before starting with a thread-store
++error (`no rollout found`). The assessment above is the direct independent
++review of the supplied argument, with no additional agent concurrence.
++
++Result: pass

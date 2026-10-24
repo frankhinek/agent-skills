@@ -1,0 +1,189 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..50c19449363e8cd2adb3394935b8093f062f24f4
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,69 @@
++# Export acceptance and restart recovery hunt
++
++Date: 2026-10-24. Source revision: `dbfe2590f87964dae5c5b437db11c6c2cb29868f`.
++
++## Findings
++
++No implementation bug found within the supported operation and recovery path.
++This is a bounded hunt, not a proof of all executions.
++
++The oracle is [app/export-contract.md](app/export-contract.md): accepted jobs
++eventually produce their fixed payload after recovery, with one worker,
++non-overlapping requests, durable committed SQLite transactions, and retries
++after transient failures. Storage loss and database corruption are excluded.
++
++In [Queue.submit](app/export_queue.py), the job transaction commits before
++acceptance returns (lines 22–26). An interruption before commit does not create
++an acknowledged obligation; an interruption after commit retains the job even
++if the caller has not received the response. Same-payload resubmission does not
++replace or reset an existing job.
++
++`Queue.work` commits `running` before the instrumentation hook (lines 34–37).
++The job remains selectable even without restart; `Queue.recover` also resets
++`running` to `pending` on construction (lines 17–20). Result insertion and the
++`done` transition share one transaction (lines 38–40): interruption before its
++commit leaves retryable work, while interruption after commit leaves a result
++and a completed job excluded from selection. No process-local slot or separate
++acknowledgment can discard the durable obligation in this path.
++
++## Executable coverage
++
++Run: `python3 tests/hunt_witness.py`.
++
++Observed: **6 tests passed; exit status 0**. The witness uses production `Queue`
++with temporary local databases. Assertions or unexpected errors yield nonzero.
++Subprocess crashes use `os._exit(73)` without closing the connection, and the
++parent checks that exact exit code before examining recovery.
++
++| Check | Boundary and oracle |
++| --- | --- |
++| Accepted job | Exit immediately after acceptance; reopen and produce payload. |
++| Interrupted claim | Exit at the documented hook; confirm durable `running`, reopen and finish. |
++| Interrupted output transaction | SQLite trace callback exits before the `done` update (after result insertion), and separately before COMMIT (after both writes); reopen, finish, retain exactly one result. |
++| Completed job | Exit after successful work; reopen, retain result, perform no further work. |
++| Transient output failure | Temporary SQLite trigger aborts result insertion; remove fault, retry in the same process, then restart and confirm completion. |
++| Duplicate submission | Repeat the same ID and payload before and after completion; retain one result without new work. |
++
++The output-failure trigger checks rollback and retry control flow; it does not
++simulate every operating-system I/O error. The crash checks cover selected real
++SQL boundaries, not every instruction or recovery interruption. Recovery's reset
++is itself transactional: an interrupted reset leaves either `running` or
++`pending`, both selectable by the worker. This last observation is code inspection,
++not a separate crash test. Eventual completion assumes the contract's recovered
++environment and repeated work calls; the tests use finite retry bounds.
++
++## Scope and preservation
++
++Reviewed `Queue.__init__`, `submit`, `work`, `recover`, `result`, and their SQLite
++state transitions. Checked root record applicability and references: local-only
++storage applies; the note-payload specification concerns the separate
++`handler`/`exporter` path; import metadata requirements do not govern this queue.
++The single-writer claim concerns `data/` and `Store.write`; this hunt uses separate
++temporary queue databases and does not verify that claim or read its existing
++proof/verification reports. No queue-specific governing record was found.
++
++Stopped after this operation and recovery path. Concurrent workers, overlapping
++requests, changing a job's payload, storage loss, database corruption, unrelated
++note operations, and claim verification were not investigated. Product code,
++governing records, and existing evidence were preserved. Only this report and
++`tests/hunt_witness.py` were added.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..c0f8f8c66b7d3769f3c0015fa99a27036ab218b8
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,108 @@
++"""Bounded contract checks; run with python3 tests/hunt_witness.py."""
++import os
++from pathlib import Path
++import sqlite3
++import subprocess
++import sys
++import tempfile
++import unittest
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT))
++from app.export_queue import Queue
++
++
++class DurableExport(unittest.TestCase):
++    def setUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self.tmp.cleanup)
++        self.path = str(Path(self.tmp.name) / "jobs.sqlite")
++
++    def child(self, body):
++        script = (
++            "import os, sys\nfrom app.export_queue import Queue\n"
++            "q = Queue(sys.argv[1])\n" + body
++        )
++        result = subprocess.run(
++            [sys.executable, "-c", script, self.path], cwd=ROOT,
++            capture_output=True, text=True, timeout=10,
++        )
++        self.assertEqual(result.returncode, 73, result.stderr)
++
++    def drain(self):
++        q = Queue(self.path)
++        try:
++            for _ in range(5):
++                if not q.work():
++                    break
++            self.assertEqual(q.result("a"), "payload")
++            self.assertFalse(q.work())
++            self.assertEqual(q.db.execute(
++                "SELECT state FROM jobs WHERE id='a'"
++            ).fetchone(), ("done",))
++            self.assertEqual(q.db.execute(
++                "SELECT count(*) FROM results WHERE id='a'"
++            ).fetchone(), (1,))
++        finally:
++            q.close()
++
++    def test_accepted_survives_process_exit(self):
++        self.child("assert q.submit('a', 'payload')['accepted']\nos._exit(73)\n")
++        self.drain()
++
++    def test_interrupted_claim_restarts(self):
++        self.child("q.submit('a', 'payload')\nq.work(after_claim=lambda: os._exit(73))\n")
++        with sqlite3.connect(self.path) as db:
++            self.assertEqual(db.execute("SELECT state FROM jobs").fetchone(), ("running",))
++        self.drain()
++
++    def test_output_transaction_interruption(self):
++        # Real process exits after INSERT or after UPDATE, before their commit.
++        for boundary in ("UPDATE jobs SET state = 'done'", "COMMIT"):
++            with self.subTest(boundary=boundary):
++                for suffix in ("", "-journal", "-wal", "-shm"):
++                    Path(self.path + suffix).unlink(missing_ok=True)
++                self.child(
++                    "q.submit('a', 'payload')\n"
++                    "def arm():\n"
++                    "    def trace(sql):\n"
++                    f"        if sql.startswith({boundary!r}): os._exit(73)\n"
++                    "    q.db.set_trace_callback(trace)\n"
++                    "q.work(after_claim=arm)\n"
++                )
++                self.drain()
++
++    def test_completed_survives_restart(self):
++        self.child("q.submit('a', 'payload')\nassert q.work()\nos._exit(73)\n")
++        self.drain()
++
++    def test_transient_write_failure_then_retry(self):
++        q = Queue(self.path)
++        try:
++            q.submit("a", "payload")
++            q.db.execute("CREATE TEMP TRIGGER fail_output BEFORE INSERT ON results "
++                         "BEGIN SELECT RAISE(ABORT, 'transient failure'); END")
++            with self.assertRaises(sqlite3.DatabaseError):
++                q.work()
++            q.db.execute("DROP TRIGGER fail_output")
++            self.assertTrue(q.work())
++            self.assertEqual(q.result("a"), "payload")
++        finally:
++            q.close()
++        self.drain()
++
++    def test_same_payload_resubmission(self):
++        q = Queue(self.path)
++        try:
++            q.submit("a", "payload")
++            q.submit("a", "payload")
++            self.assertTrue(q.work())
++            q.submit("a", "payload")
++            self.assertFalse(q.work())
++        finally:
++            q.close()
++        self.drain()
++
++
++if __name__ == "__main__":
++    unittest.main()

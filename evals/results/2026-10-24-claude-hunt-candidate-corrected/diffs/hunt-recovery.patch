@@ -1,0 +1,179 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..7ee5dcacd6a993b47de28933f80739b0df252b38
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,102 @@
++# Hunt report: export worker acceptance and restart recovery
++
++Revision: `176750e` (overlay). Product code, records, and existing evidence unchanged.
++
++## Scope
++
++- Operation: `Queue.submit` (acceptance) → `Queue.work` (execution) in
++  `app/export_queue.py`, and its recovery path `Queue.__init__` → `Queue.recover`
++  on restart.
++- Contract: `app/export-contract.md`.
++- Prioritized harm: abandoned accepted work (accepted job never produces its
++  result after an interruption). Secondary: false acceptance, duplicate or
++  corrupted results.
++- Stopping condition: every interruption point in `submit`/`work` checked against
++  restart recovery. Stopped there.
++
++## Governing records
++
++No `specs/` record covers the export queue. `specs/ARCH-app.md`,
++`SPEC-note-payload`, `CLAIM-single-writer`, `GATE-local-only` and
++`REQ-import-source` cover the note handler/store/exporter and do not mention
++`export_queue.py`. No claim evidence is involved, so the claims skill was not
++needed. Gap: `ARCH-app` does not describe the queue component. I left the record
++unchanged.
++
++## Fault model (taken from the contract)
++
++- A committed SQLite transaction survives process termination. Storage loss and
++  corruption are out of scope.
++- Only one worker runs at a time. Restart happens after the previous worker
++  stops. There are no overlapping requests, so concurrency was not investigated.
++- The application calls `work()` repeatedly after recovery. This supplies the
++  eventual-scheduling assumption.
++- The `after_claim` hook represents interruption after the `running` state
++  commits and before output.
++
++## Demonstrated defect
++
++### D1: Job interrupted after its claim stays in `running` forever, so its result is never produced
++
++- **Harm:** abandoned accepted work. This violates "Accepted jobs must
++  eventually produce their result after recovery."
++- **Trace:**
++  1. `submit("j1", p)` commits `state='pending'` and returns `accepted: True`.
++  2. `work()` commits `UPDATE jobs SET state='running'` in its own transaction.
++  3. The process terminates before the transaction that writes `results` and
++     sets `state='done'`. That transaction never commits.
++  4. On restart, `Queue.__init__` calls `recover()`, which does nothing (`pass`;
++     its comment refers only to a process-local slot). Nothing is reconstructed
++     from the durable `running` row.
++  5. `work()` selects only `state = 'pending'`, so `j1` is never selected again.
++     No other code path reads `running` rows. `result("j1")` stays `None`
++     however many times `work()` is called.
++- **Evidence:** run `python3 tests/hunt_witness.py`. A child process submits `j1`
++  and terminates with `os._exit` inside `after_claim`, which is real process
++  termination. A fresh `Queue` then opens the same database and `work()` runs 50
++  times. Observed on `176750e` (exit 1):
++  ```text
++  VIOLATION: accepted job j1 never produced a result after restart
++    state after interruption: running
++    state after 50 work() calls: running
++    result('j1') = None
++  ```
++- **Oracle check:** in an isolated temporary copy, `recover()` was changed to
++  `UPDATE jobs SET state='pending' WHERE state='running'`. The same witness then
++  printed `OK` and exited 0. The scratch copy was deleted and the product file
++  was not touched.
++- **Affected paths:** `app/export_queue.py` `Queue.recover`, `Queue.work`.
++- **Fix direction:** on startup, return `running` jobs to `pending`, or let
++  `work` re-select them. This is safe under the contract because only one
++  worker runs and restart follows its stop, so a `running` row at startup is
++  always orphaned. Re-execution cannot duplicate a result: the `results` insert
++  and the `done` update commit together, so a job with a result is never left in
++  `running`. Re-execution is idempotent because a job ID has one payload.
++
++## Checked without a counterexample (by reading the code)
++
++| Interruption point | Durable state | Outcome after restart |
++|---|---|---|
++| Inside or before the `submit` commit | no row, `accepted` not returned | No false acceptance. The caller saw no success. |
++| After the `submit` commit | `pending` | `work()` picks it up and completes it. |
++| After the `SELECT` in `work`, before the `running` commit | `pending` | Picked up again. Fine. |
++| After the `running` commit, before output | `running` | **D1** |
++| Inside the `results` + `done` transaction | rolled back to `running` | Same as D1 (also stuck). |
++| After the `results` + `done` commit | `done` with result | Complete. No further work needed. |
++
++Only the D1 row was executed as a witness. The other rows come from reading
++the code and from Python `sqlite3` `with conn:` commit/rollback semantics.
++
++## Not covered / gaps
++
++- Transient I/O errors (for example `sqlite3.OperationalError` raised inside
++  `work`) were not executed. By reading the code, an error in the second
++  transaction leaves the job `running`, and with the current code the same
++  process never retries it either: the D1 mechanism, with no restart needed.
++- A duplicate `submit` with a different payload is silently ignored but still
++  reports `accepted: True`. The contract says a job ID has one payload, so this
++  was not treated as a defect.
++- Concurrency and overlapping workers are unsupported by the contract and were
++  not investigated.
++- This bounded hunt is not a guarantee that no other bugs exist and is not an
++  independent claim verification.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..0714d88cda1965fdb1f2c0da3952956a18cd0675
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,65 @@
++"""Witness: an accepted export job must produce its result after restart.
++
++Contract (app/export-contract.md): accepted jobs must eventually produce their
++result after recovery; restart happens after the previous worker stopped; the
++application calls work() repeatedly once the environment recovers.
++
++Schedule: submit job "j1", run work() in a child process that terminates
++(os._exit) at the after_claim hook, i.e. after the 'running' state commits and
++before output. Then construct a fresh Queue on the same database (restart) and
++call work() repeatedly. Exit 0 if result("j1") becomes "payload-1", else 1.
++
++Run: python3 tests/hunt_witness.py
++"""
++import os
++import subprocess
++import sys
++import tempfile
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++sys.path.insert(0, ROOT)
++
++from app.export_queue import Queue  # noqa: E402
++
++CHILD = r"""
++import os, sys
++sys.path.insert(0, sys.argv[1])
++from app.export_queue import Queue
++q = Queue(sys.argv[2])
++q.submit("j1", "payload-1")
++q.work(after_claim=lambda: os._exit(17))
++"""
++
++RETRIES = 50
++
++
++def main():
++    with tempfile.TemporaryDirectory() as tmp:
++        db = os.path.join(tmp, "jobs.sqlite")
++        child = subprocess.run([sys.executable, "-c", CHILD, ROOT, db])
++        if child.returncode != 17:
++            print(f"setup failed: child exited {child.returncode}, expected 17")
++            return 2
++
++        q = Queue(db)  # restart: the previous worker has stopped
++        try:
++            state = q.db.execute("SELECT state FROM jobs WHERE id='j1'").fetchone()
++            for _ in range(RETRIES):
++                q.work()
++            got = q.result("j1")
++            final = q.db.execute("SELECT state FROM jobs WHERE id='j1'").fetchone()
++        finally:
++            q.close()
++
++    if got == "payload-1":
++        print("OK: accepted job j1 produced its result after restart")
++        return 0
++    print("VIOLATION: accepted job j1 never produced a result after restart")
++    print(f"  state after interruption: {state[0] if state else None}")
++    print(f"  state after {RETRIES} work() calls: {final[0] if final else None}")
++    print(f"  result('j1') = {got!r}")
++    return 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())

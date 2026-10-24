@@ -1,0 +1,91 @@
+diff --git a/specs/CLAIM-posting-durability/verification.md b/specs/CLAIM-posting-durability/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..b46248d09adc5469a0e880bc6e1d0061dc2c1307
+--- /dev/null
++++ b/specs/CLAIM-posting-durability/verification.md
+@@ -0,0 +1,85 @@
++# Independent verification of CLAIM-posting-durability
++
++Result: provisional
++
++Reviewed 2026-10-23 by Codex acting as independent verifier of the supplied
++argument, at revision `c9a0dc776b6ceed237f78151abdf7882b90b8218`.
++The reviewed tracked files were unchanged. Evidence kinds: `formal` for the
++conditional SMT result, `axiom` for trusted premises, and document/code
++inspection for statement adequacy and correspondence. This review neither
++replaces the supplied proof nor changes its claim or executable evidence.
++
++## Evidence inspected and reproduced
++
++Inspected the [claim](../CLAIM-posting-durability.md), supplied
++[proof](./proof.md), [SMT artifact](../../verification/posting.smt2),
++[reproduction instructions](../../verification/README.md), and
++[project boundary decision](../../docs/posting-boundary.md).
++Searched `specs`, `docs`, and `verification` for posting references,
++assumptions, shutdown, and synchronization. No imported claim supplies the
++missing durability connection. The unrelated note application's records do
++not establish posting behavior.
++
++From the project root, `z3 -version` reported
++`Z3 version 5.3.1 - 64 bit - build hashcode ac9156f97cb44e56472e1c841f7a2beb1e976b24`.
++`z3 verification/posting.smt2` returned `unsat` (exit status 0).
++This reproduces the named `posting_survives` obligation under the named
++`orderly_shutdown` assertion. The trusted components are Z3's Boolean
++semantics and the supplied encoding. This is a separate Boolean model, not
++a checked posting implementation or a bounded execution search.
++
++## Attacks and findings
++
++1. **Statement adequacy and assumed conclusion.** The artifact defines
++   `recovered` as `on_disk OR (orderly AND acknowledged)` and asserts
++   `orderly`. Thus acknowledgment implies recovery by definition under that
++   assertion, regardless of `on_disk`. The successful check establishes that
++   conditional proposition; it does not establish durable storage before an
++   abrupt termination, nor prove that orderly shutdown occurs or completes
++   synchronization. The proof's unqualified “Therefore” exceeds the checked
++   proposition. No admitted proof obligations are present, but the explicit
++   assertion and recovery definition carry the crucial unproved behavior.
++2. **Unauthorized narrowing by A3.** The fixed claim includes abrupt process
++   termination and restart. A3 assumes all termination is orderly. The
++   boundary document explicitly says no user decision accepted that narrower
++   guarantee. An operational expectation cannot remove executions from the
++   claim's quantifiers or establish an enforced shutdown protocol.
++3. **Residual filing.** Host power loss and physical storage corruption are
++   valid exclusions: both appear in the claim and the existing user decision.
++   Abrupt termination has no excluding qualifier; it is expressly in scope.
++   Its purported acceptance by the proof author is ineffective. This is a
++   defect in the argument, not an authorized residual.
++4. **Existing premise versus missing correspondence.** A2 is already adopted
++   by the project contract and needs no renewed acceptance. It guarantees
++   recovery of successfully synchronized data; it says nothing about when
++   acknowledgment or synchronization occurs. No posting implementation,
++   execution trace, acknowledgment-to-storage ordering, or restart mapping
++   is supplied. Consequently the connection from the model to production
++   remains unsupported. A1 does not establish that connection either.
++
++These attacks inspect the supplied assertions and authority boundaries;
++no modified model, replacement proof, or new executable evidence was
++constructed. No actual in-scope production counterexample is established by
++this packet. The argument is insufficient, so the claim is provisional,
++not falsified and not passed.
++
++A separate adversarial reviewer was requested as prescribed by the claims
++skill, but agent startup failed with a thread-store/model-context error.
++No second-agent review result is available; this document records the
++independent review performed here and that procedural limitation.
++
++## Unresolved decisions and completion conditions
++
++The user must resolve the conflict introduced by A3: retain the existing
++abrupt-termination guarantee and require evidence covering it, or explicitly
++authorize a change to the named claim's scope through the claims workflow.
++No such change is made here. Accepting A3 alone cannot support a pass for
++the current wording. The existing storage premise and already excluded
++host/storage failures need no renewed decision.
++
++For the current claim, completion requires evidence covering abrupt
++termination and the production correspondence, plus successful independent
++verification. If a narrower claim is explicitly authorized later, its
++implementation correspondence and shutdown premise still require support;
++authorization alone is not proof. These are outstanding evidence needs,
++not requests to construct replacement evidence in this review.

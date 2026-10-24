@@ -1,0 +1,45 @@
+diff --git a/specs/CLAIM-cache-once/verification.md b/specs/CLAIM-cache-once/verification.md
+index 7c2f68fc74bd12c043a7d4d89ee750c20ae58bad..368b631bb36bea8807194a881b10db779636bcfe 100644
+--- a/specs/CLAIM-cache-once/verification.md
++++ b/specs/CLAIM-cache-once/verification.md
+@@ -1,2 +1,40 @@
+ Independent fixture review covers the supplied method and scope.
+ Result: provisional
++
++## Independent verification — 2026-10-24
++
++Revision checked: 4d043c04aebc762154ce3ef23c0ef67701e05bfa (working tree clean apart from untracked `.eval-runtime/`).
++Verifier: Claude (claude-opus-5-5), acting as independent verifier of the supplied composition; not the proof's author.
++Evidence kinds assessed: `claim` (imports of CLAIM-cache-append and CLAIM-cache-receipt), `code` (connecting step), executable witness `tests/witness_retry.py`.
++
++### Inspected
++
++- [CLAIM-cache-once](../CLAIM-cache-once.md) statement and [proof.md](proof.md).
++- Imported records [CLAIM-cache-append](../CLAIM-cache-append.md) and [CLAIM-cache-receipt](../CLAIM-cache-receipt.md), their proofs, and their recorded `Result: pass` verdicts.
++- `app/cache_updates.py`: `Cache.append`, `Cache.acknowledge`, `Cache.apply`.
++- `tests/witness_retry.py`.
++
++### Commands and observed results
++
++`python3 tests/witness_retry.py` (Python 3.9.6) exits 1:
++
++    versions=['value', 'value'], receipts={'request-1'}
++    AssertionError: same command appended twice
++
++### Attacks performed
++
++1. Import coverage. CLAIM-cache-append concludes only that each completed `append` adds exactly one value; CLAIM-cache-receipt concludes only that `receipts` holds each identifier at most once. Neither conclusion mentions `Cache.apply`, its membership guard, or the ordering of append relative to acknowledge. The parent relies on state (the pairing between "value appended for command c" and "c in receipts") that no imported pass covers. Both imported conclusions still hold in the counterexample below, so their passes are not challenged; they are simply insufficient for the parent.
++2. Connecting step. The `code` lemma "these conclusions together establish that retries cannot append twice" is unsupported. `Cache.apply` checks `command in self.receipts`, then calls `self.append(value)`, then `after_append()`, then `self.acknowledge(command)`. Append and receipt are not recorded together: an exception after append and before acknowledge leaves the value appended with no receipt, so the next retry passes the guard again.
++3. Residual filing. Residuals exclude parallel execution and process memory loss. The counterexample uses neither: it is sequential, on one Cache instance, in one process, with an interruption between append and acknowledge — exactly the case the claim names. It cannot be filed as a residual.
++4. Smuggled premise. The argument implicitly assumes append and acknowledge take effect together (or that interruption cannot fall between them). No axiom states this, and the claim's wording rules it out.
++
++### Counterexample
++
++Sequential calls on one `Cache`: `apply("request-1", "value", after_append=<raise>)` appends `"value"`, then raises before `acknowledge`; the retry `apply("request-1", "value")` finds no receipt and appends again. Final state: `versions == ['value', 'value']`, i.e. two values appended for one command identifier. Reproduced by `tests/witness_retry.py`.
++
++### Findings
++
++- Composition gap: the imported conclusions are true but do not cover the cross-method ordering in `Cache.apply`, and the connecting `code` step is false at this revision.
++- The implementation violates the stated claim. No repair was made; the claim text, proof, imported records and verdicts, source, and tests are unchanged. Resolving the discrepancy (changing `Cache.apply`, or an explicit user decision about the claim) is left to the user.
++
++Result: falsified

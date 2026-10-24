@@ -18,7 +18,7 @@ HOSTILE_SYSTEM="$TEST_ROOT/hostile-system.gitconfig"
 HOSTILE_HOME="$TEST_ROOT/hostile-home"
 SAFE_URL="https://github.com/example/assurance-records-fixture"
 SECRET_SENTINEL="f05-secret-sentinel"
-SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
+SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep assurance-records-bug-hunt)
 
 unset BASH_ENV ENV
 unset -f git 2>/dev/null || true

@@ -1,0 +1,45 @@
+diff --git a/specs/CLAIM-delivery/verification.md b/specs/CLAIM-delivery/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..dfd03818b703a927258c9eb9b5fae60ac99e6145
+--- /dev/null
++++ b/specs/CLAIM-delivery/verification.md
+@@ -0,0 +1,39 @@
++Independent verification of the supplied proof, 2026-10-22, at revision
++8fd3d1ab48fbd4fba4acc4720674b8be1ea1db35 (Claude, independent verifier).
++
++Inspected: specs/CLAIM-delivery.md, specs/CLAIM-delivery/proof.md, the
++imported records CLAIM-exclusive and CLAIM-failover with their proofs and
++verifications, verification/deployments.md, verification/README.md, and
++verification/reservation.smt2.
++
++Attacks performed:
++
++- Imported-claim conclusions, read exactly. CLAIM-exclusive concludes
++  exclusivity only "when mode is single-worker"; CLAIM-failover concludes
++  recovery only "when mode is multi-worker". Both pass verdicts cover those
++  conditional conclusions, not unconditional ones.
++- Case split over deployments. verification/deployments.md states mode is
++  exactly one of single-worker or multi-worker. In a single-worker
++  deployment only exclusivity is imported; in a multi-worker deployment only
++  recovery is imported. No deployment satisfies both antecedents, so the
++  proof's final step ("Both records have pass verdicts, so this deployment
++  supplies both") does not follow. It drops the mode qualifiers and smuggles
++  a premise that one deployment satisfies both modes, which the stated
++  deployment model rules out.
++- Alternative support. reservation.smt2 was rerun with Z3 5.3.1 (both
++  obligations `unsat`). It discharges a 0..1 invariant for an abstract
++  reservation count only. It is not cited by the proof, is not tied to any
++  mode or to the worker API, and says nothing about recovery, so it does not
++  close the gap.
++- Falsification check. No production implementation or concrete delivery
++  counterexample is available (deployments.md), and the imported claims are
++  silent rather than contrary about the other mode. The gap is in the
++  argument; it does not show the claim false.
++
++Finding: the composition lemma is invalid. Lemmas 1 and 2 hold only under
++mutually exclusive modes, so the proof establishes neither conjunct of
++CLAIM-delivery for both modes together. Repair needs evidence of exclusivity
++in multi-worker mode or recovery in single-worker mode (or a deployment
++model where both imported antecedents hold); the claim wording is unchanged.
++
++Result: provisional

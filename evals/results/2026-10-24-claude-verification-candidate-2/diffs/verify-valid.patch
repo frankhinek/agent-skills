@@ -1,0 +1,59 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..0bafd5d33507436d323cb699c9bee27e8f8afdde 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,52 @@
+-No independent verification has been completed.
+-Result: provisional
++## Verification receipt
++
++- Revision checked: 3351ea7eaf32246593c4682584637d1ac0fb4f32 (clean apart from untracked `.eval-runtime/`).
++- Verifier: independent verifier agent (Claude Opus 5.5), fresh context; 2026-10-24.
++- Inputs: `specs/CLAIM-cache-ttl.md`, `proof.md`, `app/cache_policy.py`,
++  `app/cache_export.py`, `tests/witness_ttl.py`; repository grep for other
++  references to `ttl`, `cache_policy`, `cache_export` (none outside these files).
++- Evidence kinds: `code` (lemmas 1–2), `test` (lemma 3), `axiom` (Python
++  integer comparison and min/max semantics).
++
++### Fresh assessment
++
++- Lemma 1 (`app/cache_policy.py:2`): `max(0, min(100, raw))`. `min`/`max`
++  return one of their arguments, so with `type(raw) is int` every candidate is
++  an `int` and the result is an `int`; `min(100, raw) <= 100` and
++  `max(0, ·) >= 0` bound it to [0, 100]. Holds; the type-preservation step
++  rests on the stated min/max axiom.
++- Lemma 2 (`app/cache_export.py:5-8`): both `"json"` and `"raw"` return
++  `ttl(raw)` unmodified; other modes raise `ValueError` and are outside the
++  claim. Holds.
++- Lemma 3: `tests/witness_ttl.py` exercises -1 and 101 through both modes.
++  Finite boundary examples only; the proof correctly does not rely on them for
++  the quantified property.
++- Attacks performed: `bool` inputs (excluded by `type(raw) is int`); `int`
++  subclasses (excluded by the same quantifier); tie case `raw == 100` (returns
++  literal `100`, an `int`); arbitrarily large magnitudes (±10**40); shadowing or
++  rebinding of `ttl` elsewhere (no other references); residual filing (the
++  residual section excludes only inputs and modes the claim itself excludes —
++  no unauthorized narrowing); smuggled premises (none beyond the stated axiom).
++- Commands and observed results (Python 3.9.6):
++  - `python3 -I tests/witness_ttl.py` → exit 0; LOW→0 and HIGH→100 in both
++    modes, `violation=False` for all four cases.
++  - Ad hoc sampled sweep of `export_ttl` over integers -1000..1000 plus
++    ±10**40 in both modes, checking `type(result) is int and 0 <= result <= 100`
++    → no violations. Sampled, not exhaustive; supports, does not replace, the
++    code argument.
++- Material findings: none.
++
++### Reconciliation
++
++The prior `verification.md` was opened during input selection; it contained
++no findings, attacks, or counterexamples, only a note that no independent
++verification had been completed. No historical witnesses or counterexamples to
++reconcile; the existing witness was rerun above against the current revision.
++
++### Result
++
++The argument survived attack at the revision above. Weakest links remain the
++two `code` lemmas; promoting lemma 1 to a type or property-based test would
++shrink the written argument.
++
++Result: pass

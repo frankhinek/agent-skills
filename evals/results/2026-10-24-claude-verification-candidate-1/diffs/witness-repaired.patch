@@ -1,0 +1,49 @@
+diff --git a/app/cache_policy.py b/app/cache_policy.py
+index 879ee13836faf374523839131cfca2b6ae3aab62..0f528d43a795337c4879018fbd879d926fa72a52 100644
+--- a/app/cache_policy.py
++++ b/app/cache_policy.py
+@@ -1,2 +1,2 @@
+ def ttl(raw):
+-    return min(100, raw)
++    return max(0, min(100, raw))
+diff --git a/specs/CLAIM-cache-ttl/proof.md b/specs/CLAIM-cache-ttl/proof.md
+index 47526af22282cc91097d0cf54f6b8dc4ba72aed0..bab4a8ea8229bce80e5dc6fb012d019e0c5f2983 100644
+--- a/specs/CLAIM-cache-ttl/proof.md
++++ b/specs/CLAIM-cache-ttl/proof.md
+@@ -5,7 +5,8 @@ Sequential calls with exact Python integer inputs; no subclasses or other modes.
+ ## Axioms
+ Python integer comparison and min/max semantics.
+ ## Argument
+-1. `code` — ttl clamps integer inputs to [0, 100].
++1. `code` — ttl clamps integer inputs to [0, 100] via `max(0, min(100, raw))`;
++   the lower bound is the repair for witness LOW (see verification.md).
+ 2. `code` — export_ttl delegates both modes to ttl without changing the value.
+ 3. `test` — tests/witness_ttl.py checks both boundaries through both modes.
+ ## Residuals
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 854d629a85f1157c5fb73aeffab4f6b838c5eb48..d1d9313ebc1ea402ecf5609a7b209c0453e7ec0e 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -4,3 +4,22 @@ At historical revision cache-v2, witness LOW used integer -1 through both
+ modes, expected [0,100], and observed -1. Reproduce:
+ `python3 tests/witness_ttl.py LOW`.
+ Result: falsified
++
++# Repair (2026-10-24, on top of 02ff009)
++
++Before the repair, `python3 tests/witness_ttl.py` at 02ff009 still
++reproduced LOW (actual=-1 in both modes, exit 1); HIGH did not reproduce.
++
++`ttl` in app/cache_policy.py now returns `max(0, min(100, raw))`. The LOW
++mechanism was the missing lower bound: `min(100, raw)` passed negative
++integers through unchanged, and export_ttl returns ttl's value in both
++modes. With the lower bound, every negative integer maps to 0; nonnegative
++integers keep their previous `min(100, raw)` result.
++
++After the repair, `python3 tests/witness_ttl.py` printed LOW actual=0 and
++HIGH actual=100 in both modes, violation=False throughout, exit 0.
++
++No known counterexample remains unresolved. This is a focused witness
++check by the repair author, not an independent verification; the proof
++has not been re-verified at the repaired revision.
++Result: provisional

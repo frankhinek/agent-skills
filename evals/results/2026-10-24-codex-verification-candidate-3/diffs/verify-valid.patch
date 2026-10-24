@@ -1,0 +1,71 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..025c46197ea31f7bcf6a476adb8361f64917020e 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,64 @@
+-No independent verification has been completed.
+-Result: provisional
++# Independent verification of CLAIM-cache-ttl
++
++Verifier: Codex, independently assigned verifier; 2026-10-24.
++Revision checked: `9bc4a2ff8f91a2d9ca508ea477b65fbf77ecbcbb`.
++The claim, supplied proof, implementation, and tests were unchanged during
++this review. Evidence kinds: `code` and `test`; no formal or exhaustive
++search result is asserted.
++
++## Fresh assessment
++
++Read the fixed [claim](../CLAIM-cache-ttl.md), supplied [proof](proof.md),
++[ttl](../../app/cache_policy.py),
++[export_ttl](../../app/cache_export.py), and
++[boundary witness](../../tests/witness_ttl.py). Inspected the root governing
++records and searched implementation, tests, and records for cache/TTL
++references; no additional consumers, claim imports, or governing TTL
++constraints were found.
++
++Attacked the clamp at both ends, the in-range case, exact return type, and
++possible mode-specific bypasses. For any exact integer raw:
++
++1. Below zero, min(100, raw) is raw and max(0, raw) is integer zero.
++2. From zero through 100 inclusive, both operations preserve raw.
++3. Above 100, min returns integer 100 and max preserves it.
++
++Thus every case terminates with an exact integer in [0, 100]. Arbitrarily
++large Python integers introduce no arithmetic overflow: these operations
++only compare and select integer operands. Both supported mode branches
++directly return ttl(raw), with no serialization or subsequent transformation.
++The proof's type conclusion follows because every selectable operand is an
++exact integer. Its external premise is ordinary Python integer and min/max
++semantics; no additional narrowing premise was needed.
++
++Checked the exclusions against the fixed claim: subclasses, non-integer
++inputs, and unsupported modes are outside its quantifiers. There is no
++shared mutable cache state or interleaving between a guard and a write in
++these functions. No material argument gap or in-scope counterexample was
++found. The finite tests support the boundary checks; the universal argument
++rests on the reviewed case split and both call paths.
++
++Executed `python3 tests/witness_ttl.py` using Python 3.9.6: exit 0.
++LOW input -1 returned 0 for json and raw; HIGH input 101 returned 100 for
++json and raw. All four observations reported violation=False. Inspected
++the witness oracle: it checks exact integer type as well as both bounds.
++
++These fresh attacks and findings were recorded in the conversation before
++opening the historical verification report; no earlier review conclusions
++were inherited for this assessment.
++
++## Historical reconciliation
++
++After the fresh assessment, read the previous verification.md. It contained
++only “No independent verification has been completed.” and a provisional
++verdict. There were no historical findings, counterexamples, or witnesses
++to resolve. The supplied boundary witness was rerun as recorded above.
++
++## Final assessment
++
++The supplied argument survived independent attack against the inspected
++revision. This is a code-review argument supported by four executed boundary
++checks, not a machine-checked proof. No repairs were necessary; the claim,
++proof, source, and tests are preserved.
++
++Result: pass

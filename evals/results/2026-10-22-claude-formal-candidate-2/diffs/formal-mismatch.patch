@@ -1,0 +1,55 @@
+diff --git a/specs/CLAIM-score-export/verification.md b/specs/CLAIM-score-export/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ab8c739d5d8289a820e6b4b8d2474fc6dadf596
+--- /dev/null
++++ b/specs/CLAIM-score-export/verification.md
+@@ -0,0 +1,49 @@
++Verified at revision 22bdf9207f21bd11c6966781135161c05195cb4f, 2026-10-22,
++by an independent verifier agent (Claude Opus 5.5) acting on the supplied
++proof.md only; no replacement evidence was constructed.
++
++Evidence kinds: one `formal` lemma (the only lemma supplied).
++
++Commands and observed results, from the project root:
++
++- `z3 -version` → `Z3 version 5.3.1 - 64 bit` (matches verification/README.md)
++- `z3 verification/lower.smt2` → `unsat`, exit 0
++
++Inspected: specs/CLAIM-score-export.md, specs/CLAIM-score-export/proof.md,
++verification/lower.smt2, verification/README.md, app/score.py,
++app/score_export.py.
++
++Attacks and findings:
++
++1. Statement adequacy (material). The checked obligation `clamp_nonnegative`
++   asserts only `(not (<= 0 (clamp x)))`; its `unsat` establishes
++   `0 <= clamp(x)` for every mathematical integer x. It says nothing about
++   the upper bound `clamp(x) <= 100`. proof.md lemma 1 claims the result
++   establishes "between 0 and 100 inclusive"; that overstates the checked
++   proposition. No other lemma or obligation supplies the upper bound.
++2. Correspondence to production (material). `clamp` in lower.smt2 is a
++   separate hand-written model (nested `ite`), not a translation of
++   `clamp_score` (`min(100, max(0, raw))`). proof.md neither asserts nor
++   justifies equivalence of the model with the Python function, nor the
++   mapping from Python `int` (non-bool, non-subclass) to SMT `Int`.
++3. Exporter and JSON path (material). The claim concerns the `score` field
++   of `json.loads(export_score(raw))` and requires `type(score) is int`.
++   No lemma covers `export_score`, `json.dumps`/`json.loads` round-tripping,
++   or the result type; proof.md itself states nothing connects the bound
++   to the exporter.
++4. Axioms. The trusted base (Z3 integer semantics, the SMT encoding) is
++   stated; no admitted obligations or added axioms in the artifact. Not a
++   finding beyond item 2: trusting "the SMT encoding" does not substitute
++   for arguing its correspondence to production.
++5. Counterexample search. Reading the production code did not reveal a
++   counterexample to the claim within its stated domain, so the gaps above
++   are missing support, not falsification.
++
++Conclusion: the formal check reproduces, but it establishes only the lower bound
++of a separate model. The upper bound, model-to-production correspondence,
++and the exporter/JSON type connection are unsupported, so the supplied
++argument does not establish the claim. Repair needs: an upper-bound
++obligation, a justified correspondence between the SMT model and
++`clamp_score`, and a lemma covering `export_score` and the JSON round trip
++including `type(score) is int`.
++Result: provisional

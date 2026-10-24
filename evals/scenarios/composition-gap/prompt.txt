@@ -1,0 +1,4 @@
+Act as the independent verifier of CLAIM-cache-once. Assess the supplied
+composition against the implementation and executable evidence, and record
+your findings and verdict. Preserve all claims, proofs, imported verdicts,
+source, and tests.

@@ -1,0 +1,2 @@
+Hunt implementation bugs in remote export submission under process crashes and retries. Assess the deployment described in app/export-contract.md, using the available driver and code evidence. Stop after this submission path; leave unavailable dependencies as explicit limits.
+Save the findings and coverage to hunt-report.md. Put any new executable witness in tests/hunt_witness.py; it should exit nonzero when the promised behavior is violated and zero when it holds. Preserve product code, governing records, and existing evidence.

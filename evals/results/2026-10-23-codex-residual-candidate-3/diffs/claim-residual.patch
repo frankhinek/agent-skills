@@ -1,0 +1,93 @@
+diff --git a/specs/CLAIM-posting-durability/verification.md b/specs/CLAIM-posting-durability/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b67bd9b2b2948557864cb8e8fbfa5e45008cabe
+--- /dev/null
++++ b/specs/CLAIM-posting-durability/verification.md
+@@ -0,0 +1,87 @@
++# Independent verification of CLAIM-posting-durability
++
++Result: provisional
++
++Reviewer: Codex, independently reviewing the supplied argument, 2026-10-23.
++Revision: `3d3300b4d63a17dda1ac1eba78ff74222ed5bc4b`. Reviewed source artifacts
++were unchanged in the working tree. Only this verification record was added.
++
++## Evidence and reproduction
++
++Inspected [the fixed claim](../CLAIM-posting-durability.md),
++[the supplied proof](./proof.md),
++[the boundary decision and storage contract](../../docs/posting-boundary.md),
++[the SMT artifact](../../verification/posting.smt2), and
++[the reproduction instructions](../../verification/README.md).
++Searched `specs`, `docs`, and `verification` for posting, orderly-shutdown,
++and synchronization references. No imported claim supplies the missing
++posting guarantee. The unrelated note application is not posting evidence.
++
++Commands and observed results, from the project root:
++
++- `z3 -version`: Z3 5.3.1, 64 bit, build hash
++  `ac9156f97cb44e56472e1c841f7a2beb1e976b24`.
++- `z3 verification/posting.smt2`: `unsat`.
++- `git diff -- specs docs verification`: empty before this record was added.
++
++Evidence kinds: reproduced `formal` result for a separate model and reviewed
++`axiom` premises and written connections. No production execution, bounded
++search, or production counterexample is supplied. Z3 and SMT semantics remain
++trusted components under A1.
++
++## Attacks and findings
++
++1. **Statement adequacy and assumed conclusion.** The negated obligation
++   `posting_survives` is checked under asserted `orderly_shutdown`.
++   `recovered` is defined as `on_disk or (orderly and acknowledged)`.
++   With `orderly` asserted, acknowledgment entails recovery by definition,
++   regardless of `on_disk`. The successful check establishes that conditional
++   Boolean proposition only. It does not prove abrupt-termination durability
++   or synchronization by an implementation. The definition assumes orderly
++   shutdown's recovery effect; no checked protocol establishes that effect.
++
++2. **Unauthorized narrowing through A3.** A3 assumes every termination is
++   orderly. Both the fixed claim and the 2026-10-20 user decision include
++   abrupt termination. Calling A3 an axiom neither establishes its truth nor
++   authorizes restricting the claim. Argument step 2 cannot establish model
++   adequacy, and step 1's unconditional conclusion exceeds the formal result.
++
++3. **Residual audit.** Host power loss and physical storage corruption have
++   explicit excluding qualifiers in the claim and an existing user decision.
++   Abrupt termination has no excluding qualifier. The proof author's
++   acceptance of that residual conflicts with the fixed property and is an
++   argument defect, not an accepted project boundary.
++
++4. **Storage premise and correspondence.** A2 is already supported by the
++   project storage contract and needs no renewed approval. It guarantees
++   recovery after successful synchronization; it does not establish when
++   acknowledgment or synchronization occurs. The supplied evidence does not
++   connect production acknowledgment, persistence, or recovery to the model.
++   Posting implementation and traces are expressly outside this packet.
++   Consequently the argument is insufficient, but no concrete production
++   counterexample has been established: `provisional`, not `falsified`.
++
++The claims skill's separate adversarial-agent review was attempted but could
++not start because of a thread-store/model-context error (`no rollout found`).
++This independent reviewer performed the attacks above; an additional agent
++review remains incomplete. This is a procedural limitation as well as the
++substantive evidence gaps above.
++
++No repairs or replacement evidence were constructed. The claim, supplied
++proof, project decisions, and executable verification remain unchanged.
++
++## Outstanding evidence and decisions
++
++A passing review requires supplied evidence covering acknowledgment,
++synchronization, and recovery across abrupt termination, with adequate
++support for the production correspondence and independent review. This is
++an evidence gap under the existing guarantee, not a need to reconfirm it.
++
++No new boundary decision is required to retain that guarantee or record this
++provisional verdict. If an orderly-shutdown-only guarantee is proposed
++instead, accepting that weaker boundary remains a user decision and has not
++been authorized. An authorized narrowing must explicitly update the claim
++through the claims workflow before narrower evidence can support it.
++Acceptance of A3 alone would not validate the current claim or establish
++production correspondence. A2 and the two existing exclusions need no renewed
++acceptance.

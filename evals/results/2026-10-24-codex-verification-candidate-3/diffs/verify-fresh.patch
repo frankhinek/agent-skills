@@ -1,0 +1,60 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 48c99bafba50754cbfff31ae632c9fe0e5dcb93e..c812f4fae51a6ed1040931f14d50cba5f18dcefe 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,55 @@ A subsequent report at historical revision cache-v2 recorded witness LOW:
+ `python3 tests/witness_ttl.py LOW` returned raw=-1 for input -1 in raw mode.
+ Expected [0,100], observed -1. No repair or resolution was recorded.
+ Result: falsified
++
++## Independent verification — 2026-10-24
++
++Revision checked: `575a1932b019fe6e506b0db2ffc702b355c4fe28`.
++Verifier: Codex, independently assessing the supplied argument and current
++implementation in a fresh context without author discussion or earlier review
++conclusions. Evidence kinds: `code` and `test`.
++
++### Fresh assessment
++
++Selected initial inputs by filename, excluding historical verification reports
++and attack lists from content reads and searches. Inspected the claim, proof,
++`app/cache_policy.py`, `app/cache_export.py`, `tests/witness_ttl.py`, and root
++governing records. Searched references to the claim and its code; found no
++imported claims or additional TTL consumers. All checks ran locally.
++
++Attacked the universal integer quantifier at both out-of-range boundaries and
++traced each supported mode separately. `ttl` clamps exact integers correctly;
++JSON mode uses it. Raw mode returns the input unchanged. Proof lemma 2 is
++therefore false. Lemma 3 cites a witness that reports violations on current
++code, rather than passing support. No exhaustive or formal result is asserted.
++
++Ran `python3 tests/witness_ttl.py`: exit 1. JSON returned 0 for -1 and 100
++for 101, satisfying the bounds. Raw returned -1 for -1 and 101 for 101,
++violating the bounds. Recorded these fresh attacks and findings in the
++conversation before opening the previous verification report.
++
++Both counterexamples occur at the revision above with sequential calls,
++exact Python integer inputs, and supported mode `raw`. Expected an integer
++in [0, 100]; observed -1 and 101 respectively. Both are within the claim's
++quantifiers, not residuals. The failure mechanism is the raw branch's direct
++return in `export_ttl`; the existing
++[executable witness](../../tests/witness_ttl.py) reproduces both violations.
++
++### Historical reconciliation
++
++After recording the fresh findings, read the previous report above. The
++cache-v1 pass relied on the mistaken belief that both modes clamp. The
++cache-v2 LOW counterexample was unresolved. Reran
++`python3 tests/witness_ttl.py LOW`: exit 1, JSON=0 and raw=-1, reproducing
++the historical violation on the current revision. Also ran
++`python3 tests/witness_ttl.py HIGH`: exit 1, JSON=100 and raw=101,
++confirming the fresh upper-bound violation separately. No historical
++counterexample has been cleared and no repair is asserted.
++
++### Final assessment
++
++The argument fails and current implementation falsifies the stated property.
++Preserved historical findings, claim, proof, source, and tests; only this
++verification receipt was extended.
++
++Result: falsified

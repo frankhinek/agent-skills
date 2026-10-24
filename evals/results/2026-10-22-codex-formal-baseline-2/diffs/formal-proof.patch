@@ -1,0 +1,116 @@
+diff --git a/specs/CLAIM-score-export/proof.md b/specs/CLAIM-score-export/proof.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..39771134c0ac8122b2d106cd123976b8b728b131
+--- /dev/null
++++ b/specs/CLAIM-score-export/proof.md
+@@ -0,0 +1,110 @@
++# Proof for CLAIM-score-export
++
++## Scope
++
++This derivation supports the unchanged property in
++[CLAIM-score-export](../CLAIM-score-export.md). It reads
++[`clamp_score`](../../app/score.py),
++[`export_score`](../../app/score_export.py), the symbolic obligation in
++[`clamp.smt2`](../../verification/clamp.smt2), and its
++[execution instructions](../../verification/README.md).
++Sources were checked at revision `e288a1f537b95d9768ffa1829d1439882cb9aa78`.
++This is an author's derivation, not an independent verification verdict.
++
++## Model and quantifiers
++
++For every Python value `raw` satisfying `type(raw) is int`, consider a call
++to `export_score(raw)` that returns normally. Let `result` be its returned
++JSON string and `score = json.loads(result)["score"]`, using the standard
++decoder defaults. The required predicate is
++`type(score) is int and 0 <= score <= 100`.
++
++Map exact Python integers to mathematical integers by their value. The
++SMT variable `x : Int` ranges over that entire mathematical domain; there
++is no finite input enumeration. The model has no mutable application state,
++persistence, or concurrent actors. Each call constructs its own dictionary.
++The conclusion concerns the decoded value, not a durable storage predicate.
++
++## Axioms
++
++- Python exact integers have mathematical integer ordering without fixed-width
++  overflow. Integer literals here are exact integers. Built-in `min` and
++  `max` return a selected argument according to that ordering.
++- Standard Python `json.dumps` serializes an exact integer as a JSON integer
++  token, and default `json.loads` decodes that token as an exact Python
++  `int`. The string key `score` survives the object round trip.
++- Python execution and the standard library obey those semantics. The
++  referenced functions, built-ins, module bindings, and JSON functions are
++  not replaced or altered during execution. This is the ordinary execution
++  model of these source files, not protection against runtime code injection.
++- Z3 5.3.1 and its QF_LIA semantics are trusted to report satisfiability
++  correctly; the SMT parser, obligation text, and solver executable form
++  part of the trusted base. The obligation is not generated from Python,
++  so its correspondence to production is established by reading below.
++
++## Argument
++
++1. **Exact integer preservation (`code`, relying on the Python axioms).**
++   In `clamp_score`, both arguments to `max(0, raw)` are exact integers;
++   its selected result is therefore an exact integer. Both arguments to
++   the outer `min(100, ...)` are consequently exact integers too. Its
++   selected result remains an exact integer. This is a dynamic argument,
++   not a compiler-enforced type guarantee.
++
++2. **Production/model correspondence (`code`).** For an integer `x < 0`,
++   the inner maximum is 0 and the outer minimum is 0. For `0 <= x <= 100`,
++   both operations preserve `x`. For `x > 100`, the inner maximum is `x`
++   and the outer minimum is 100. These exhaustive, disjoint mathematical
++   cases give exactly the nested `ite` definition of `clamp` in
++   `clamp.smt2`, including both endpoints. No finite case list is assumed.
++
++3. **Symbolic bounds (`search`, exhaustive symbolic integer obligation).**
++   `clamp_bounds` asserts the negation of
++   `0 <= clamp(x) <= 100` for an unconstrained integer `x`. On 2026-10-22,
++   `z3 -version` reported Z3 5.3.1, and
++   `z3 verification/clamp.smt2` returned `unsat`. There is no sampling,
++   seed, finite numeric bound, or configured search budget: the query
++   covers all mathematical integers under the solver axioms. The oracle
++   is satisfiability of the negated bounds. The named negative control
++   **constant-101** replaced only the `clamp` definition body with `101`
++   in memory and ran the same obligation through `z3 -in`; it returned
++   `sat`. To reproduce that control, substitute `101` for
++   `(ite (< x 0) 0 (ite (> x 100) 100 x))` in the solver input without
++   changing the stored artifact. This demonstrates rejection of an
++   out-of-bounds model, not automatic validation of the Python/model
++   correspondence. The solver result discharges the symbolic obligation;
++   it does not independently prove the complete export implementation.
++
++4. **Export and decode (`code`, relying on the JSON axioms).**
++   `export_score` places precisely the result of `clamp_score(raw)` under
++   the literal key `score` and returns `json.dumps` of that dictionary.
++   Lemmas 1–3 give an exact integer in `[0, 100]` before serialization.
++   The JSON axioms preserve both that value and its exact integer type
++   on default decoding. Thus every normally returning call in the claim's
++   input domain satisfies the stated predicate.
++
++An additional integration smoke check on Python 3.12.12 passed for
++`[-10**1000, -1, 0, 1, 99, 100, 101, 10**1000]`, asserting the exact type
++and bounds after `json.loads(export_score(raw))`. These eight sampled
++inputs supplement the derivation; they do not establish its universal
++quantifier and are not a committed regression test.
++
++## Residuals
++
++Booleans and integer subclasses are explicitly outside the claim's input
++domain, as are other input types. Calls that raise or never return are
++outside its conditional conclusion. Custom JSON decoder hooks and runtime
++replacement of the implementation or standard functions are outside the
++standard execution model stated above. No ordinary exact-integer input,
++including arbitrarily large positive or negative values, is excluded.
++
++## Weakest links
++
++The Python-to-SMT correspondence and the JSON/type bridge rely on local
++reading and language/library axioms. The existing solver obligation checks
++only mathematical bounds, so a change to export wiring or Python clamp
++logic need not make it fail. A committed integration regression check and
++an automated correspondence check would strengthen those links. Solver
++correctness remains trusted. Recheck this derivation and rerun the solver
++and negative control when any cited source, model, or trusted execution
++assumption changes.

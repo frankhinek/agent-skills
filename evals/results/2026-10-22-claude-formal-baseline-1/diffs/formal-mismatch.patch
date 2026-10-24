@@ -1,0 +1,50 @@
+diff --git a/specs/CLAIM-score-export/verification.md b/specs/CLAIM-score-export/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..724fbebfdf7dd359d3b362195745f75dd2b0ccca
+--- /dev/null
++++ b/specs/CLAIM-score-export/verification.md
+@@ -0,0 +1,44 @@
++Verified at revision 2f1493364bded74fd3a7133bb227f91452d0939a, 2026-10-22,
++by an independent verifier agent (Claude Opus 5.5) that did not write the proof.
++
++Inspected: specs/CLAIM-score-export.md, specs/CLAIM-score-export/proof.md,
++app/score.py, app/score_export.py, verification/lower.smt2,
++verification/README.md.
++
++Reproduction: `z3 -version` reports Z3 5.3.1; `z3 verification/lower.smt2`
++prints `unsat`. The single formal obligation, clamp_nonnegative, holds.
++
++Attacks and findings:
++
++1. Missing upper bound (material). lower.smt2 asserts only
++   `(not (<= 0 (clamp x)))`. Its unsat establishes `0 <= clamp(x)` and
++   nothing about `clamp(x) <= 100`. Lemma 1's statement that it "establishes
++   the exported score is between 0 and 100 inclusive" overstates the solver
++   result; half of the claimed bound has no evidence.
++2. No connection from the SMT model to the exporter (material). The SMT
++   `clamp` is a hand-written `ite` encoding; nothing in the argument shows it
++   corresponds to Python `clamp_score` (`min(100, max(0, raw))`), and nothing
++   covers `export_score`'s `json.dumps` followed by JSON decoding of the
++   `score` field. The proof itself states no other lemma supplies this link.
++   Treating the encoding as trusted in the Axioms does not discharge the
++   correspondence; it is a smuggled premise.
++3. Quantifier mismatch (material, open). The model ranges over mathematical
++   integers, but the claim ranges over every Python integer, which includes
++   `bool`. Running the current exporter: `export_score(True)` yields
++   `{"score": true}`, which decodes to Python `True` (type `bool`), not a JSON
++   number. Whether a decoded boolean counts as "an integer between 0 and 100"
++   is not settled by the claim's wording; the proof neither models nor files
++   this case as a residual. This needs the user's interpretation; if `bool`
++   is not an acceptable integer result, it is a counterexample inside the
++   claim's quantifier. Large magnitudes (±10**400) clamped correctly in a
++   spot check; that is an observation, not evidence for the proof.
++
++Conclusion: the supplied formal result does not establish the claim. No
++counterexample to the claim is recorded under the plain-integer reading, so
++the verdict is not `falsified`, but the argument does not survive attack and
++cannot support `pass`. The claim, proof, implementation, and SMT file were
++left unchanged; repair (an upper-bound obligation, a model-to-code
++correspondence lemma, and a decision on `bool` inputs) belongs to the proof
++author or the user.
++
++Result: provisional

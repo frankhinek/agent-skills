@@ -1,0 +1,8 @@
+diff --git a/app/message.py b/app/message.py
+index f6124d90fbaf981ba98069c49c5d233ccfe08a52..4f56429c288a6116fc77137a32e0c1315379a451 100644
+--- a/app/message.py
++++ b/app/message.py
+@@ -1,2 +1,2 @@
+ def pending_label():
+-    return "Pending"
++    return "Waiting"

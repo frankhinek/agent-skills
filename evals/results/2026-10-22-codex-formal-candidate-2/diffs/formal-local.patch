@@ -1,0 +1,15 @@
+diff --git a/verification/identity.smt2 b/verification/identity.smt2
+index f5f30d1b2500c1a825c961061853500648b59514..290137b6e583d182c57a0aa31a62586f919e2c70 100644
+--- a/verification/identity.smt2
++++ b/verification/identity.smt2
+@@ -1,5 +1,10 @@
+ (set-logic QF_LIA)
++; Guarantee: for every mathematical integer x, identity(x) = x, since
++; identity adds zero. This obligation concerns this SMT definition only.
+ (define-fun identity ((x Int)) Int (+ x 0))
+ (declare-const x Int)
++; identity_add_zero asks whether a counterexample exists; an unsat result
++; establishes the guarantee under the SMT integer and solver semantics.
++; See verification/README.md for the checker version and reproduction command.
+ (assert (! (not (= (identity x) x)) :named identity_add_zero))
+ (check-sat)

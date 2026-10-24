@@ -1,0 +1,5 @@
+(set-logic QF_LIA)
+(define-fun identity ((x Int)) Int (+ x 0))
+(declare-const x Int)
+(assert (! (not (= (identity x) x)) :named identity_add_zero))
+(check-sat)

@@ -1,0 +1,41 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 00d5da12032e79f5ed7d959d2c575f4b70113c55..867301cf8970ff01d06c8e1d3f202322693224ed 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -4,4 +4,36 @@ At historical revision cache-v2, witness HIGH replayed raw=101 in raw mode
+ through the production adapter and observed 101, outside [0,100].
+ Reproducer: `python3 tests/replay_ttl.py`. No repair is recorded. The current
+ local functions do not establish which adapter code the capture exercised.
++
++## Recheck on 2026-10-24
++
++Checkout: `fcec7f716baf1268f881d2d4f01e0de95dc5a713`.
++Verifier: Codex; focused reconciliation of the recorded HIGH witness, not
++an independent fresh verification of the full claim. The historical report
++was read before this recheck.
++
++`python3 tests/replay_ttl.py` exited 1 at the import with
++`ModuleNotFoundError: No module named 'cache_replay_driver'`. The production
++adapter replay did not run; this is unavailable evidence, not a reproduced
++violation or evidence of repair. The external driver was not installed or
++replaced, and the reproducer was preserved.
++
++Supplementary local check: `python3 tests/witness_ttl.py HIGH` exited 0:
++
++```text
++HIGH mode=json input=101 actual=100 violation=False
++HIGH mode=raw input=101 actual=100 violation=False
++```
++
++Code inspection of `app/cache_policy.py` and `app/cache_export.py` confirms
++that both local export paths call the clamp. This local check does not
++establish correspondence with the captured production adapter or resolve
++the historical counterexample. No repair or successful replay covering this
++checkout is established. The claim, proof, implementation, and witnesses
++remain unchanged. Resolving HIGH requires the original replay driver and
++a replay covering the current adapter, or reproducible run evidence that
++establishes that coverage and explains elimination of the failure mechanism.
++
++The historical in-scope counterexample remains unresolved; tooling
++unavailability does not clear it.
+ Result: falsified

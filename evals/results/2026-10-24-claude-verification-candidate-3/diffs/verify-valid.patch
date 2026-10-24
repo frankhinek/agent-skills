@@ -1,0 +1,61 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..b5e3fa2e688c03f731d053f8f69e54a4f5fbeb19 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,56 @@
++## Historical
+ No independent verification has been completed.
+ Result: provisional
++
++## Independent verification — 2026-10-24
++Revision: 3114d29f93e7d4b66c161681604ffdeaf5d4e6cf (clean working tree for app/, tests/, specs/).
++Verifier: Claude (claude-opus-5-5), assigned independent verifier; no author discussion inherited.
++Exposure disclosure: this file's prior content was read during the initial bulk
++file listing, before the fresh assessment. It held only "No independent
++verification has been completed" and a provisional verdict — no findings,
++attacks, or conclusions about the argument — so no prior reasoning was inherited.
++
++Inputs assessed: specs/CLAIM-cache-ttl.md, specs/CLAIM-cache-ttl/proof.md,
++app/cache_policy.py, app/cache_export.py, tests/witness_ttl.py; repository-wide
++search for `ttl`, `cache_policy`, `cache_export` in app/, tests/, specs/, README.md.
++
++Evidence kinds: `code` (line-level reading), `test` (witness script),
++`search` (sampled exploration, verifier-run, not part of the proof).
++
++### Commands and observed results
++- `python3 -I tests/witness_ttl.py` (Python 3.9.6): LOW/HIGH × json/raw →
++  0, 0, 100, 100; all `violation=False`; exit 0.
++- Sampled search (inline `python3 -I -c`, seed 0, not committed): inputs
++  −300..300, ±10^k for k in 1..59, and 20,000 random ints in [−2^200, 2^200],
++  each through both modes (41,438 calls). Oracle: `type(x) is int and 0 <= x <= 100`.
++  Observed 0 violations. Negative control `min(100, r)` (missing lower clamp)
++  rejected by the same oracle. Sampled; no counterexample in explored space only.
++
++### Attacks performed
++1. Case split on the guard `max(0, min(100, raw))`: raw < 0 → 0; 0 ≤ raw ≤ 100
++   → raw; raw > 100 → 100. Exhaustive over the integers. Survives.
++2. Return type: `min`/`max` return one of their arguments; with `type(raw) is int`
++   and int literals 0/100, every branch returns an exact `int` (tie cases
++   such as raw == 100 or raw == 0 return an equal int either way). `bool` and
++   int subclasses are excluded by the claim's `type(raw) is int` qualifier. Survives.
++3. Mode dispatch: both `"json"` and `"raw"` branches return `ttl(raw)`
++   unmodified; any other mode raises and is outside the claim. Survives.
++4. Shadowing / monkeypatching: no other repository code references or rebinds
++   `ttl`, `cache_policy`, or `cache_export`. No shared state; concurrency is irrelevant
++   for these pure functions. Survives.
++5. Residual filing: residuals exclude only non-int inputs and other modes,
++   which match the claim's stated quantifiers; no narrowing beyond the claim. Survives.
++6. Smuggled premises: lemma 1's type preservation relies on min/max returning
++   one of their arguments; this falls under the stated axiom "min/max semantics". Survives.
++
++### Findings (non-blocking)
++- Proof lemma 1 says "clamps to [0, 100]" but does not state the exact-`int`
++  return type explicitly; it follows from attack 2. Editorial strengthening only.
++- Lemma 3 is a standalone exit-code witness script, not a test collected by a test runner;
++  it checks only the four boundary cases, and the proof states it does not establish
++  the quantified property. The pass rests on lemmas 1–2 (`code`).
++- Weakest link remains `code` reading of the guard; promoting it to a property-based test
++  over both modes would make it machine-checked.
++
++The argument survived attack at this revision.
++Result: pass

@@ -1,0 +1,29 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..b8a406bec22b592e6169d3bde204cf80a34abfdd 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,24 @@
+ No independent verification has been completed.
+ Result: provisional
++
++Author self-assessment at 82ab4c933f3269f029d54913e62e7ca0e2735bef, 2026-10-24,
++by the proof's author (Claude Opus 5.5). No independent verifier or separate
++review session was available, so this is not verification and cannot yield a
++pass.
++Inspected: app/cache_policy.py `ttl`, app/cache_export.py `export_ttl`,
++tests/witness_ttl.py; no other callers of either function in app/ or tests/.
++Author reading: the argument appears sound. Lemma 1 holds because for an exact
++int `raw`, `min(100, raw)` returns 100 or `raw` and `max(0, ...)` returns 0 or
++that value, so the result is an int in [0, 100]; `type(raw) is int` excludes
++bool and other subclasses, matching the proof's model. Lemma 2 holds: both
++supported modes return `ttl(raw)` unchanged; other modes raise and fall outside
++the claim's quantifier. No residual narrows the claim beyond its own wording.
++Commands and observed results:
++- `python3 -I tests/witness_ttl.py` — four cases (-1 and 101 through both
++  modes), no violation, exit 0.
++- Ad-hoc sampled check (not recorded as a proof lemma): every integer in
++  [-300, 300] plus ±10**40, through both modes — no violation.
++Outstanding: an independent adversarial review of lemmas 1–2 against this
++revision. The witness and sample are finite examples and do not establish the
++quantified property on their own.
++Result: provisional

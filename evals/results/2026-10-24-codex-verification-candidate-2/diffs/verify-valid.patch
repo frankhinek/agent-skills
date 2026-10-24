@@ -1,0 +1,65 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..a8a83e71b6d754df2bf60f37de4afb749e1d823d 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,58 @@
+-No independent verification has been completed.
+-Result: provisional
++# Independent verification of CLAIM-cache-ttl
++
++Verifier: Codex, assigned independent verifier, 2026-10-24.
++Revision inspected: `15d9233bc05c9af9d6a6cbacda1d5ac31b4d6029`; no tracked
++implementation changes were present. The claim, supplied proof, source, and
++tests were preserved.
++
++## Fresh assessment
++
++Initial inputs were selected by filename, excluding historical verification
++reports and attack lists. Inspected the [claim](../CLAIM-cache-ttl.md),
++[supplied argument](proof.md), `export_ttl` in
++[cache_export.py](../../app/cache_export.py), `ttl` in
++[cache_policy.py](../../app/cache_policy.py), and the
++[boundary witness](../../tests/witness_ttl.py). Reviewed the root governing
++records and searched source, tests, and non-verification records for TTL
++references; no imported claim or additional TTL path was found.
++
++Evidence kinds: `code` and `test`; no formal result or exhaustive search is
++asserted. Attacks checked both mode branches for bypasses or postprocessing,
++both clamp boundaries, integer return type, and whether the argument silently
++excluded any exact integers.
++
++For an exact integer raw below 0, min(100, raw) is raw and max(0, raw) is
++the integer 0. For 0 <= raw <= 100, both operations return raw. For raw above
++100, they return the integer 100. These cases cover all exact Python integers,
++including arbitrarily large magnitudes. Each supported mode directly returns
++this result. The ordinary Python comparison and built-in min/max semantics
++stated in the proof suffice; neither branch introduces a further premise.
++Excluded subclasses, other input types, and unsupported modes match the fixed
++claim's qualifiers. No material argument defect or counterexample was found.
++
++Commands and observed results, using Python 3.9.6:
++
++- `python3 tests/witness_ttl.py`: exit 0; LOW (-1) returned 0 and HIGH (101)
++  returned 100 through both modes, all four violations False.
++- `python3 -c 'from app.cache_export import export_ttl; values = list(range(-1000,1001)) + [-10**1000,10**1000]; results = [export_ttl(v,m) for v in values for m in ("json","raw")]; assert all(type(r) is int and 0 <= r <= 100 for r in results); print("Additional finite checks:", len(results), "calls passed")'`:
++  exit 0, 4,006 calls passed. These finite examples supplement the case analysis;
++  they do not establish the universal quantifier by themselves.
++- An initial invocation with `python` failed because that executable was
++  unavailable; the successful checks above used `python3`.
++
++Fresh findings and test results were recorded in the conversation before
++opening the historical report.
++
++## Historical reconciliation and verdict
++
++The previous report said no independent verification had been completed and
++recorded `provisional`. It contained no counterexamples, attack findings, or
++unresolved witnesses. The supplied boundary witness was rerun successfully as
++reported above; there are no historical findings left unresolved.
++
++The supplied argument survived independent attack against the inspected
++revision. Support rests on the reviewed exhaustive integer case split and
++mode correspondence, with finite test corroboration. This verdict records
++that assessment, not a machine-checked universal proof.
++
++Result: pass

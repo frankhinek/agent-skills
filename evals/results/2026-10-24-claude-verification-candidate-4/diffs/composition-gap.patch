@@ -1,0 +1,69 @@
+diff --git a/specs/CLAIM-cache-once/verification.md b/specs/CLAIM-cache-once/verification.md
+index 7c2f68fc74bd12c043a7d4d89ee750c20ae58bad..78083219be3dd3674c43a1ce85247de0fc2b9248 100644
+--- a/specs/CLAIM-cache-once/verification.md
++++ b/specs/CLAIM-cache-once/verification.md
+@@ -1,2 +1,64 @@
+ Independent fixture review covers the supplied method and scope.
+ Result: provisional
++
++## Independent verification — 2026-10-24
++
++Verifier: independent verifier agent (Claude Opus 5.5), fresh context, no author discussion.
++Revision: 1db4771938349a4914d3ab522cb48953ad2e3c1a; `app/cache_updates.py` SHA-256
++`bc8a9b3fdcf09ac905d67500f21cfec77857a344f62c76367092d091b5bfdad3`.
++Evidence kinds: `claim` (two imports), `code` (connecting step), executable witness.
++Inspected: claim record, `proof.md`, imported claims and proofs, `Cache` in
++`app/cache_updates.py`, `tests/witness_retry.py`. Fresh findings were recorded
++in the verifier's conversation before historical reports were opened (a scratch
++file write was refused by the sandbox).
++
++### Fresh findings
++
++1. Counterexample within scope (falsifies the claim). `Cache.apply` checks
++   `command in self.receipts`, calls `append`, then `after_append`, then
++   `acknowledge`. These three calls are not atomic. An interruption between
++   `append` and `acknowledge` leaves the value in `versions` with no receipt.
++   A retry with the same command passes the guard and appends a second time.
++   - Conditions: one `Cache` instance, calls in sequence, in-process memory
++     kept. These are the claim's own quantifiers; the claim explicitly covers
++     interruption between append and acknowledge, so this run is not one of
++     the proof's residuals.
++   - Schedule: `apply("request-1", "value", after_append=<raise>)`, catch the
++     exception, then `apply("request-1", "value")`.
++   - Expected: at most one value appended for `request-1`.
++   - Observed: `versions=['value', 'value']`, `receipts={'request-1'}`.
++   - Witness: [`tests/witness_retry.py`](../../tests/witness_retry.py).
++     `python3 -I tests/witness_retry.py` (Python 3.9.6) failed with
++     `AssertionError: same command appended twice`, exit 1.
++2. The composition does not support the conclusion. I accepted both imported
++   claims exactly as worded: one value per completed append, and unique
++   receipts. The run in finding 1 still breaks the parent claim. Neither
++   import relates receipts to versions. The `code` connecting step ("these
++   conclusions together establish that retries cannot append twice") states
++   its conclusion without arguing it, and the conclusion is false. The
++   proof's paraphrase "atomic append" also says more than CLAIM-cache-append
++   does. That claim covers only completed calls and promises no
++   deduplication.
++3. The proof's stated weakest link ("cross-method ordering requires
++   inspection") is the step that fails, and the proof never inspected it.
++
++### Reconciliation with historical checks
++
++- Earlier receipt for this claim: `provisional` with no findings recorded.
++  Nothing in it conflicts with the findings above.
++- [CLAIM-cache-append](../CLAIM-cache-append/verification.md) and
++  [CLAIM-cache-receipt](../CLAIM-cache-receipt/verification.md): both `pass`
++  at the current source hash, so the imported support is current. The
++  receipt verification itself notes that it "establishes no relationship
++  between receipt membership and versions", which agrees with finding 2.
++  Neither imported pass is disputed, and their verdicts are unchanged. The
++  failure is in the composition, not in the imports.
++- I reran the witness against the current state (results above). The
++  counterexample stands.
++
++Unresolved: findings 1–2. Repairing this needs a code change that makes the
++append and the acknowledge durable as a unit, or that rechecks before a
++retry appends, plus a new connecting argument. Rewording the claim is not a
++repair.
++
++Result: falsified

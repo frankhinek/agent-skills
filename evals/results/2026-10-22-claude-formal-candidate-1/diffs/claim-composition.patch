@@ -1,0 +1,53 @@
+diff --git a/specs/CLAIM-delivery/verification.md b/specs/CLAIM-delivery/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..93edc9d4845357473b49cd4629a97b9d3822d4cb
+--- /dev/null
++++ b/specs/CLAIM-delivery/verification.md
+@@ -0,0 +1,47 @@
++Independent verification at revision df78ddd, 2026-10-22, by a Claude
++verifier agent (Opus 5.5) that did not write the proof.
++
++Evidence kinds: two `claim` imports and one unlabeled connecting step. No
++`formal`, `search`, or `test` evidence is cited.
++`verification/reservation.smt2` concerns an abstract reservation count, is not
++cited by the proof, and was not used.
++
++Inspected: `specs/CLAIM-delivery.md`, `specs/CLAIM-delivery/proof.md`,
++the imported records [CLAIM-exclusive](../CLAIM-exclusive.md) and
++[CLAIM-failover](../CLAIM-failover.md) with their proofs and verifications,
++and `verification/deployments.md`.
++
++Imported verdicts: both imports currently record `Result: pass`. I checked
++whether their scopes cover the state the parent relies on.
++
++Attacks and findings:
++
++1. The connecting step does not compose. The parent needs both conclusions
++   in the same deployment. CLAIM-exclusive holds only when mode is
++   single-worker. CLAIM-failover holds only when mode is multi-worker.
++   `verification/deployments.md` says the mode is exactly one of the two.
++   So no deployment falls under both imports' scopes. A single-worker
++   deployment has no supported recovery, and a multi-worker deployment has
++   no supported exclusivity. The step "both records have pass verdicts, so
++   this deployment supplies both" treats passing components as if they
++   established the parent. It is unlabeled and does not hold.
++2. The imports rest on a smuggled axiom and lack a correspondence argument.
++   Each import's pass is conditional on the axiom that an abstract worker
++   API supplies its property. The parent proof does not carry these axioms
++   forward. Nothing connects the abstract API to production code, and
++   `deployments.md` says the production implementation is unavailable.
++3. The scope is incomplete. The proof reads no code, configuration, or
++   deployment model beyond the mode premise. It has no residuals or
++   weakest-links sections.
++
++These findings show the claim is unsupported, not that it is false. No
++execution in which a key has two active workers, or an interrupted delivery
++is never resumed, has been exhibited. Without that counterexample, a
++`falsified` verdict is not warranted.
++
++Repair needed for a pass: provide evidence for the missing conjunct in each
++mode, or for both conjuncts in a single mode. For example, prove recovery
++under single-worker mode, or exclusivity under multi-worker mode. Also tie
++the abstract worker API to production code and carry its axioms forward.
++
++Result: provisional

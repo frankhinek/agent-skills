@@ -1,0 +1,59 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..f97473d4aaea9d0c418d2f525ff62cb6445bbadd 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,52 @@
+-No independent verification has been completed.
+-Result: provisional
++Revision: ae0cc66e72effc02b335297ec4c6a0ba94597d24 (clean tree apart from
++untracked .eval-runtime/). Independent verifier: Claude Opus 5.5 agent, 2026-10-24.
++Python 3.9.6.
++
++Evidence kinds: `code` (lemmas 1–2), `test` (lemma 3), plus a verifier-run
++sampled `search` that is not part of the proof.
++
++Inspected: the claim statement, proof.md, app/cache_policy.py,
++app/cache_export.py and tests/witness_ttl.py. A repository grep for `ttl`,
++`cache_policy` and `cache_export` found no other definitions or call paths.
++
++Attacks on the argument:
++- Lemma 1 (`max(0, min(100, raw))`): checked line by line. `min` returns
++  either 100 or `raw`, and `max` returns either 0 or that value. When values
++  tie, Python returns the first argument, which is an int literal. Every
++  possible return value is therefore an exact `int` in [0, 100]. With
++  `type(raw) is int`, neither call can raise, and arbitrarily large ints do
++  not overflow. The quantifier also excludes bool and other int subclasses,
++  matching the proof's "no subclasses" model, so the model does not narrow
++  the claim.
++- Lemma 2: both branches (`"json"`, `"raw"`) return `ttl(raw)` unchanged.
++  The `ValueError` branch is reached only by modes outside the claim. The
++  case split covers both supported modes completely.
++- Smuggled premises: the only trusted premises are Python integer
++  comparison and min/max semantics, and the proof states them. Runtime
++  monkeypatching of `ttl` is not a premise the argument uses.
++- Residual filing: "inputs and modes outside the stated quantifiers" adds no
++  exclusion beyond the claim's own wording, so nothing in scope is filed as
++  a residual.
++
++Commands and observed results:
++- `python3 -I tests/witness_ttl.py` exited 0. LOW (-1) gave 0 and HIGH (101)
++  gave 100 in both modes, with no violation.
++- Sampled search: every integer in [-2000, 2000], plus ±10**100, ±2**63,
++  and 0, 1, 99, 100, 101, in both modes (8022 calls). Oracle:
++  `type(r) is int and 0 <= r <= 100`. Result: 0 violations.
++- Negative control: replacing `ttl` with the identity in the imported
++  module makes the same oracle flag -1 and 101.
++
++Findings (non-blocking):
++- Lemma 3 is labeled `test`, but tests/witness_ttl.py is a standalone exit-code
++  script with no test runner or CI wiring. It only acts as a test if
++  something runs it. The proof's weakest-links section already says finite
++  examples do not establish the quantified property. The pass rests on
++  lemmas 1–2, which are short enough to read exhaustively.
++- A mode object with a pathological `__eq__` (for example, a str subclass
++  that never compares equal) would raise `ValueError`. Such a value is not
++  one of the supported modes the claim quantifies over, so it is not a
++  counterexample.
++
++The argument survived attack at this revision.
++Result: pass

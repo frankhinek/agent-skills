@@ -1,0 +1,138 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..17ef946f3d546711b19b9ae874a10633273f8a1d
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,132 @@
++# Bug hunt: remote export submission under crashes and retries
++
++Revision: `4e1a2613e363a25f8073ef03d2552aa4e7e501ce` (working tree clean apart from untracked harness state).
++
++## Scope and stopping condition
++
++- Surface: `app/remote_export.py` `submit(request_id, payload)` and the
++  deployment described in `app/export-contract.md`.
++- Promised behavior (from the contract): a response with `durable=true` means
++  the submission survives process restart without duplicate effects.
++- Harms prioritized: false success report (`durable=true` without an
++  established durable effect); duplicate effects on caller retry after a crash;
++  lost accepted work after a crash.
++- Stop: after this submission path's crash/retry cases are checked or blocked
++  by the unavailable driver. Other modules were read only for discovery.
++
++## Discovery
++
++- No `specs/` record names `remote_export`, `submit`, or the transport driver.
++  `ARCH-app` describes a purely local app and does not mention remote export.
++- No caller of `submit` exists in the checkout, so retry policy, request-ID
++  generation, and payload contents are unknown.
++- `GATE-local-only` forbids uploading user data "by any transport". Whether
++  `submit` sends user data depends on the unknown payload; see Q1.
++
++## Fault model
++
++Established from code:
++
++- `submit` builds a client with `Client.from_deployment()`, calls
++  `client.put(request_id, payload)`, ignores its return value, and returns the
++  constant `{"durable": True, "id": request_id}`.
++- `submit` writes no local state (no intent log, no outbox). Nothing survives
++  a crash on the caller side except what the caller itself kept.
++- `durable` is a literal, not derived from any acknowledgment or observation.
++  `id` echoes the input.
++
++Not established (driver not supplied, no endpoint reachable):
++
++- Whether a normal return from `put()` means the write is durably committed,
++  only accepted/queued, or something else.
++- Whether `put()` can report a non-durable or partial outcome through its
++  return value rather than by raising.
++- Whether the remote side deduplicates repeated `put()` calls by `request_id`,
++  and over what time window or restart scope.
++- Whether `put()` or `from_deployment()` retry internally.
++
++Crash points considered: before `put`; during `put` (request may or may not
++have reached the remote); after `put` returns but before `submit` returns;
++after `submit` returns. Caller retry with the same `request_id` is assumed to
++be the recovery path, because nothing else in the checkout performs recovery.
++
++## Findings
++
++No demonstrated implementation defect. Every harm below depends on driver
++semantics this environment cannot check.
++
++### C1 (conditional): `durable=true` is asserted, not established
++
++- Trace: `submit` returns `durable: True` whenever `put()` returns without
++  raising, whatever `put()` returns.
++- Harm if the premise holds: if a normal `put()` return can mean "accepted but
++  not yet durable", or if the acknowledgment lives in a return value that
++  `submit` throws away, then a remote-side crash/restart after `submit` returns
++  loses work the caller was told was durable. That is a false success report.
++- Premise needed: the production `put()` acknowledgment contract. Undocumented.
++- Fix direction, if confirmed: build `durable` from the driver's actual durable
++  acknowledgment (or raise when it is missing) instead of a literal.
++
++### C2 (conditional): duplicate effects on retry depend entirely on driver dedup
++
++- Trace: crash during `put` or between `put` returning and `submit` returning
++  → caller gets no response → caller retries `submit(request_id, payload)` →
++  a second `put` with the same `request_id`.
++- Harm if the premise fails: without remote deduplication by `request_id`
++  (one that also lasts across remote restarts), the effect happens twice,
++  which breaks "without duplicate effects".
++- Also unchecked: a retry that reuses a `request_id` with a *different* payload.
++  Whether the remote rejects it, keeps the first, or overwrites is unknown.
++- Premise needed: the driver's request-ID idempotency guarantee and its scope.
++  Undocumented. No caller exists, so it is also unknown whether callers reuse
++  `request_id` across retries at all.
++
++### C3 (conditional): accepted work after a caller crash
++
++- `submit` keeps no local record, so a caller crash before or during `put`
++  leaves no durable trace of the obligation. This is only a harm if the caller
++  had already acknowledged the export to someone else. No caller exists to
++  check this. The `durable` promise covers only successful returns, so this is
++  outside the contract as written.
++
++### Q1 (requirements question, not a code verdict): conflict with GATE-local-only
++
++`specs/GATE-local-only.md` forbids network upload of user data by any
++transport. `submit` sends `payload` to a remote endpoint. If `payload` carries
++notes, config, or anything under `data/`, the code conflicts with the gate.
++Nobody has resolved this conflict. I left the gate and the code unchanged.
++The owner should decide whether remote export is permitted and what it may
++carry.
++
++## Checks actually run
++
++- Read every product module, record, and the deployment contract.
++- `python3 -I -c "import export_transport_driver"` → `ModuleNotFoundError`.
++  `importlib.util.find_spec` → `None`. The driver is not installed here.
++- Searched `app/`, `specs/`, `external/`, `README.md` for `remote_export`,
++  `submit`, `durable`, `export_transport`. Found no callers and no governing
++  records.
++
++## Explicit limits
++
++- Production `export_transport_driver`: not supplied. Its `put()` acknowledgment
++  and request-ID retry semantics are undocumented. **C1 and C2 cannot be
++  confirmed or refuted.**
++- No reachable production or test endpoint, so no end-to-end crash/restart
++  experiment was possible.
++- No caller of `submit` exists, so caller retry policy and request-ID reuse
++  were not checked.
++- Not covered: concurrent submissions with the same `request_id`; cancellation
++  or timeout behavior inside `put()`; failure modes of `Client.from_deployment()`.
++
++## Witness
++
++I did not add `tests/hunt_witness.py`. The promised behavior depends on the
++production driver. A witness built on a stub driver would only test semantics
++I made up, and the contract says such a driver is not evidence. It would pass
++or fail depending on what I invented, so its exit code would not say whether
++the promise holds. A real witness needs the production driver, or a documented
++contract for it, plus an endpoint. With those it should: (1) call `submit`,
++restart the remote/process, and assert the effect exists exactly once; and
++(2) crash between `put` and the return, retry with the same `request_id`, and
++assert a single effect.

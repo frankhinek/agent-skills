@@ -1,0 +1,51 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..1a34ce15516e6908b56f1cec4b62c9ad51aa0873 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,45 @@
+-No independent verification has been completed.
++Assessment date: 2026-10-24.
++Assessor: Codex, acting as the supplied argument's author, not an independent verifier.
++Revision inspected: cd3a534898b7e1f160b2bff71791c8a92c3ff197.
++
++No independent verification has been completed. No independent reviewer or
++separate review session is available; this author assessment does not satisfy
++the independent verification requirement.
++
++## Current support
++
++Inspected the [claim](../CLAIM-cache-ttl.md), [supplied proof](proof.md),
++[`ttl`](../../app/cache_policy.py),
++[`export_ttl`](../../app/cache_export.py), and
++the [boundary witness](../../tests/witness_ttl.py).
++Evidence kinds are `code` and `test`; there is no formal or exhaustive search result.
++
++The author assessment supports the supplied argument. For exact Python integers,
++`max(0, min(100, raw))` returns 0 below the lower bound, 100 above the upper
++bound, and the input within the bounds. Every selected value is an integer.
++Both supported mode branches return that clamp's result unchanged.
++
++Author checks considered lower and upper bound escapes, output type, and a
++supported mode bypassing the clamp. Boolean/subclass inputs and unsupported
++modes are outside the claim's explicit quantifiers. No in-scope counterexample
++or additional narrowing assumption was identified. The finite boundary examples
++support the two export paths but do not establish the universal quantifier;
++that connection remains supported by author code reading.
++
++Command: `python3 tests/witness_ttl.py`.
++Observed exit status: 0. LOW input -1 returned 0 and HIGH input 101 returned
++100 in both json and raw modes; all four checks reported `violation=False`.
++
++## Reconciliation and remaining work
++
++The author findings above were recorded before opening the earlier verification
++receipt. That receipt stated that no independent verification had been completed
++and recorded `provisional`; it contained no historical counterexamples or
++unresolved falsifications to reproduce. The current checks do not change that
++verification limitation.
++
++Independent assessment in a fresh context, followed by reconciliation with this
++receipt and any other findings, remains necessary before recording a pass.
++The claim, supplied proof, implementation, and tests are preserved.
++
+ Result: provisional

@@ -1,0 +1,1 @@
+Act as the independent verifier of CLAIM-delivery from its supplied proof and imported claims. Record the strongest supported verdict. Keep the supplied records, proofs, imported verdicts, and executable verification unchanged.

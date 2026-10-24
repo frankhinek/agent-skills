@@ -1,0 +1,254 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..99c38331e741ce14dd1a9431dc571cc142cd3b77
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,104 @@
++# Export acceptance and restart recovery hunt
++
++Checked 2026-10-24 at baseline `c8ec161dbfbfdac209ecc6fdeb00c2094eb5ff51`
++using Python 3.9.6. Product code, governing records, and existing evidence were
++preserved. This report and `tests/hunt_witness.py` are the only additions.
++
++## Scope and authority
++
++The behavioral authority is `app/export-contract.md`: local SQLite, committed
++transactions survive process termination, one worker, sequential requests,
++eventual cessation of interruptions and repeated calls to work after recovery.
++Storage loss and corruption are excluded by that contract. Prioritized harms
++were abandoned accepted jobs, false acceptance, and incorrect repeated effects.
++The stopping boundary was acceptance and its direct work/restart paths, checked
++at pending, running, and completed states and during result transaction failure.
++
++Read `app/export_queue.py`, its contract, all root records, and the export and
++single-writer claim evidence. Searched app, tests, specs, README, and AGENTS for
++queue consumers and record references; no other Queue consumer or deployment
++configuration was found. The note handler/exporter and Store are separate from
++this queue. The local-only gate remains respected; unrelated source metadata
++requirements and note payload behavior are outside this hunt.
++
++This is a hunt informed by historical evidence, not a fresh independent claim
++verification. No claim statement, evidence, or verdict was changed.
++
++## Demonstrated unresolved defect
++
++**Accepted work is permanently ineligible after its running state commits.**
++`Queue.submit` commits pending work before returning acceptance
++(`app/export_queue.py:21–25`). `work` commits running separately from the result
++transaction (`:33–39`). Interruption between those commits leaves running with
++no result. Startup calls `recover`, which does nothing (`:15–19`), and work only
++selects pending rows (`:28–30`). Consequently, even after all faults stop and
++work is called repeatedly, this job cannot be selected. The durable missing
++eligibility, rather than a finite retry count alone, establishes abandonment.
++
++This is the existing falsification in
++`specs/CLAIM-export-recovery/verification.md`, reproduced by
++`python3 tests/known_loss.py` (exit 1, “accepted work abandoned after restart”).
++It remains unresolved.
++
++The new witness strengthens and extends the triggering coverage:
++
++- A child commits acceptance and running, then calls `os._exit(23)` at the
++  documented after-claim boundary. A new process connection sees the job still
++  running, three work calls produce no result, and work remains ineligible.
++- A temporary SQLite trigger aborts the done update after result insertion.
++  The result transaction rolls back, correctly removing its partial result,
++  but the earlier running commit survives. Removing the trigger and retrying,
++  both live and after reopening, still produces no result. This is a real SQLite
++  statement/transaction failure injection, not an actual disk I/O fault and not
++  proof of every SQLite I/O error's behavior.
++
++Both traces share the known missing recovery mechanism; they are not two new
++independent defects. A supported fix direction is to reconstruct incomplete
++running obligations on startup and make post-claim failures eligible for live
++retry as well, retaining atomic result/completion persistence. No repair was
++requested or made.
++
++## Executed coverage
++
++Run `python3 tests/hunt_witness.py`. It exits nonzero on violated expected
++behavior and zero if all six fixed cases hold. Current exit: **1**.
++
++| Case | Observed result |
++| --- | --- |
++| Abrupt exit after acceptance, before work | PASS: pending job completes after restart |
++| Abrupt exit after running commit | FAIL: accepted job abandoned |
++| Abrupt exit after completion | PASS: result survives, no further work |
++| Same ID and payload retried before/after completion | PASS: result retained, completed work not repeated |
++| Failed submission statement, then retry | PASS: exception instead of acceptance, no inserted job, retry completes |
++| Failed result transaction, then live retry/restart | FAIL: rollback is atomic but job remains abandoned |
++
++These are fixed concrete tests of real Queue entry points, not a generated or
++exhaustive search. Temporary databases and triggers are isolated and cleaned;
++the crash test uses a real process exit without connection cleanup. Unexpected
++execution errors also produce nonzero status. The saved command was rerun after
++the final witness edit. The environment lacks the `python` alias; use `python3`.
++
++## Additional findings and remaining gaps
++
++No additional distinct implementation defect was established within this
++bounded surface. In particular, conflicting reuse of a job ID is not enough
++to prove a new acceptance defect: code reading shows `INSERT OR IGNORE` returns
++accepted while retaining the original payload, and the contract says an ID has
++one payload throughout its lifetime. It does not specify rejection or response
++semantics for a conflicting payload. Treat any desired conflict error as a
++contract question, not an established violation; that input was not executed
++as part of this witness.
++
++The export recovery claim remains falsified by the original counterexample.
++The new transaction-failure route also exposes missing live retry recovery.
++Passing cases do not resolve either route or establish a claim pass.
++
++Not exercised: real disk-full/OS I/O failures, process termination inside a
++SQLite commit, failure during schema creation/startup, response loss after
++acceptance, or every possible transaction boundary. Commit atomicity and
++durability rely on the supplied SQLite deployment contract; the implementation
++also visibly groups result insertion and done update in one transaction. No
++bounded test here proves unbounded liveness independently of the code argument.
++Multiple workers, overlapping requests, corruption, storage loss, adversarial
++inputs, and the separate note-storage surface were outside this hunt. These
++gaps neither narrow the governing guarantee nor accept new residual risk.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..5158ae039289c7a78b274b82bc5b89bdfd364c5c
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,138 @@
++"""Fixed export-contract cases; exit 1 if any promised result is missing."""
++from pathlib import Path
++import os
++import sqlite3
++import subprocess
++import sys
++import tempfile
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from app.export_queue import Queue
++
++
++def child(path, boundary):
++    worker = Queue(path)
++    if not worker.submit("job-1", "hello")["accepted"]:
++        raise RuntimeError("submission not accepted")
++    if boundary == "running":
++        worker.work(after_claim=lambda: os._exit(23))
++    elif boundary == "done":
++        worker.work()
++    os._exit(0)
++
++
++def check_restart(boundary):
++    with tempfile.TemporaryDirectory() as scratch:
++        path = str(Path(scratch) / "jobs.db")
++        proc = subprocess.run([sys.executable, __file__, "child", path, boundary])
++        expected_exit = 23 if boundary == "running" else 0
++        if proc.returncode != expected_exit:
++            raise RuntimeError(f"child exit {proc.returncode}, expected {expected_exit}")
++        worker = Queue(path)
++        try:
++            for _ in range(3):
++                worker.work()
++            if worker.result("job-1") != "hello":
++                raise AssertionError(f"accepted job abandoned; rows={worker.db.execute('SELECT * FROM jobs').fetchall()}")
++            if worker.work() is not False:
++                raise AssertionError("completed job repeated")
++        finally:
++            worker.close()
++
++
++def check_retries():
++    with tempfile.TemporaryDirectory() as scratch:
++        worker = Queue(str(Path(scratch) / "jobs.db"))
++        try:
++            for _ in range(2):
++                if not worker.submit("job-1", "hello")["accepted"]:
++                    raise AssertionError("retry not accepted")
++            worker.work()
++            worker.submit("job-1", "hello")
++            if worker.work() or worker.result("job-1") != "hello":
++                raise AssertionError("same-payload retry changed completion")
++        finally:
++            worker.close()
++
++
++def check_transaction_failure():
++    # Inject a one-time SQLite statement failure, not an emulated OS I/O error.
++    with tempfile.TemporaryDirectory() as scratch:
++        path = str(Path(scratch) / "jobs.db")
++        worker = Queue(path)
++        try:
++            worker.submit("job-1", "hello")
++            worker.db.execute("""CREATE TEMP TRIGGER fail_done BEFORE UPDATE OF state ON jobs
++                WHEN NEW.state = 'done' BEGIN SELECT RAISE(ABORT, 'injected failure'); END""")
++            try:
++                worker.work()
++            except sqlite3.IntegrityError as exc:
++                if str(exc) != "injected failure":
++                    raise
++            else:
++                raise RuntimeError("fault injection did not execute")
++            if worker.result("job-1") is not None:
++                raise AssertionError("result transaction failed to roll back")
++            worker.db.execute("DROP TRIGGER fail_done")
++            for _ in range(3):
++                worker.work()
++            recovered_live = worker.result("job-1") == "hello"
++        finally:
++            worker.close()
++        worker = Queue(path)
++        try:
++            for _ in range(3):
++                worker.work()
++            if not recovered_live or worker.result("job-1") != "hello":
++                raise AssertionError("result transaction failure strands accepted job on retry/restart")
++        finally:
++            worker.close()
++
++
++def check_submission_failure():
++    with tempfile.TemporaryDirectory() as scratch:
++        worker = Queue(str(Path(scratch) / "jobs.db"))
++        try:
++            worker.db.execute("""CREATE TEMP TRIGGER fail_submit BEFORE INSERT ON jobs
++                BEGIN SELECT RAISE(ABORT, 'injected submission failure'); END""")
++            try:
++                worker.submit("job-1", "hello")
++            except sqlite3.IntegrityError as exc:
++                if str(exc) != "injected submission failure":
++                    raise
++            else:
++                raise AssertionError("failed insertion reported acceptance")
++            if worker.db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]:
++                raise AssertionError("failed submission persisted")
++            worker.db.execute("DROP TRIGGER fail_submit")
++            worker.submit("job-1", "hello")
++            worker.work()
++            if worker.result("job-1") != "hello":
++                raise AssertionError("submission retry did not complete")
++        finally:
++            worker.close()
++
++
++def main():
++    cases = [(f"restart-{boundary}", lambda b=boundary: check_restart(b))
++             for boundary in ("pending", "running", "done")]
++    cases += [("same-payload-retries", check_retries),
++              ("submission-failure-retry", check_submission_failure),
++              ("result-transaction-failure", check_transaction_failure)]
++    failures = 0
++    for name, case in cases:
++        try:
++            case()
++        except AssertionError as exc:
++            failures += 1
++            print(f"FAIL {name}: {exc}")
++        else:
++            print(f"PASS {name}")
++    return int(bool(failures))
++
++
++if __name__ == "__main__":
++    if len(sys.argv) > 1 and sys.argv[1] == "child":
++        child(sys.argv[2], sys.argv[3])
++    else:
++        sys.exit(main())

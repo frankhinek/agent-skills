@@ -1,0 +1,141 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..840642de61c6277e9f2ca2107041c0ea29c8675d
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,67 @@
++# Hunt report: export worker acceptance and restart recovery
++
++Contract: `app/export-contract.md`. Target: `app/export_queue.py` (`Queue`).
++
++## Finding 1 — A job interrupted after its claim is never finished after restart (confirmed)
++
++**Promise broken:** "Accepted jobs must eventually produce their result after
++recovery." The contract also says committed transactions survive termination,
++restart happens only after the previous worker has stopped, and the
++`after_claim` hook marks interruption after the `running` state commits.
++
++**Defect:** `Queue.work` commits `state = 'running'` in its own transaction,
++then writes the result and `done` in a later transaction. If the process dies
++between the two, the job stays durably `running`. `Queue.recover()` does
++nothing (its comment, "The process-local worker slot starts empty", treats the
++claim as process-local, but the claim is stored in SQLite). `work()` only
++selects `state = 'pending'`, so nothing ever picks the job up again. Because
++`submit` uses `INSERT OR IGNORE`, submitting the same ID again does not help:
++it reports `accepted: True` and leaves the stuck row as it is.
++
++**Witness:** `tests/hunt_witness.py`. A child process submits `job-1` and
++calls `work(after_claim=...)`; the hook calls `os._exit` to simulate a real
++termination. A fresh `Queue` on the same database then calls `work()` up to 10
++times. Current result: exit 1,
++`VIOLATED: accepted job-1 has result None after restart and repeated work(); job state is 'running'`.
++
++**Why this is a supported scenario:** there is one worker, the restart
++happens after the old worker stopped, the database survives, and the
++environment has recovered. No simultaneous worker or storage loss is involved.
++
++**Check of the witness:** I copied the code to a temp directory and changed
++`recover()` there to reset `running` rows to `pending`. The witness then
++exits 0, so it tells the two behaviors apart. Under the contract's single-worker
++assumption, any `running` row seen at startup is an orphaned claim, so that
++reset is safe. Product code was not changed.
++
++**Related (same root cause, not tested separately):** the contract says the
++application retries `work` after transient I/O failures. If `after_claim`
++raises, or the second transaction fails, in a process that keeps running, the
++job also stays `running` and later `work()` calls skip it. The witness covers
++only the restart path.
++
++## Coverage
++
++Checked against the contract:
++- `submit` acceptance: the job row commits before `accepted: True` is
++  returned, so acceptance survives termination. `INSERT OR IGNORE` on an
++  existing ID fits "a job ID has one payload throughout its lifetime".
++- Interruption before the claim commits: the job stays `pending` and is
++  picked up after restart. No defect.
++- Interruption after the claim but before output: **Finding 1**.
++- The result write: `INSERT INTO results` and `state = 'done'` share one
++  transaction, so they commit together or not at all. Once the job is `done`
++  it is never selected again ("Completed jobs need no further work"). No
++  defect.
++- `recover()` at startup: has no effect. This is the cause of Finding 1.
++
++Not covered (out of scope or unsupported by the contract): concurrent workers
++or overlapping requests, storage loss or corruption, the note
++store and exporter (`app/exporter.py`, `app/store.py`), and the other paths
++that hit the same root cause (see "Related" above).
++
++## Records
++
++No `specs/` record governs `app/export_queue.py`. `ARCH-app`,
++`CLAIM-single-writer`, and `SPEC-note-payload` cover the note store and
++exporter, not the job queue. No records were created or changed.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..ff8673f3a486e545790e7d0df090a9df3935a2f8
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,62 @@
++"""Witness: an accepted export job must produce its result after restart.
++
++Per app/export-contract.md, a committed transaction survives process
++termination, restart happens after the previous worker stopped, and accepted
++jobs must eventually produce their result after recovery. The after_claim hook
++is the supported interruption point after the running state commits.
++
++Exits 0 if the promise holds, 1 if it is violated, 2 on setup failure.
++"""
++import os
++import subprocess
++import sys
++import tempfile
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++sys.path.insert(0, ROOT)
++
++from app.export_queue import Queue  # noqa: E402
++
++CHILD = r"""
++import os, sys
++sys.path.insert(0, sys.argv[1])
++from app.export_queue import Queue
++q = Queue(sys.argv[2])
++assert q.submit("job-1", "payload-1")["accepted"]
++q.work(after_claim=lambda: os._exit(17))  # process dies before output
++"""
++
++
++def main():
++    with tempfile.TemporaryDirectory() as tmp:
++        db = os.path.join(tmp, "jobs.db")
++        child = subprocess.run([sys.executable, "-I", "-c", CHILD, ROOT, db])
++        if child.returncode != 17:
++            print(f"setup failed: child exited {child.returncode}, expected 17")
++            return 2
++
++        # Restart after the previous worker stopped: a fresh worker on the
++        # same database; the environment has recovered, so the application
++        # calls work repeatedly.
++        q = Queue(db)
++        try:
++            for _ in range(10):
++                if q.result("job-1") is not None:
++                    break
++                q.work()
++            got = q.result("job-1")
++            state = q.db.execute(
++                "SELECT state FROM jobs WHERE id = 'job-1'").fetchone()
++        finally:
++            q.close()
++
++    if got != "payload-1":
++        print(f"VIOLATED: accepted job-1 has result {got!r} after restart "
++              f"and repeated work(); job state is {state[0] if state else None!r}")
++        return 1
++    print("HOLDS: accepted job-1 produced its result after restart")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

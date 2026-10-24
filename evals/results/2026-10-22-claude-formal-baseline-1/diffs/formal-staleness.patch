@@ -1,0 +1,62 @@
+diff --git a/config/storage.json b/config/storage.json
+index 8faae91c2a6885d2be4358c88105d0ece2957479..06b50b400c8dd2a66842558903d03b53d5bc31c9 100644
+--- a/config/storage.json
++++ b/config/storage.json
+@@ -1 +1 @@
+-{"driver": "certified-v1"}
++{"driver": "candidate-v2"}
+diff --git a/specs/CLAIM-reservation/proof.md b/specs/CLAIM-reservation/proof.md
+index 04d7cb191d95f83f51cf09d597a38394c0556404..f5fd3df87c9a23545610cc82e2e967bd42be501d 100644
+--- a/specs/CLAIM-reservation/proof.md
++++ b/specs/CLAIM-reservation/proof.md
+@@ -1,5 +1,5 @@
+ Scope: app/reservations.py, config/storage.json, config/driver-contract.md, verification/reservation.smt2.
+ 
+ 1. `formal` — reservation_base and reservation_step establish the abstract count invariant by induction; Z3 5.3.1 returns unsat for both obligations.
+-2. `axiom` — the selected certified-v1 driver implements each abstract reservation transition atomically, as stipulated in config/driver-contract.md. This connects the model to deployment.
++2. `axiom` — the selected driver implements each abstract reservation transition atomically. This connects the model to deployment. config/storage.json now selects candidate-v2, whose concurrency and transaction guarantees config/driver-contract.md records as unassessed, so this premise is currently unsupported (certified-v1 stipulated it).
+ Residuals: none within the stated key lifetime.
+diff --git a/specs/CLAIM-reservation/verification.md b/specs/CLAIM-reservation/verification.md
+index 9ca691f9ef85f3d8e41a9f370e7681ae95987217..556bbe14650d45fdf51ab7b31f68c401bcd270d0 100644
+--- a/specs/CLAIM-reservation/verification.md
++++ b/specs/CLAIM-reservation/verification.md
+@@ -1,3 +1,6 @@
+ Independent fixture review at the overlay baseline, 2026-10-22.
+ Checked the argument and imported evidence under certified-v1.
+ Result: pass
++
++2026-10-22: config/storage.json switched from certified-v1 to candidate-v2. The pass above relied on certified-v1 for the driver-atomicity axiom (lemma 2), so it no longer covers the deployed configuration. The SMT obligations and app/reservations.py are unchanged; no counterexample is known. Needs re-verification of lemma 2 against assessed candidate-v2 guarantees.
++Result: provisional
+diff --git a/specs/CLAIM-retry-safe/verification.md b/specs/CLAIM-retry-safe/verification.md
+index 9ca691f9ef85f3d8e41a9f370e7681ae95987217..b6273f30e929024f7ad54465c093291dbcf050f5 100644
+--- a/specs/CLAIM-retry-safe/verification.md
++++ b/specs/CLAIM-retry-safe/verification.md
+@@ -1,3 +1,6 @@
+ Independent fixture review at the overlay baseline, 2026-10-22.
+ Checked the argument and imported evidence under certified-v1.
+ Result: pass
++
++2026-10-22: the imported CLAIM-single-post is now provisional after config/storage.json switched to candidate-v2. app/retry.py is unchanged; no counterexample is known. Needs re-verification once CLAIM-single-post is re-verified.
++Result: provisional
+diff --git a/specs/CLAIM-single-post/proof.md b/specs/CLAIM-single-post/proof.md
+index ae35a92ae114abcf843d414b488897b83586e950..7dfa2f2e01485ceb0d0cc430e278b487fbcfdaf8 100644
+--- a/specs/CLAIM-single-post/proof.md
++++ b/specs/CLAIM-single-post/proof.md
+@@ -1,5 +1,5 @@
+ Scope: app/posting.py.
+ 
+ 1. `claim` — [CLAIM-reservation](../CLAIM-reservation.md) supplies at most one successful reservation per key.
+-2. `axiom` — certified-v1 transactions commit reservation and append together; the driver contract rules out all other posting writers.
++2. `axiom` — the selected driver's transactions commit reservation and append together; the driver contract rules out all other posting writers. config/storage.json now selects candidate-v2, whose transaction guarantees config/driver-contract.md records as unassessed, so this premise is currently unsupported (certified-v1 stipulated it).
+ 3. `code` — post appends only after a successful reservation.
+diff --git a/specs/CLAIM-single-post/verification.md b/specs/CLAIM-single-post/verification.md
+index 9ca691f9ef85f3d8e41a9f370e7681ae95987217..da73cf298c2eeda0c21781cad9d95e1847ec1c56 100644
+--- a/specs/CLAIM-single-post/verification.md
++++ b/specs/CLAIM-single-post/verification.md
+@@ -1,3 +1,6 @@
+ Independent fixture review at the overlay baseline, 2026-10-22.
+ Checked the argument and imported evidence under certified-v1.
+ Result: pass
++
++2026-10-22: config/storage.json switched from certified-v1 to candidate-v2. The pass above relied on certified-v1 for the transaction axiom (lemma 2), and the imported CLAIM-reservation is now provisional. app/posting.py is unchanged; no counterexample is known. Needs re-verification once candidate-v2's transaction guarantees are assessed and CLAIM-reservation is re-verified.
++Result: provisional

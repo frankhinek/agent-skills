@@ -16,7 +16,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
+SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep assurance-records-bug-hunt)
 MANIFEST=".agents/skills/.vendored-manifest"
 MANIFEST_FORMAT=2
 
@@ -332,6 +332,15 @@ if { [ -n "$current" ] || [ -f "$MANIFEST" ]; } && [ "$FORCE" = "no" ]; then
     echo "Inspect and preserve local work before replacing this installation." >&2
     exit 1
   fi
+  # Top-level links are omitted from copy inventories. A newly managed link
+  # must not disappear merely because the old manifest never named it.
+  for s in "${SKILLS[@]}"; do
+    if [ -L ".agents/skills/$s" ]; then
+      echo "error: existing skill symlink is not covered by the copied inventory: $s" >&2
+      echo "Preserve or reconcile it before refreshing, or explicitly use --force." >&2
+      exit 1
+    fi
+  done
   if [ "$current" != "$expected" ]; then
     echo "error: vendored skills were edited since they were vendored:" >&2
     if report_inventory_changes "$expected" "$current" >&2; then
@@ -419,4 +428,4 @@ else
   echo "AGENTS.md already references assurance-records"
 fi
 
-echo "done ($MODE): .agents/skills/{assurance-records,assurance-records-claims,assurance-records-upkeep}"
+echo "done ($MODE): .agents/skills/{assurance-records,assurance-records-claims,assurance-records-upkeep,assurance-records-bug-hunt}"

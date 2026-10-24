@@ -226,7 +226,7 @@ git_object_id_valid() {
   [ "${#object_id}" -eq 40 ] || [ "${#object_id}" -eq 64 ]
 }
 
-# Hashes a canonical list of the three committed managed-skill tree IDs. This
+# Hashes a canonical list of the committed managed-skill tree IDs. This
 # excludes unrelated repository paths while retaining Git's object identity.
 # Status 2 means the revision does not contain the complete managed payload;
 # status 1 means Git could not inspect or hash it.

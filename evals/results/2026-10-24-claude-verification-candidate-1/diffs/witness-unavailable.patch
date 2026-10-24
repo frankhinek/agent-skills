@@ -1,0 +1,32 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 00d5da12032e79f5ed7d959d2c575f4b70113c55..4decc254a8bee913ef8ec50f1523fbfba50a34a8 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -5,3 +5,27 @@ through the production adapter and observed 101, outside [0,100].
+ Reproducer: `python3 tests/replay_ttl.py`. No repair is recorded. The current
+ local functions do not establish which adapter code the capture exercised.
+ Result: falsified
++
++# Recheck at f2437c19e0403db456f13e5a0a5b933879c548e2
++
++Agent recheck on 2026-10-24 (Python 3.9.6). This is a witness recheck, not a
++fresh independent verification: the recorded counterexample was in context
++before the code was read.
++
++- `python3 tests/replay_ttl.py` exited 1 with
++  `ModuleNotFoundError: No module named 'cache_replay_driver'`. The external
++  replay driver is unavailable and was not installed or replaced, so the
++  recorded HIGH capture was not replayed against this checkout.
++- `python3 tests/witness_ttl.py` exited 0: LOW (-1) and HIGH (101) returned 0
++  and 100 in both json and raw modes, no violation. This calls the local
++  `export_ttl` directly, not the production adapter the capture exercised.
++- No `cache-v2` ref exists in this repository, and no recorded repair or
++  evidence links the captured adapter path to the local `export_ttl`.
++
++The local witness passing does not reproduce or resolve the counterexample:
++it covers a different code path, and an unavailable reproducer is not repair.
++The HIGH raw=101 -> 101 counterexample stays unresolved. To resolve it, replay
++HIGH through the production adapter at the current revision with the driver
++available, or establish that the adapter is exactly `export_ttl` and record
++the repair mechanism.
++Result: falsified

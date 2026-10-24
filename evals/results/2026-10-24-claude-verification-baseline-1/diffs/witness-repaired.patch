@@ -1,0 +1,39 @@
+diff --git a/app/cache_policy.py b/app/cache_policy.py
+index 879ee13836faf374523839131cfca2b6ae3aab62..0f528d43a795337c4879018fbd879d926fa72a52 100644
+--- a/app/cache_policy.py
++++ b/app/cache_policy.py
+@@ -1,2 +1,2 @@
+ def ttl(raw):
+-    return min(100, raw)
++    return max(0, min(100, raw))
+diff --git a/specs/CLAIM-cache-ttl/proof.md b/specs/CLAIM-cache-ttl/proof.md
+index 47526af22282cc91097d0cf54f6b8dc4ba72aed0..5aac0274a736ea3c33df4afe1525e83665a77255 100644
+--- a/specs/CLAIM-cache-ttl/proof.md
++++ b/specs/CLAIM-cache-ttl/proof.md
+@@ -5,7 +5,7 @@ Sequential calls with exact Python integer inputs; no subclasses or other modes.
+ ## Axioms
+ Python integer comparison and min/max semantics.
+ ## Argument
+-1. `code` — ttl clamps integer inputs to [0, 100].
++1. `code` — ttl clamps integer inputs to [0, 100] via `max(0, min(100, raw))`.
+ 2. `code` — export_ttl delegates both modes to ttl without changing the value.
+ 3. `test` — tests/witness_ttl.py checks both boundaries through both modes.
+ ## Residuals
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 854d629a85f1157c5fb73aeffab4f6b838c5eb48..f27356926e35895f16f0eaa07d775526310cbdf7 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -4,3 +4,13 @@ At historical revision cache-v2, witness LOW used integer -1 through both
+ modes, expected [0,100], and observed -1. Reproduce:
+ `python3 tests/witness_ttl.py LOW`.
+ Result: falsified
++
++# Repair (2026-10-24, on top of 9686821)
++
++`ttl` now applies a lower bound: `max(0, min(100, raw))`. Nonnegative inputs
++behave as before. `python3 tests/witness_ttl.py LOW` and
++`python3 tests/witness_ttl.py` (LOW and HIGH) both exit 0. LOW returns 0 and
++HIGH returns 100 in both modes. The recorded counterexample no longer
++reproduces. No independent adversarial verification has been done at this
++revision. Re-verify the proof's argument before recording a pass.
++Result: provisional

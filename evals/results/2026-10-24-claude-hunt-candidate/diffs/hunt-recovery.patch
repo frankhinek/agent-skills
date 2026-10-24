@@ -1,0 +1,164 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..3852258c28e2e4b0a668d9c1db665c40bd3393cf
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,91 @@
++# Bug hunt: export worker acceptance and restart recovery
++
++Revision: `43822f1` (main). Authority: `app/export-contract.md`.
++
++## Scope and stopping condition
++
++- Operation: `Queue.submit` (acceptance), `Queue.work` (claim → output →
++  done), and the startup path `Queue.__init__` → `Queue.recover` in
++  `app/export_queue.py`.
++- Harms checked: accepted work abandoned after an interruption, lost or
++  duplicated results, false acceptance reports, permanently stuck jobs.
++- Stop: after every interruption point in that operation and its restart
++  recovery path was checked. Other app code (`Store`, handlers, exporter) is
++  out of scope.
++
++Record discovery: no `specs/` record governs `app/export_queue.py`.
++`CLAIM-single-writer` covers `data/` only; the queue's DB path is chosen by
++the caller, so it was not affected. No records or claim evidence were changed.
++
++## Fault model (from the contract)
++
++- SQLite commits survive process termination. Storage loss and corruption are
++  out of scope.
++- One worker process at a time. Restart happens only after the previous worker
++  has stopped. No overlapping requests.
++- The application retries after transient I/O failures and keeps calling
++  `work()` after recovery.
++- The `after_claim` hook is the real boundary after the `running` commit.
++  Raising there represents interruption before output.
++- Obligation: accepted jobs must eventually produce their result after
++  recovery. Completed jobs need no further work.
++
++## Demonstrated defect
++
++### D1: a job interrupted after its claim is abandoned forever
++
++- **Harm:** a job that was accepted (`submit` returned `accepted: True` after
++  a committed insert) never produces a result. Retries and restarts do not
++  help, so it violates "Accepted jobs must eventually produce their result
++  after recovery."
++- **Trace:**
++  1. `submit` commits `(id, payload, 'pending')`.
++  2. `work` commits `state = 'running'` in its own transaction. Then the
++     process is interrupted before the output transaction (at `after_claim`).
++  3. On restart, `Queue.__init__` calls `recover()`, which is a no-op
++     (`pass`). Its comment treats the worker slot as process-local, but the
++     `running` state is durable.
++  4. `work` selects only `state = 'pending'`, so it returns `False` on every
++     later call. No code path moves `running` back to `pending` or finishes
++     it.
++- **Same mechanism, no restart needed:** a transient I/O error that makes the
++  output transaction (`INSERT INTO results` + `UPDATE ... 'done'`) roll back
++  also leaves the row `running`. The application's retry `work()` calls then
++  skip it. This was found by reading the code, not by running it.
++- **Evidence:** `python3 tests/hunt_witness.py` (run from the repo root)
++  submits `job-1`, interrupts `work` through the hook, closes, reopens the
++  queue at the same path, and calls `work()` 10 times. Observed: exit 1,
++  `result=None, job state='running'`.
++- **Oracle check:** in a throwaway copy, `recover()` was changed to run
++  `UPDATE jobs SET state = 'pending' WHERE state = 'running'`. The witness
++  then exits 0. The copy was deleted afterwards and product code is unchanged.
++- **Fix direction (not applied):** because only one worker runs and restart
++  happens after it stops, any `running` row at startup is orphaned. Making
++  `recover()` durably requeue `running` rows is enough for the restart case.
++  Re-running is safe: the results insert and the `done` update commit
++  together, so a `running` row never already has a result. For the in-process
++  transient-error case, `work` also needs to requeue (or retry) the claimed
++  row when the output transaction fails, and not rely on a restart.
++
++## Checked without a counterexample
++
++- Interruption before or during the `submit` commit: nothing is acknowledged
++  unless the insert committed, so there is no false acceptance.
++- Duplicate `submit` of the same ID: `INSERT OR IGNORE` keeps the original
++  row. The contract fixes one payload per ID, so nothing is lost.
++- Interruption between the results insert and the `done` update: both are in
++  one `with self.db` transaction, so either both commit or neither does. There
++  is no orphaned result and no duplicate-key failure when the job runs again.
++- Interruption after the `done` commit: the job is complete, its result is
++  durable, and it is not selected again.
++- Interruption before the claim commit: the row stays `pending` and is picked
++  up after restart.
++
++## Gaps
++
++- The transient-I/O variant of D1 comes from code reading only. The witness
++  covers the restart path.
++- Concurrency, overlapping workers, storage loss, and security behavior were
++  not examined, because the contract excludes them.
++- Nothing outside `app/export_queue.py` uses the queue, so there were no
++  downstream consumers to trace.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..2f981860a1860108582bce5ae9efd0ffac3862f6
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,61 @@
++"""Witness: an accepted export job interrupted after its running-state commit
++must still produce its result after restart (app/export-contract.md).
++
++Exits 0 when the contract holds, 1 when the accepted job is abandoned.
++Run from the repository root: python3 tests/hunt_witness.py
++"""
++import os
++import sys
++import tempfile
++
++sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
++
++from app.export_queue import Queue  # noqa: E402
++
++
++class Interrupted(Exception):
++    pass
++
++
++def interrupt():
++    raise Interrupted()
++
++
++def main():
++    with tempfile.TemporaryDirectory() as tmp:
++        path = os.path.join(tmp, "jobs.db")
++
++        # First worker process: accept the job, then die after 'running' commits.
++        q = Queue(path)
++        ack = q.submit("job-1", "payload-1")
++        if ack != {"accepted": True, "id": "job-1"}:
++            print("setup error: unexpected submit response %r" % (ack,))
++            return 2
++        try:
++            q.work(after_claim=interrupt)
++        except Interrupted:
++            pass
++        else:
++            print("setup error: hook did not interrupt work()")
++            return 2
++        q.close()
++
++        # Restart after the previous worker stopped; the application keeps
++        # calling work() once the environment has recovered.
++        q = Queue(path)
++        for _ in range(10):
++            q.work()
++        got = q.result("job-1")
++        state = q.db.execute("SELECT state FROM jobs WHERE id = 'job-1'").fetchone()
++        q.close()
++
++    if got != "payload-1":
++        print("VIOLATION: accepted job-1 has no result after restart and "
++              "10 work() calls; result=%r, job state=%r" % (got, state and state[0]))
++        return 1
++    print("OK: accepted job-1 produced its result after restart")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

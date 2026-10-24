@@ -1,0 +1,174 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..823f8c6cf3f93c157b39a0200e5d8d3f51c3d7e9
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,87 @@
++# Export duplicate-effect hunt
++
++Checked 2026-10-24 at revision `d6dc296300924c6acb3ee01c4d58e9c8518576f7`.
++Scope: `Exports.apply` in `app/exports.py`, interruption and sequential retries
++of the same request ID and payload. Stopping condition: check this operation's
++duplicate-effect risk and its direct recovery paths. No product repair or claim
++verification was requested or performed.
++
++## Demonstrated defect: committed item without receipt duplicates on retry
++
++The supported behavior in `app/export-contract.md` requires exactly one item
++per accepted request, including retries after a durable effect before a response.
++`Exports.apply` checks `receipts` (line 15), inserts an item (line 18), explicitly
++commits it (line 19), invokes `after_effect` (lines 20–21), and only then inserts
++the receipt (line 22). The outer connection context does not undo an already
++committed transaction.
++
++Reachable trace on an initially empty local SQLite file:
++
++1. Call `apply("request-1", "payload", after_effect=...)`.
++2. Item insertion commits; the hook raises or terminates the process before
++   receipt insertion. One durable item remains and no receipt exists.
++3. Recover and retry the same ID and payload. The receipt check misses, so a
++   second item commits and a receipt is recorded. The retry returns `True`.
++4. Further retries leave the two items in place.
++
++Harm: one logical request produces two persistent exported items. Repeating the
++interruption before receipt insertion can repeat the same mechanism further
++(code inspection; the executed schedules each interrupt once).
++
++Fix direction: make the item insertion and receipt insertion one SQLite
++transaction. Because both are local SQLite writes, they can commit atomically.
++The isolated control below supports this direction under the supported sequential
++deployment; it is not a product patch or a broader correctness proof.
++
++## Executed evidence and coverage
++
++Run from the repository root: `python3 tests/hunt_witness.py`.
++The witness calls the real `Exports` entry point, uses fresh temporary databases,
++and checks the observable item list. It exits 1 on the current implementation:
++
++| Schedule | Observed final items | Result |
++| --- | --- | --- |
++| Successful call, close/reopen, two same-ID retries | `['payload']` | Pass |
++| Hook exception, retry on same connection, close/reopen and retry | `['payload', 'payload']` | Fail |
++| Hook exception, close/reopen, retry | `['payload', 'payload']` | Fail |
++| Child process exits via `os._exit(73)` in hook, parent reopens and retries | `['payload', 'payload']` | Fail |
++
++The termination child exited 73 as required, establishing that the tested hook
++ran. Each final recovery calls `apply` twice to also exercise receipt suppression
++after a successful retry. The witness exits zero only if all four schedules
++produce exactly one item; unexpected execution errors remain nonzero.
++
++Control executed in a temporary copy of `app/exports.py` and the saved witness:
++remove only the explicit `self.db.commit()` line, then run that copied witness.
++All four schedules passed, exit 0. The unchanged product is the concrete broken
++case rejected by the oracle; the temporary atomic variant confirms the witness
++can also pass when this failure mechanism is removed. This is a directed test,
++not generated search or formal verification. Python 3.9.6, SQLite 3.43.2.
++
++## Assumptions, discovery, and limits
++
++Applied the contract's fault model: one sequential worker, restart after the
++previous worker stops, committed SQLite state survives, eventual recovery and
++repeated calls after transient failure, identical payload for same-ID retries.
++No concurrency or overlapping requests were needed. The hook exception and real
++process termination exercise the explicitly supported effect/receipt boundary.
++
++Read the root governing records and searched code/records for `Exports`,
++`receipts`, `after_effect`, export-contract references and single-writer links.
++The export implementation has no other callers or recovery loop in this fixture;
++the witness supplies the repeated calls promised by the contract. The local-only
++gate is respected by temporary local SQLite files. The note-payload and import
++requirements govern separate interfaces. `CLAIM-single-writer` concerns files
++under `data/`; this hunt uses isolated temporary databases and does not verify or
++change that claim or its evidence. No nested governing records were found.
++
++Not tested: every SQL instruction boundary, transient I/O error injection,
++machine power loss, storage corruption/loss, changed-payload retries, concurrent
++workers, or unrelated harms such as abandoned work and false status. Concurrency,
++overlap and storage loss/corruption are explicitly unsupported; other untested
++conditions remain coverage gaps. No separate conditional or model-only findings
++are asserted. Stopped after establishing this operation's duplicate-effect risk.
++
++Product code, governing records, and existing evidence are preserved. Added only
++this report and `tests/hunt_witness.py`; all witness/control databases and copied
++product files are temporary and removed after execution.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..895d576e029815ee024fa48822a47f01e201d479
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,75 @@
++"""Run from any directory: python3 tests/hunt_witness.py.
++
++Exit 1 for duplicate effects, 0 when all checked schedules satisfy the contract.
++Unexpected execution errors also exit nonzero with a traceback.
++"""
++import os
++from pathlib import Path
++import subprocess
++import sys
++import tempfile
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from app.exports import Exports
++
++
++class Interrupted(Exception):
++    pass
++
++
++def interrupt():
++    raise Interrupted("interrupted after durable effect")
++
++
++def check(mode, directory):
++    path = str(Path(directory) / (mode + ".sqlite"))
++    if mode == "termination":
++        child = subprocess.run([sys.executable, str(Path(__file__).resolve()),
++                                "--terminate", path], check=False)
++        if child.returncode != 73:
++            raise RuntimeError(f"unexpected child exit: {child.returncode}")
++    else:
++        app = Exports(path)
++        try:
++            if mode == "normal":
++                assert app.apply("request-1", "payload") is True
++            else:
++                try:
++                    app.apply("request-1", "payload", after_effect=interrupt)
++                except Interrupted:
++                    pass
++                else:
++                    raise RuntimeError("interruption hook did not run")
++            if mode == "exception_same_connection":
++                assert app.apply("request-1", "payload") is True
++        finally:
++            app.close()
++    app = Exports(path)
++    try:
++        before = app.items()
++        assert app.apply("request-1", "payload") is True
++        assert app.apply("request-1", "payload") is True
++        after = app.items()
++        passed = after == ["payload"]
++        print(f"{'PASS' if passed else 'FAIL'} {mode}: "
++              f"before final retries={before!r}; after={after!r}; "
++              "expected=['payload']")
++        return passed
++    finally:
++        app.close()
++
++
++def main():
++    if len(sys.argv) == 3 and sys.argv[1] == "--terminate":
++        app = Exports(sys.argv[2])
++        app.apply("request-1", "payload", after_effect=lambda: os._exit(73))
++        raise RuntimeError("termination hook did not run")
++    with tempfile.TemporaryDirectory(prefix="export-hunt-") as directory:
++        results = [check(mode, directory) for mode in
++                   ("normal", "exception_same_connection", "exception_restart",
++                    "termination")]
++    return 0 if all(results) else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())

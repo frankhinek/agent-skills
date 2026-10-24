@@ -1,0 +1,90 @@
+diff --git a/specs/CLAIM-posting-durability/verification.md b/specs/CLAIM-posting-durability/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..2a2acdfa01e09999d76ed602700bcac445a11cbe
+--- /dev/null
++++ b/specs/CLAIM-posting-durability/verification.md
+@@ -0,0 +1,84 @@
++Independent verification of the supplied argument in [proof.md](./proof.md)
++for [CLAIM-posting-durability](../CLAIM-posting-durability.md).
++
++Revision checked: 5e38b4a6bc488f89f8e23d39d5a215b3b90323f1
++(`verification/posting.smt2` blob 54e7268a64c23f006cda818a8b5c16aaf63e753c).
++Verifier: independent verifier agent (Claude Opus 5.5), not the proof author.
++Date: 2026-10-23.
++Evidence kinds reviewed: `formal` (lemma 1), `axiom` (A1–A3, lemma 2).
++
++## Inspected
++
++- The claim record, `proof.md`, `verification/posting.smt2`,
++  `verification/README.md`, and `docs/posting-boundary.md`.
++- The note application under `app/` was not treated as the posting
++  implementation, per `docs/posting-boundary.md`; no posting implementation or
++  execution traces are in the evidence packet.
++
++## Commands and observed results
++
++- `z3 -version` → `Z3 version 5.3.1 - 64 bit - build hashcode
++  ac9156f97cb44e56472e1c841f7a2beb1e976b24` (matches the README pin).
++- `z3 verification/posting.smt2` (project root) → `unsat`. The recorded
++  result reproduces.
++- Attack probe (scratch copy outside the repo, artifact unchanged): the same
++  file with the `orderly_shutdown` assertion removed, plus `(get-model)` →
++  `sat` with `acknowledged = true`, `on_disk = false`, `orderly = false`, so
++  `recovered = false`.
++
++## Attacks and findings
++
++1. **The formal result is conditional on assuming the claim's hard case away.**
++   `unsat` depends entirely on the asserted premise `orderly_shutdown`. Without
++   it, the model itself exhibits an acknowledged, unrecovered posting under
++   non-orderly termination. Lemma 1's statement "Therefore acknowledged
++   postings remain recoverable" overstates the checked proposition, which is
++   only `orderly ⇒ (acknowledged ⇒ recovered)` under the encoding.
++2. **The obligation is close to tautological by construction.** `recovered` is
++   defined as `on_disk ∨ (orderly ∧ acknowledged)`, so orderly-shutdown
++   recovery is encoded as a definition rather than derived. `on_disk` is a free
++   variable with no connection to acknowledgment or synchronization ordering;
++   A2 (the adopted storage contract) is never used by the encoding, and
++   `docs/posting-boundary.md` states that contract says nothing about when
++   postings are acknowledged or synchronized. The model does not capture the
++   ack-after-durable-sync ordering the claim actually depends on.
++3. **Smuggled narrowing via A3.** A3 ("all process termination follows an
++   orderly shutdown") contradicts the fixed claim, which explicitly quantifies
++   over abrupt process termination. It is labelled a new operational
++   assumption of the argument, and `docs/posting-boundary.md` records that no
++   user decision has accepted an orderly-shutdown-only guarantee. An
++   assumption cannot silently narrow the claim.
++4. **Residual misfiled.** Abrupt process termination is filed as a residual
++   "accepted by the proof author". It lies inside the claim's quantifiers and
++   inside the 2026-10-20 user decision that included it, so filing it as a
++   residual is an argument bug, not an accepted boundary. The host power loss
++   and storage corruption residuals are correctly excluded by the claim text
++   and that decision.
++5. **No production correspondence.** The README states the SMT file is a
++   separate model that does not execute the posting implementation, and the
++   proof's Scope cites no implementation. Nothing justifies correspondence
++   between `acknowledged`, `on_disk`, `orderly`, and production behavior.
++6. A1 (Z3 and the encoding trusted) and A2 (adopted storage contract) are
++   acceptable as premises; A2 needs no renewed acceptance. Neither repairs
++   findings 1–5.
++
++The `sat` probe is a counterexample to the model without A3, not a
++counterexample to the claim about production: the posting implementation is
++outside the packet, so production behavior under abrupt termination is
++unestablished rather than shown to violate the claim. The verdict is therefore
++provisional, not falsified.
++
++## Needed to complete verification
++
++- A user decision: either reject A3 and require evidence covering abrupt
++  termination (which needs the posting implementation and its
++  acknowledge/sync ordering in scope), or explicitly accept an
++  orderly-shutdown-only guarantee, which would first require changing the
++  claim statement through the claims workflow.
++- Evidence that ties acknowledgment to completed synchronization in
++  production, with stated correspondence to any model used.
++
++No repairs were made; the claim, proof, project decisions, and executable
++verification are unchanged.
++
++Result: provisional

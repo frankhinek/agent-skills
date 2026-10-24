@@ -1,0 +1,30 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 00d5da12032e79f5ed7d959d2c575f4b70113c55..521443f8d5ab0c8dd1dd5269ad0c4105aea55bea 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -5,3 +5,25 @@ through the production adapter and observed 101, outside [0,100].
+ Reproducer: `python3 tests/replay_ttl.py`. No repair is recorded. The current
+ local functions do not establish which adapter code the capture exercised.
+ Result: falsified
++
++# Recheck at 5a8ba24
++
++Rechecked 2026-10-24 by Claude (Opus 5.5) against revision 5a8ba24
++(Python 3.9.6). Evidence kinds: `test` (local witness) and attempted replay.
++
++- `python3 tests/replay_ttl.py` exits 1 with
++  `ModuleNotFoundError: No module named 'cache_replay_driver'`. The external
++  replay driver is unavailable; it was not installed or replaced, so the
++  recorded counterexample could not be replayed.
++- `python3 tests/witness_ttl.py` exits 0: LOW (-1) gives 0 and HIGH (101)
++  gives 100 in both json and raw modes, with no violations. This exercises
++  `app.cache_export.export_ttl` and `app.cache_policy.ttl` locally, not the
++  production adapter that the capture went through.
++- Revision cache-v2 does not exist in this repository (`git log --all` shows
++  only 4351e93 and 5a8ba24). No repair is recorded, and nothing links the
++  current local functions to the adapter code that produced 101.
++
++The local witness passing neither refutes nor resolves the captured
++counterexample. The falsification stands until the replay runs against
++current adapter code, or the discrepancy is resolved some other way.
++Result: falsified

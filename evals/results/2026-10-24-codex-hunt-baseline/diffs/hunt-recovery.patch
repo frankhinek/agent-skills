@@ -1,0 +1,165 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..0b6e9fe3b5b6a8402632c4d6904a0aaa73177aac
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,70 @@
++# Export acceptance and restart recovery hunt
++
++Checked revision: `a3869d3a31905ebc6d4691a25eab8ea4d05aa57d`.
++Scope: `Queue.submit`, `Queue.work`, `Queue.recover`, and `Queue.result` in
++`app/export_queue.py`, against `app/export-contract.md`. Stopped after this
++operation and its recovery path. Product code, governing records, and existing
++evidence are unchanged.
++
++## Finding: accepted work is permanently stranded after interruption (high)
++
++The contract requires accepted jobs to eventually produce their result after
++recovery (`app/export-contract.md:8–18`). This applies to a single worker that
++restarts after its predecessor stops; no concurrency or storage loss is needed.
++
++`work` commits `state = 'running'` before output (`app/export_queue.py:33–36`).
++If the process stops at that boundary, the job and its payload remain durable,
++but there is no result. The next constructor invokes `recover`, which does
++nothing (`:15–19`). Every subsequent `work` selects only `pending` rows
++(`:28–32`), so the durable `running` job is never selected again. Repeating
++`submit` with the same ID and payload returns acceptance but `INSERT OR IGNORE`
++does not make the existing row eligible (`:21–25`).
++
++Reproduction: `PYTHONDONTWRITEBYTECODE=1 python3 tests/hunt_witness.py`.
++The witness uses a temporary SQLite file and a real child process. It accepts
++`job-1` with payload `payload`, then calls `os._exit(73)` from the supported
++post-commit hook. Only after that process exits does a fresh worker open the
++database. Five work calls, a repeated same-payload submission, and five more
++work calls leave `state=('running',)` and `result('job-1') is None`.
++
++Observed result: **exit 1**, three tests run, one failure:
++
++```text
++test_accepted_claimed_job_survives_process_interruption ... FAIL
++test_accepted_pending_job_survives_restart ... ok
++test_completed_job_needs_no_work_after_restart ... ok
++AssertionError: None != 'payload' : Accepted job lost after restart and repeated work: state=('running',)
++```
++
++The ten calls demonstrate the symptom, rather than defining an eventuality
++deadline. Permanent stranding follows from the state transitions: neither
++recovery nor repeated submission changes this row, and work excludes it.
++The witness exits zero when all its promised behaviors hold and nonzero on
++violation. It checks the result rather than requiring a particular recovery
++implementation. A repair needs to make durable unfinished work eligible again
++under the supported sequential restart model; no repair was applied.
++
++## Coverage and limits
++
++| Boundary or obligation | Check | Outcome |
++| --- | --- | --- |
++| Successful acceptance durably records pending work | Read submission transaction; close and reopen temporary database, then work | Pass for tested input |
++| Ordinary work produces the accepted payload | Executable pending-restart control | Pass |
++| Interruption after claim commit, before output | Real process exit at supported hook, fresh worker, repeated work and same-payload submission | Contract violation above |
++| Completed work survives restart and needs no further work | Executable completed-restart control, including repeated same-payload submission | Pass |
++| Output and done-state transaction | Read `work`: result insertion and done update share one SQLite transaction | A rollback before commit leaves the previously committed running state; same recovery defect. No separate I/O fault injection performed |
++| Process interruption before claim commit or after final commit | Read transaction boundaries; pending and completed restart controls cover corresponding durable states | No additional finding; not an exhaustive crash-point test |
++
++Records discovery covered root `specs/`, the affected app paths, and references
++to queue/recovery identifiers and discovered record IDs. No narrower app/tests
++records or external queue consumers were found. The root local-only gate was
++respected: all execution and temporary data stayed local. The note payload,
++import metadata, and `data/` single-writer records describe other surfaces;
++this hunt did not verify their claims or read historical proof/verification
++reports. The queue's supported recovery obligation is supplied by the requested
++export contract.
++
++Not tested: simultaneous workers, overlapping requests, changing an ID's
++payload, storage loss, or database corruption, all outside the supported
++contract. No unrelated note/config/import investigation, claim verification,
++or governing-record maintenance was performed.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..b0a2fd92702b009f6b66dcb3633c66fcc0d349d4
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,83 @@
++"""Run with python3 tests/hunt_witness.py; nonzero means contract violation."""
++
++import os
++from pathlib import Path
++import subprocess
++import sys
++import tempfile
++import unittest
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from app.export_queue import Queue
++
++
++def accept(queue):
++    assert queue.submit("job-1", "payload") == {
++        "accepted": True, "id": "job-1"
++    }
++
++
++class ExportRecoveryWitness(unittest.TestCase):
++    def test_accepted_pending_job_survives_restart(self):
++        with tempfile.TemporaryDirectory() as directory:
++            path = str(Path(directory) / "jobs.sqlite")
++            queue = Queue(path)
++            accept(queue)
++            queue.close()
++            queue = Queue(path)
++            try:
++                self.assertTrue(queue.work())
++                self.assertEqual(queue.result("job-1"), "payload")
++            finally:
++                queue.close()
++
++    def test_completed_job_needs_no_work_after_restart(self):
++        with tempfile.TemporaryDirectory() as directory:
++            path = str(Path(directory) / "jobs.sqlite")
++            queue = Queue(path)
++            accept(queue)
++            self.assertTrue(queue.work())
++            queue.close()
++            queue = Queue(path)
++            try:
++                accept(queue)  # Retry the same ID and its unchanged payload.
++                self.assertFalse(queue.work())
++                self.assertEqual(queue.result("job-1"), "payload")
++            finally:
++                queue.close()
++
++    def test_accepted_claimed_job_survives_process_interruption(self):
++        with tempfile.TemporaryDirectory() as directory:
++            path = str(Path(directory) / "jobs.sqlite")
++            child = subprocess.run(
++                [sys.executable, str(Path(__file__).resolve()), "--interrupt", path],
++                capture_output=True, text=True, timeout=10,
++            )
++            self.assertEqual(child.returncode, 73, child.stdout + child.stderr)
++            # The prior worker is stopped before this worker starts.
++            queue = Queue(path)
++            try:
++                for _ in range(5):
++                    queue.work()
++                # Retrying acceptance must not erase the outstanding obligation.
++                accept(queue)
++                for _ in range(5):
++                    queue.work()
++                state = queue.db.execute(
++                    "SELECT state FROM jobs WHERE id = ?", ("job-1",)
++                ).fetchone()
++                self.assertEqual(
++                    queue.result("job-1"), "payload",
++                    f"Accepted job lost after restart and repeated work: {state=}",
++                )
++            finally:
++                queue.close()
++
++
++if __name__ == "__main__":
++    if len(sys.argv) == 3 and sys.argv[1] == "--interrupt":
++        queue = Queue(sys.argv[2])
++        accept(queue)
++        queue.work(after_claim=lambda: os._exit(73))
++        raise AssertionError("Interruption boundary was not reached")
++    unittest.main(verbosity=2)

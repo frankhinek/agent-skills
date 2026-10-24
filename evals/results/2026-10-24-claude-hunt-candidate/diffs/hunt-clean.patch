@@ -1,0 +1,207 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..d556f3061862c962f6830914c14806845c5ac934
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,85 @@
++# Bug hunt: export worker acceptance and restart recovery
++
++Revision: `9d0da36` (`app/export_queue.py`, contract `app/export-contract.md`).
++
++## Result
++
++**No counterexample found in the scoped coverage.** No implementation defect
++demonstrated. This is a bounded hunt, not a guarantee that bugs are absent and
++not an independent claim verification.
++
++## Scope and stopping condition
++
++- Operation: `Queue.submit` (acceptance) → `Queue.work` (claim, output,
++  completion), and the restart path `Queue.__init__` → `Queue.recover`.
++- Harms prioritized: an accepted job abandoned after interruption (never gets
++  a result), a job marked `done` without a durable result, a wrong or
++  duplicated result, and restart failing or redoing finished work.
++- Stop: after each interruption point in this operation was checked against
++  restart recovery. Stopped there as requested.
++
++## Fault model (from `app/export-contract.md`)
++
++- SQLite: a committed transaction survives process termination; storage loss
++  and corruption are out of scope.
++- Exactly one worker process at a time; restart only after the previous worker
++  has stopped. No concurrent workers or overlapping requests.
++- The application calls `work()` repeatedly after recovery.
++- One payload per job ID for its whole lifetime (caller obligation), so the
++  `INSERT OR IGNORE` in `submit` dropping a second payload is outside the
++  supported inputs.
++- The `after_claim` hook marks the real boundary after `running` commits;
++  raising there stands for interruption before output.
++
++No `specs/` record governs `app/export_queue.py`. `ARCH-app`,
++`CLAIM-single-writer`, and `SPEC-note-payload` cover `Store`, `data/`, and the
++note payload only; the queue's SQLite file is not under `data/`. No claim
++evidence was involved, and no records were changed.
++
++## Trace (code reading)
++
++| Interruption point | Durable state | Recovery |
++|---|---|---|
++| Before or during the `submit` transaction | no row, or a committed `pending` row | uncommitted: never accepted (no response was sent). Committed: `work()` picks it up |
++| After `submit` commits, before `work` | `pending` | `work()` selects it after restart |
++| After `running` commits (hook point) | `running`, no result | `recover()` in `__init__` resets `running`→`pending` before any `work()` |
++| During the output transaction | rolled back to `running` | same as above. The result `INSERT` and the `done` update are one transaction, so neither is visible without the other |
++| After the output commits | `done` + result | not selected again, so the plain `INSERT` on `results` can't hit a primary-key conflict |
++
++With one worker, the `SELECT` running outside the claim transaction can't race.
++`recover()` runs only at construction, i.e. after the previous worker stopped,
++so it never resets a job that is still live.
++
++## Checks run
++
++`python3 tests/hunt_witness.py` exits 0 on this revision (Python 3.9.6). Each
++scenario uses real child processes that are killed with `os._exit` (no
++unwinding), followed by a fresh process that constructs `Queue` and calls
++`work()` until it returns False:
++
++1. crash after two submits → restart → drain: both `done` with exact payloads
++2. crash at the hook after the claim → restart → drain: same
++3. three crashes in a row at the hook (each re-claims the recovered job) →
++   restart → drain: same
++4. a further restart after completion: exits cleanly, results kept
++
++Oracle sanity check: in throwaway copies outside the repo, (a) disabling the
++`recover()` update and (b) committing `done` before output both made the
++witness exit 1 (jobs stuck in `running`, or `done` with no result). The copies
++were then deleted and product code was not modified.
++
++## Gaps and leads (not investigated)
++
++- **Lead: in-process transient failure.** If the output transaction raises
++  (e.g. a transient SQLite I/O error) and the *same* process keeps calling
++  `work()`, the job stays `running`. `work()` only selects `pending`, so the
++  job is skipped until the process restarts. The contract says the
++  application retries after transient I/O failures but does not say whether
++  it restarts the process first. Whether this is a defect depends on that
++  intended behavior. It is outside the process-interruption scope and was not
++  tested.
++- Not tested: kills *inside* the SQLite commit (beyond the contract's atomic
++  commit premise), real disk-full or I/O errors, multiple workers, and
++  overlapping requests (all unsupported by the contract).
++- `app/exporter.py` (`export_note`) is a separate note-export path that does
++  not use the queue. It was not examined.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..e857728f0d7fbb8a114fb932d8516431318582a2
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,110 @@
++"""Witness: an accepted export job produces its result after a process
++interruption and restart (app/export-contract.md).
++
++Each scenario runs the real Queue in child processes against one SQLite file.
++The interrupted child dies with os._exit (no cleanup, no Python unwinding) at
++the chosen point; a fresh child then constructs Queue (the restart path, which
++runs recover()) and calls work() repeatedly, as the contract says the
++application does. Exits 1 if any accepted job lacks its exact payload as its
++result or is not 'done', or if restart after completion fails.
++
++Run: python3 tests/hunt_witness.py
++"""
++import os
++import sqlite3
++import subprocess
++import sys
++import tempfile
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++
++CHILD = r"""
++import os, sys
++sys.path.insert(0, sys.argv[1])
++from app.export_queue import Queue
++db, mode = sys.argv[2], sys.argv[3]
++q = Queue(db)
++if mode == "submit-then-die":
++    q.submit("job-a", "payload-a")
++    q.submit("job-b", "payload-b")
++    os._exit(9)
++if mode == "die-after-claim":
++    # Interrupt at the instrumented boundary: 'running' is committed, no output.
++    q.work(after_claim=lambda: os._exit(9))
++    os._exit(0)  # reached only when no job was claimed
++if mode == "drain":
++    for _ in range(100):
++        if not q.work():
++            break
++    q.close()
++    os._exit(0)
++"""
++
++
++def child(db, mode):
++    return subprocess.run([sys.executable, "-I", "-c", CHILD, ROOT, db, mode]).returncode
++
++
++def rows(db):
++    con = sqlite3.connect(db)
++    try:
++        jobs = dict(con.execute("SELECT id, state FROM jobs"))
++        results = dict(con.execute("SELECT id, payload FROM results"))
++    finally:
++        con.close()
++    return jobs, results
++
++
++def check(name, db, expected):
++    jobs, results = rows(db)
++    ok = True
++    for job_id, payload in expected.items():
++        if results.get(job_id) != payload or jobs.get(job_id) != "done":
++            print(f"FAIL {name}: {job_id} state={jobs.get(job_id)!r} "
++                  f"result={results.get(job_id)!r} expected={payload!r}")
++            ok = False
++    if ok:
++        print(f"ok   {name}")
++    return ok
++
++
++def expect_rc(name, rc, want):
++    if rc != want:
++        print(f"FAIL {name}: child exited {rc}, expected {want}")
++        return False
++    return True
++
++
++def main():
++    expected = {"job-a": "payload-a", "job-b": "payload-b"}
++    ok = True
++    with tempfile.TemporaryDirectory() as tmp:
++        # 1. Crash right after acceptance, before any work.
++        db = os.path.join(tmp, "s1.db")
++        ok &= expect_rc("submit", child(db, "submit-then-die"), 9)
++        ok &= expect_rc("drain", child(db, "drain"), 0)
++        ok &= check("crash after submit, restart, drain", db, expected)
++
++        # 2. Crash after the running state commits, before output.
++        db = os.path.join(tmp, "s2.db")
++        ok &= expect_rc("submit", child(db, "submit-then-die"), 9)
++        ok &= expect_rc("claim", child(db, "die-after-claim"), 9)
++        ok &= expect_rc("drain", child(db, "drain"), 0)
++        ok &= check("crash after claim, restart, drain", db, expected)
++
++        # 3. Every claim interrupted several times in a row, then restart.
++        db = os.path.join(tmp, "s3.db")
++        ok &= expect_rc("submit", child(db, "submit-then-die"), 9)
++        for _ in range(3):
++            ok &= expect_rc("claim", child(db, "die-after-claim"), 9)
++        ok &= expect_rc("drain", child(db, "drain"), 0)
++        ok &= check("repeated crash after claim, restart, drain", db, expected)
++
++        # 4. Restart after completion: no rerun error, results kept.
++        ok &= expect_rc("re-drain", child(db, "drain"), 0)
++        ok &= check("restart after completion", db, expected)
++    return 0 if ok else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())

@@ -1,0 +1,181 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..841f4e59da933af0ff35ba8f32dfaa36fb22f977
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,79 @@
++# Export acceptance and restart recovery hunt
++
++Checked revision: `6a3927e69761ad3e4a04be827806cbbed380ff4b`.
++Contract: [app/export-contract.md](app/export-contract.md).
++Witness: [tests/hunt_witness.py](tests/hunt_witness.py).
++
++Scope: `Queue.submit`, `Queue.work`, startup recovery, and durable jobs/results.
++Prioritized harm: accepted work permanently abandoned after interruption or a
++failed output transaction. Stopping boundary: this operation and its direct
++recovery path; no broader note-store or import audit.
++
++## Demonstrated defect: committed running jobs are never recovered
++
++An accepted job can permanently lose its promised result after process exit.
++`submit` commits the pending row before returning acceptance
++(`app/export_queue.py:21–25`). `work` commits `running` before producing output
++(`:33–38`). Termination at the documented `after_claim` boundary therefore leaves
++a durable running job with no result. On restart, the constructor calls
++`recover`, which does nothing (`:15–19`). Every subsequent `work` selects only
++pending rows (`:28–32`). The accepted job remains inaccessible to the worker.
++
++The witness submits `job` / `payload` in a child process, calls real `work`, and
++terminates with `os._exit(23)` in the documented hook. Only after that process
++has exited does the parent reopen the same SQLite file and call `work` three
++times. Observed: no result, durable state `running`; expected: `payload` after
++healthy recovery. The SQL selection predicate and absent recovery establish
++that further healthy calls cannot progress this row; the finding does not
++infer permanence merely from a finite retry count.
++
++The same mechanism affects an output transaction error: the saved witness uses
++a temporary SQLite trigger to abort the result insert, removes the trigger,
++then retries real `work`. The result is still absent. This demonstrates the
++post-claim SQL-error path, not an actual operating-system I/O fault injection.
++The code ordering also leaves running state committed when the output
++transaction rolls back. Both schedules exercise one defect, not two distinct
++findings.
++
++Fix direction: reconstruct unfinished running obligations at startup and ensure
++failed attempts become eligible for retry in the live process. Under the
++supported single-worker, sequential-restart contract, unfinished running rows
++can be returned to pending. Preserve the atomic result-insert/done transaction
++and avoid replaying completed jobs. No repair was made.
++
++## Coverage and execution
++
++Executed `PYTHONDONTWRITEBYTECODE=1 python3 tests/hunt_witness.py` with Python
++3.9.6. Exit status **1**, four tests run: two passed and two failed at contract
++assertions. Each test uses an isolated temporary local SQLite file. The child
++exit status is checked so a failed setup cannot masquerade as a crash witness.
++
++| Selected case | Observed result |
++| --- | --- |
++| Acceptance committed, process exits before work | Restart produces the original payload; passed |
++| Running committed, process exits before output | Restart abandons accepted job; failed |
++| Output transaction aborts, fault removed, healthy retries | Accepted job remains abandoned; failed |
++| Completed transaction, process exits, same-payload resubmission | Result survives; no further work or duplicate result; passed |
++
++Code inspection: acceptance uses a committed SQLite transaction; result creation
++and the done transition share one transaction. No other queue consumers or
++recovery owners were found by targeted searches for `Queue`, `export_queue`,
++`submit`, and `recover` in application code and governing records.
++
++Governing-record discovery covered root `specs/` and references into the named
++surface. `GATE-local-only` applies and was respected. `ARCH-app`,
++`SPEC-note-payload`, and `REQ-import-source` describe adjacent note/import paths,
++not queue recovery. `CLAIM-single-writer` concerns writes under `data/`; this
++queue witness uses temporary SQLite files outside that directory. No claim
++proof or historical verification evidence was needed or changed. The supported
++export contract directly supplies the obligation tested here.
++
++Assumptions are the contract's local durable SQLite storage, exactly one active
++worker, no overlapping requests, restart after the prior worker stops, fixed
++payload per job ID, and eventual healthy repeated work calls. Storage loss,
++corruption, concurrency, and conflicting payloads are outside this contract.
++No power-loss simulation, mid-SQLite-commit kill, or actual transient OS I/O
++failure was tested. SQLite commit durability/atomicity is trusted as specified
++by the supplied contract. This is a deterministic implementation witness, not
++a generated search or an independent claim verification. No claim of exhaustive
++bug absence is made. Product code, records, and existing evidence were preserved.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a79e19d4ce3b688749c69700ec1606dc578bd708
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,90 @@
++"""Run: python3 tests/hunt_witness.py. Nonzero means a contract violation."""
++from pathlib import Path
++import os
++import sqlite3
++import subprocess
++import sys
++import tempfile
++import unittest
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT))
++from app.export_queue import Queue
++
++
++def child(path, boundary):
++    queue = Queue(path)
++    assert queue.submit('job', 'payload') == {'accepted': True, 'id': 'job'}
++    if boundary == 'pending':
++        os._exit(23)
++    if boundary == 'running':
++        queue.work(after_claim=lambda: os._exit(23))
++    elif boundary == 'done':
++        queue.work()
++        os._exit(23)
++    raise AssertionError('crash boundary was not reached')
++
++
++class RecoveryWitness(unittest.TestCase):
++    def setUp(self):
++        self.scratch = tempfile.TemporaryDirectory()
++        self.addCleanup(self.scratch.cleanup)
++        self.path = str(Path(self.scratch.name) / 'jobs.sqlite')
++
++    def crash(self, boundary):
++        completed = subprocess.run(
++            [sys.executable, str(Path(__file__).resolve()), '--child', self.path, boundary],
++            cwd=str(ROOT), check=False)
++        self.assertEqual(completed.returncode, 23, 'must reach intended crash boundary')
++
++    def reopen(self):
++        queue = Queue(self.path)
++        self.addCleanup(queue.close)
++        return queue
++
++    def drain(self, queue):
++        for _ in range(3):
++            queue.work()
++
++    def test_pending_acceptance_survives_exit(self):
++        self.crash('pending')
++        queue = self.reopen()
++        self.drain(queue)
++        self.assertEqual(queue.result('job'), 'payload')
++
++    def test_running_acceptance_survives_exit(self):
++        self.crash('running')
++        queue = self.reopen()
++        self.drain(queue)
++        state = queue.db.execute('SELECT state FROM jobs WHERE id = ?', ('job',)).fetchone()
++        self.assertEqual(queue.result('job'), 'payload',
++                         'accepted job abandoned after restart; durable state=%r' % (state,))
++
++    def test_completed_job_needs_no_work(self):
++        self.crash('done')
++        queue = self.reopen()
++        self.assertEqual(queue.result('job'), 'payload')
++        self.assertFalse(queue.work())
++        queue.submit('job', 'payload')
++        self.assertFalse(queue.work())
++        self.assertEqual(queue.db.execute('SELECT COUNT(*) FROM results').fetchone()[0], 1)
++
++    def test_output_error_then_healthy_retry(self):
++        queue = self.reopen()
++        queue.submit('job', 'payload')
++        # Inject one SQLite write error without modifying product code.
++        queue.db.execute("""CREATE TEMP TRIGGER fail_output BEFORE INSERT ON results
++                            BEGIN SELECT RAISE(ABORT, 'injected output failure'); END""")
++        with self.assertRaisesRegex(sqlite3.IntegrityError, 'injected output failure'):
++            queue.work()
++        queue.db.execute('DROP TRIGGER fail_output')
++        self.drain(queue)
++        self.assertEqual(queue.result('job'), 'payload',
++                         'accepted job abandoned after output error and healthy retry')
++
++
++if __name__ == '__main__':
++    if len(sys.argv) == 4 and sys.argv[1] == '--child':
++        child(sys.argv[2], sys.argv[3])
++    else:
++        unittest.main(verbosity=2)

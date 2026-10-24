@@ -12,7 +12,7 @@ REMOTE="$TEST_ROOT/published"
 PROJECTS="$TEST_ROOT/projects"
 SNAPSHOTS="$TEST_ROOT/snapshots"
 SAFE_URL="https://github.com/example/assurance-records-fixture"
-SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
+SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep assurance-records-bug-hunt)
 
 unset BASH_ENV ENV
 unset -f git 2>/dev/null || true

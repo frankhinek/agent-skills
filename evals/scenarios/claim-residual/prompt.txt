@@ -1,0 +1,1 @@
+Act as the independent verifier of the supplied argument for CLAIM-posting-durability. Review its formal evidence, assumptions, and residuals, and record the verdict in verification.md. Preserve the claim, supplied proof, project decisions, and executable verification; do not construct replacement evidence. Report any unresolved decisions needed to complete this review.

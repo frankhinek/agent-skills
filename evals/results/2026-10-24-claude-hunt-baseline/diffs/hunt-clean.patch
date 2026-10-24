@@ -1,0 +1,167 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..3893d9d118076799bf05c2fc027b86036f227d06
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,63 @@
++# Hunt report: export worker acceptance and restart recovery
++
++Scope: `app/export_queue.py` (`Queue.submit`, `Queue.work`, `Queue.recover`),
++judged against `app/export-contract.md`. I stopped after the accept → claim →
++interrupt → recover → complete path. No `specs/` record governs
++`app/export_queue.py` or the export contract. `ARCH-app`, `CLAIM-single-writer`,
++`SPEC-note-payload`, `GATE-local-only` and `REQ-import-source` cover the
++note store, handler, exporter and metadata only. Nothing here touches their
++surfaces. I didn't change any product code, records or existing evidence.
++
++Witness: `python3 tests/hunt_witness.py` (exit 1 = violation, 0 = holds).
++Current result: **exit 1**.
++
++## Finding 1: a job interrupted in-process stays `running` until the process restarts
++
++- **Contract:** "Accepted jobs must eventually produce their result after
++  recovery." "The application retries work after transient I/O failures and
++  calls work repeatedly once the environment recovers." A raise from the
++  `after_claim` hook "represents interruption before output".
++- **Code:** `Queue.work` commits `state = 'running'`, then calls
++  `after_claim()`. If that call raises, nothing reverts the claim. Later
++  `work()` calls only select `state = 'pending'`, so they skip the job and
++  return `False`. The only path from `running` back to `pending` is
++  `Queue.recover`, which runs only in `__init__` (its comment says "The
++  process-local worker slot starts empty"). A `running` row means "held by
++  this process's worker slot". After the exception, that slot is empty, but
++  the row still claims it.
++- **Consequence:** the contract's recovery model is "the application retries
++  after a transient failure". Under that model, an accepted job never produces
++  its result: it is stranded until something constructs a new `Queue`, and the
++  contract does not promise a restart for transient failures. Other pending
++  jobs keep being processed, so the only sign is that one result is missing.
++- **Witness (scenario B):** submit `job-1`. Call `work` with a hook that
++  raises `OSError`. Catch the error and call `work()` 20 more times on the
++  same `Queue`. Observed: `result('job-1') is None` and the job state is
++  `'running'`.
++
++## Checked and holding
++
++- **Acceptance durability:** `submit` commits the `pending` row before it
++  returns `accepted: True`. A committed transaction survives termination, so
++  accepted jobs survive a crash right after acceptance. `INSERT OR IGNORE`
++  on a re-submit is consistent with "a job ID has one payload throughout its
++  lifetime".
++- **Restart after process death at the claim boundary (scenario A):** a
++  child process submits, claims, and calls `os._exit` in `after_claim`. A
++  fresh `Queue` on the same file runs `recover()` (`running` → `pending`), and
++  `work()` then produces `payload-1`. This holds (witness prints `OK`).
++- **Atomic completion:** `INSERT INTO results` and `state = 'done'` share one
++  transaction. A crash between them can't leave a result without `done`, or
++  `done` without a result. So recovery never re-runs a job that already has a
++  result, and the `results` primary key is never hit.
++- **Completed jobs** are never re-selected (`done` is not `pending`).
++
++## Not covered
++
++- Failures inside the completion transaction itself, such as the disk filling
++  up during `INSERT INTO results`. `with self.db` rolls back to `running`,
++  which leads to the same stranding as Finding 1. I reasoned about this case
++  but didn't run a separate witness.
++- Concurrency and overlapping workers, which the contract excludes.
++- `app/handler.py`, `app/exporter.py` and `app/store.py` (note export, not the
++  job queue). These are outside the requested operation.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a8f7f241ab53cc8535c2ac9a09de1490a7305d5c
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,92 @@
++"""Witness for app/export-contract.md: accepted jobs eventually produce results.
++
++Scenario A (restart recovery): the worker process dies at the after_claim
++boundary; a fresh process recovers and keeps calling work().
++Scenario B (in-process retry): the after_claim hook raises (a transient I/O
++interruption before output); the same application keeps calling work() once
++the environment recovers, as the contract says it does.
++
++Exits nonzero if any accepted job never gets its result.
++"""
++import os
++import subprocess
++import sys
++import tempfile
++
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++sys.path.insert(0, ROOT)
++
++from app.export_queue import Queue  # noqa: E402
++
++RETRIES = 20
++
++CRASH_CHILD = """
++import os, sys
++sys.path.insert(0, sys.argv[1])
++from app.export_queue import Queue
++q = Queue(sys.argv[2])
++q.submit("job-1", "payload-1")
++q.work(after_claim=lambda: os._exit(9))
++"""
++
++
++def drain(q):
++    for _ in range(RETRIES):
++        if not q.work():
++            break
++
++
++def scenario_restart(tmp):
++    path = os.path.join(tmp, "restart.db")
++    proc = subprocess.run([sys.executable, "-I", "-c", CRASH_CHILD, ROOT, path])
++    if proc.returncode != 9:
++        return "child did not reach the after_claim boundary (rc=%d)" % proc.returncode
++    q = Queue(path)
++    try:
++        drain(q)
++        got = q.result("job-1")
++    finally:
++        q.close()
++    if got != "payload-1":
++        return "after restart, result is %r, expected 'payload-1'" % (got,)
++    return None
++
++
++def scenario_in_process_retry(tmp):
++    path = os.path.join(tmp, "retry.db")
++    q = Queue(path)
++    try:
++        q.submit("job-1", "payload-1")
++
++        def transient_failure():
++            raise OSError("transient I/O failure before output")
++
++        try:
++            q.work(after_claim=transient_failure)
++        except OSError:
++            pass  # the application retries after transient I/O failures
++        drain(q)  # environment recovered; work is called repeatedly
++        got = q.result("job-1")
++        state = q.db.execute("SELECT state FROM jobs WHERE id = 'job-1'").fetchone()
++    finally:
++        q.close()
++    if got != "payload-1":
++        return ("after a transient failure and %d work() retries without restart, "
++                "result is %r and job state is %r" % (RETRIES, got, state and state[0]))
++    return None
++
++
++def main():
++    failures = []
++    with tempfile.TemporaryDirectory() as tmp:
++        for name, fn in [("restart recovery", scenario_restart),
++                         ("in-process retry", scenario_in_process_retry)]:
++            err = fn(tmp)
++            print("%s: %s" % (name, "OK" if err is None else "VIOLATION - " + err))
++            if err:
++                failures.append(name)
++    return 1 if failures else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

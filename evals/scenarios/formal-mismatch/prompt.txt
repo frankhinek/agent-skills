@@ -1,0 +1,1 @@
+Act as the independent verifier of the supplied argument for CLAIM-score-export. Assess whether its formal result establishes the claim and record the verdict in verification.md. Preserve the claim, supplied proof, implementation, and executable verification; do not construct replacement evidence.

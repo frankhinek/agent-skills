@@ -1,0 +1,67 @@
+diff --git a/specs/CLAIM-posting-durability/verification.md b/specs/CLAIM-posting-durability/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..13b77f05d880fe399ad5396b9b2005285300f4f3
+--- /dev/null
++++ b/specs/CLAIM-posting-durability/verification.md
+@@ -0,0 +1,61 @@
++Verified at revision 036dec63f3731d2c8772980e16f6c039db29759d, 2026-10-23,
++by an independent verifier agent (Claude Opus 5.5), not the proof author.
++
++Evidence kinds reviewed: `formal` (Lemma 1), `axiom` (A1-A3, Lemma 2).
++
++Inspected: specs/CLAIM-posting-durability.md, proof.md, verification/README.md,
++verification/posting.smt2, docs/posting-boundary.md (user decision 2026-10-20
++and the existing storage contract). The posting implementation is outside the
++evidence packet; app/ was not used as a stand-in, per docs/posting-boundary.md.
++
++Commands and observed results (project root):
++
++- `z3 -version` -> `Z3 version 5.3.1 - 64 bit`; matches the recorded toolchain.
++- `z3 verification/posting.smt2` -> `unsat`; the recorded result reproduces.
++- Same file with unsat cores enabled (temporary copy) -> core
++  `(orderly_shutdown posting_survives)`: the result depends on the `orderly`
++  assertion.
++- Same file with `orderly_shutdown` removed (temporary copy) -> `sat`, model
++  `acknowledged=true, on_disk=false, orderly=false`, i.e. an acknowledged,
++  unsynchronized posting is not recovered after a non-orderly termination.
++
++Attacks and findings:
++
++1. Unauthorized narrowing through an assumption. The claim covers abrupt
++   process termination, and docs/posting-boundary.md records the user decision
++   that it is included and that no orderly-shutdown-only guarantee has been
++   accepted. A3 ("all process termination follows an orderly shutdown") and
++   the `orderly` assertion exclude exactly that case. The proposition checked
++   is "acknowledged postings survive an orderly shutdown", not the claim.
++2. Residual misfiled. Abrupt termination is inside the claim's quantifiers,
++   so the proof author cannot accept it as a residual; doing so is an
++   argument bug. Only host power loss and physical storage corruption are
++   legitimate residuals (claim qualifier and the 2026-10-20 decision).
++3. Lemma 1 overstates its conclusion. "Therefore acknowledged postings remain
++   recoverable" does not follow from an unsat result that requires
++   `orderly_shutdown`; the formal result is conditional on A3.
++4. Smuggled premise in the encoding. `recovered` is defined as
++   `on_disk or (orderly and acknowledged)`, which builds "orderly shutdown
++   synchronizes acknowledged postings" into a definition rather than deriving
++   it; even with A3 the theorem is near-tautological.
++5. Missing correspondence. The SMT file is a separate model
++   (verification/README.md). No lemma connects `acknowledged` or `on_disk`
++   to when the posting implementation acknowledges or synchronizes, and A2
++   explicitly says nothing about that ordering. The connection that would
++   carry the claim through abrupt termination (sync completes before
++   acknowledgement) is unargued.
++6. A1 and A2 are acceptable: A1 is the stated trusted solver/encoding, and
++   A2 restates the adopted storage contract without needing renewed approval.
++
++Not falsified: the `sat` model above is a counterexample to the model without
++A3, not an observed execution of the posting implementation, which is outside
++this packet. No counterexample to the claim itself was established.
++
++To support a pass, the argument needs evidence covering abrupt termination
++within the existing boundary, e.g. a lemma tying acknowledgement to completed
++synchronization in the posting implementation (with A2), and a model that does
++not assume orderly shutdown. Removing A3 and the misfiled residual is part of
++that repair; no new user decision is required to keep the existing boundary.
++
++Result: provisional
++Evidence does not cover abrupt process termination, which the claim includes.

@@ -29,9 +29,11 @@ they were recorded.
 skills/
 ├── assurance-records/SKILL.md        # core convention: record types, authority rules
 ├── assurance-records-claims/SKILL.md # claim proofs + adversarial verification
-└── assurance-records-upkeep/         # bootstrap / lint / groom workflows
-    ├── SKILL.md
-    └── lint.sh                     # executable mechanical checks (CI-ready)
+├── assurance-records-upkeep/         # bootstrap / lint / groom workflows
+│   ├── SKILL.md
+│   └── lint.sh                     # executable mechanical checks (CI-ready)
+└── assurance-records-bug-hunt/       # explicitly requested harm-driven investigations
+    └── SKILL.md
 install.sh                          # symlink skills into each tool's global dir
 vendor.sh                           # set up a project (vendor skills + AGENTS.md pointer)
 lib/vendor-inventory.sh             # versioned typed-manifest implementation
@@ -50,7 +52,7 @@ The runner snapshots the current contract files into a temporary committed Git
 fixture, so it tests uncommitted changes without weakening `vendor.sh`'s
 committed-source requirement. The same command runs in CI on macOS and Linux.
 CI installs the official `skills-ref` validator at the immutable commit pinned
-in the workflow and validates all three distributed skill directories. It also
+in the workflow and validates all four distributed skill directories. It also
 downloads the checksum-verified official ShellCheck 0.11.0 binary for each
 platform and rejects warning-or-higher findings across every tracked shell
 script. Run the same static check locally with:
@@ -101,6 +103,15 @@ For a vendored project:
 4. From a committed checkout of this rename, run `vendor.sh --copy <project>`
    and `vendor.sh --check <project>`. Review the project diff before committing.
 
+## Add the bug-hunt skill to an existing installation
+
+Re-run `install.sh` for global symlinks, or `vendor.sh --copy <project>` for
+a vendored project. An unchanged three-skill copy refreshes without `--force`;
+local edits remain protected. `--check` reports the missing fourth skill until
+that refresh. Interrupted transactions from the three-skill version recover
+before an upgrade starts. Recovery preserves entries the older transaction
+did not manage.
+
 ## New project
 
 ```sh
@@ -141,7 +152,7 @@ detection need a trusted signed release or manifest; this repository does not
 provide one.
 
 Copy refreshes are transactional. `vendor.sh` first copies and verifies all
-three managed skills in a hidden staging directory on the destination
+four managed skills in a hidden staging directory on the destination
 filesystem. Only then does it move the old managed entries aside, activate the
 staged copies, verify the live inventory, and publish the prepared manifest.
 Unrelated entries under `.agents/skills/` are never moved.
@@ -172,7 +183,7 @@ pointer symlinks are refused rather than followed, so project-scoped setup
 cannot write through them to another location.
 
 The manifest records two different identities: the full source commit for
-provenance, and a deterministic payload ID covering exactly the three managed
+provenance, and a deterministic payload ID covering exactly the four managed
 skill trees. Remote provenance is stored only as
 `https://github.com/OWNER/REPOSITORY`, without credentials, a port, query,
 fragment, or additional path. Copy mode accepts that HTTPS form and the common
@@ -208,13 +219,13 @@ That rejects ordinary source divergence, including content changes, ignored
 files, empty directories, index-hidden paths, checkout-filter differences, and
 embedded repositories, before the payload ID is stamped.
 
-Before checking provenance, `--check` inventories all three expected skill
+Before checking provenance, `--check` inventories all four expected skill
 destinations and their regular `SKILL.md` markers. A coherent install whose
-three symlinks point exactly to their matching skills in this repository
+four symlinks point exactly to their matching skills in this repository
 succeeds immediately; a coherent all-copy install continues through the
 manifest, local-edit, and published revision checks. Missing, mixed, dangling,
 wrong-target, markerless, and otherwise invalid installations fail before
-provenance or network work and print every skill's state. When all three skills
+provenance or network work and print every skill's state. When all four skills
 and the manifest are absent, the install is called out separately as not
 installed or the wrong project directory, even if the shared `.agents/skills`
 directory contains unrelated skills. Preserve or move only affected
@@ -233,6 +244,7 @@ The value comes from a few explicit moves at the right moments:
 | You make a decision that must stick ("local-only, no cloud sync") | "establish a gate: \<constraint\>, because \<goal\>" — agents can no longer undo it without you |
 | A property's failure would really hurt ("payments can't double-apply") | "create a claim: \<property\>" — future changes treat it as an invariant to uphold |
 | You want actual evidence (pre-release, after a scary refactor) | "prove and verify CLAIM-x" — written proof plus an independent adversarial check |
+| You want a bounded investigation of failure paths | "hunt bugs in \<operation\>, including crashes and retries" — findings and runnable witnesses; new claims remain explicit |
 | Before a PR / end of session | "lint the records" — broken links, missing justifications, code/record drift |
 | Every month or so | "groom the records" — random-sample trim of stale or low-value records |
 
@@ -269,9 +281,10 @@ The assurance-records skill family is a personal synthesis with this lineage:
 | `assurance-records` | dpc's Linked Specs record model, with maan2003's claim concept incorporated as the `CLAIM` record type |
 | `assurance-records-claims` | maan2003's agentic-claims proof and verification practice, adapted to the Linked Specs authority model |
 | `assurance-records-upkeep` | dpc's Linked Specs bootstrapping and grooming practices, with claim boundaries from the combined model |
+| `assurance-records-bug-hunt` | maan2003's harm-driven bug hunt, with executable-check practices adapted from pstack |
 | Scripts, linter, and eval suite | Original to this repository |
 
-ADR practice is the historical backdrop. The relevant upstream instruction
+ADR practice is the historical backdrop. The dpc and maan2003 instruction
 material is available under CC0 1.0 Universal:
 
 - [dpc's `dpc-public-skills` at `564df51f`](https://radicle.network/nodes/radicle.dpc.pw/rad%3Az2HR882B4c4mTdAgdt4SozpdeTuMf) dedicates the repository, including its
@@ -280,9 +293,13 @@ material is available under CC0 1.0 Universal:
   including skill instructions and documentation, under
   [CC0](https://github.com/maan2003/public-skills/blob/4bb7c110cdf712f7893ea19b0ceb7a6c253efe24/LICENSE.md).
 
+The bug-hunt skill also adapts practices from [pstack at `9580c236`](https://github.com/cursor/plugins/tree/9580c23696ac8d7abed0c166f2f9918800afb819/pstack),
+licensed under MIT by Lauren Tan. Its notice travels with the skill in
+[LICENSE.pstack](skills/assurance-records-bug-hunt/LICENSE.pstack).
+
 Those public grants permit the incorporation and adaptation used here; no
-private permission is relied upon. The upstream material remains available
-under CC0. Frank's copyrightable contributions—including the original code,
+private permission is relied upon. Upstream material retains its respective
+CC0 or MIT terms. Frank's copyrightable contributions—including the original code,
 skill adaptations, selection, and arrangement—are licensed under the
 [MIT License](LICENSE).
 

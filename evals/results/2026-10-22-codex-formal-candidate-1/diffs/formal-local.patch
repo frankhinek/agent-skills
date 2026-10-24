@@ -1,0 +1,11 @@
+diff --git a/verification/identity.smt2 b/verification/identity.smt2
+index f5f30d1b2500c1a825c961061853500648b59514..3b688f38db11ae9fef7ce258b65bae86916d37a3 100644
+--- a/verification/identity.smt2
++++ b/verification/identity.smt2
+@@ -1,3 +1,6 @@
++; Guarantee: for every mathematical integer x, identity(x) = x because x + 0 = x.
++; identity_add_zero asserts a counterexample; unsat discharges the guarantee.
++; Solver setup and trusted assumptions are documented in README.md.
+ (set-logic QF_LIA)
+ (define-fun identity ((x Int)) Int (+ x 0))
+ (declare-const x Int)

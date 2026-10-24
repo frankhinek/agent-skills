@@ -1,0 +1,60 @@
+diff --git a/specs/CLAIM-score-export/verification.md b/specs/CLAIM-score-export/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..b90a542fa590812e0c8b7c1e84bdba699b3178ba
+--- /dev/null
++++ b/specs/CLAIM-score-export/verification.md
+@@ -0,0 +1,54 @@
++# Verification of CLAIM-score-export
++
++Result: provisional
++
++Verifier: Codex, acting independently of the supplied argument's author.
++Date: 2026-10-22.
++Revision inspected: `76abe3b342f2b7c3bf3cd97726b9792406e58b89`;
++the claim, supplied proof, implementation, and executable verification had
++no working-tree changes.
++
++Inspected [the claim](../CLAIM-score-export.md), [the supplied argument](proof.md),
++[the SMT artifact](../../verification/lower.smt2),
++[its reproduction instructions](../../verification/README.md),
++[clamp_score](../../app/score.py), and
++[export_score](../../app/score_export.py).
++Evidence kinds: reproduced `formal` result for a separate mathematical model,
++and `code` inspection to assess the supplied correspondence argument.
++
++Commands run from the project root:
++
++- `z3 -version` returned `Z3 version 5.3.1 - 64 bit - build hashcode ac9156f97cb44e56472e1c841f7a2beb1e976b24`.
++- `z3 verification/lower.smt2` returned `unsat` (exit code 0).
++
++The named assertion `clamp_nonnegative` negates only `0 <= clamp(x)`.
++Its unsatisfiability establishes that lower bound for every mathematical
++integer in the encoded model. It is symbolic verification, not bounded or
++sampled exploration. The trusted base includes Z3 and the SMT encoding;
++there are no explicit added axioms or admitted obligations in this artifact.
++
++The statement-adequacy attack finds that the sole checked obligation does
++not assert `clamp(x) <= 100`. Although the model's definition includes a
++branch returning 100, that definition is not a checked upper-bound
++obligation. The supplied lemma incorrectly extends the lower-bound result
++to both bounds. No other supplied lemma fills this gap.
++
++The production-correspondence attack finds that the artifact neither calls
++nor verifies Python code. The supplied argument does not justify the
++connection from its mathematical `clamp` to `clamp_score`, or from that
++function through `json.dumps` and `json.loads` to an exact built-in integer
++score. An SMT `Int` is not itself evidence for Python's `type(score) is int`.
++The claim's exclusion of booleans and integer subclasses does not supply
++these missing connections. These obligations are inside the claim's domain
++and cannot be dismissed as residuals.
++
++The formal result therefore does not establish the full claim through the
++supplied argument. No counterexample to the stated implementation property
++was established; an incomplete argument warrants `provisional`, not
++`falsified`. This review supplies no replacement proof, new obligation, or
++replacement executable evidence, and makes no repairs to the preserved files.
++
++Process limitation: the separate adversarial agent required by the claims
++skill was requested but could not start because the collaboration service
++reported a missing rollout/model context. The attacks above are this
++verifier's own review; no separate-agent result is represented as completed.

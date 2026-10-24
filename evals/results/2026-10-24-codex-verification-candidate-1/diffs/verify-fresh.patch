@@ -1,0 +1,60 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 48c99bafba50754cbfff31ae632c9fe0e5dcb93e..996643195827c1d9e46e5bbb6df9946a8d624579 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,55 @@ A subsequent report at historical revision cache-v2 recorded witness LOW:
+ `python3 tests/witness_ttl.py LOW` returned raw=-1 for input -1 in raw mode.
+ Expected [0,100], observed -1. No repair or resolution was recorded.
+ Result: falsified
++
++## Independent verification — 2026-10-24
++
++Verifier: Codex, assigned independent verification in a fresh context, with
++no inherited author discussion or earlier review conclusions. Checked revision
++`092f761b188ece0a550919a2243f76040c724fc5`; the claim, proof, source, and
++witness were unchanged in the working tree.
++
++### Fresh assessment
++
++Before reading the previous reports above, inspected the fixed
++[CLAIM-cache-ttl](../CLAIM-cache-ttl.md), its [supplied argument](proof.md),
++[ttl](../../app/cache_policy.py), [export_ttl](../../app/cache_export.py),
++and [witness](../../tests/witness_ttl.py). Searched repository references to
++cache, ttl, and export_ttl; found no imported claims or additional consumers.
++Reviewed the root governing records; none narrows the stated TTL property.
++Evidence kinds: `code` and `test`; no formal or exhaustive search evidence.
++
++Attacked the assertion that both branches delegate to the clamp by tracing
++each return path. Lemma 1 holds for exact integers: min/max clamp to [0, 100]
++and preserve integer type. Lemma 2 is false: the raw branch returns raw
++unchanged. Lemma 3's executable witness detects violations rather than
++supporting a passing conclusion. The lower and upper out-of-range cases
++are within the claim's quantifiers, not residuals.
++
++Fresh counterexamples at the checked revision, using sequential calls with
++exact integer inputs and supported mode `raw`:
++
++| Input | Expected | Observed | Finding |
++| --- | --- | --- | --- |
++| -1 | integer in [0, 100] | -1 | Lower bound violated |
++| 101 | integer in [0, 100] | 101 | Upper bound violated |
++
++The initial `python -m tests.witness_ttl` attempt could not run because
++`python` is unavailable. With Python 3.9.6, `python3 tests/witness_ttl.py`
++printed both raw violations; JSON returned 0 and 100 respectively.
++Separate runs of `python3 tests/witness_ttl.py LOW` and
++`python3 tests/witness_ttl.py HIGH` each exited 1 and reproduced the
++corresponding raw violation, with JSON reporting no violation.
++
++### Historical reconciliation and final assessment
++
++After the fresh assessment, read the previous reports. The cache-v1 pass
++relied on the same incorrect delegation premise and does not support the
++current implementation. The unresolved cache-v2 LOW counterexample was
++rerun against the current revision and reproduced exactly. HIGH is an
++additional fresh counterexample. Both remain unresolved; no repair was made.
++The supplied argument cannot establish the fixed property, and the current
++implementation directly falsifies it. Claim, proof, source, and tests are
++preserved; only this verification receipt changed.
++
++Result: falsified

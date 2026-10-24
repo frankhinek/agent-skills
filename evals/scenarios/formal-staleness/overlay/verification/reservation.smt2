@@ -1,0 +1,12 @@
+(set-logic QF_LIA)
+; Inductive base and step obligations for the abstract reservation count.
+(define-fun invariant ((n Int)) Bool (and (<= 0 n) (<= n 1)))
+(define-fun reserve ((n Int)) Int (ite (= n 0) 1 n))
+(push)
+(assert (! (not (invariant 0)) :named reservation_base))
+(check-sat)
+(pop)
+(declare-const n Int)
+(assert (invariant n))
+(assert (! (not (invariant (reserve n))) :named reservation_step))
+(check-sat)

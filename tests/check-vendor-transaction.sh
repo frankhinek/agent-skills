@@ -488,7 +488,7 @@ run_vendor "$fresh_shim" --copy "$fresh_project"
 [ "$RUN_STATUS" -ne 0 ] || fail "fresh rename failure unexpectedly succeeded"
 assert_triggered fresh-failure
 assert_contains fresh-failure "$RUN_OUTPUT" "restored previous installation"
-for skill in assurance-records assurance-records-claims assurance-records-upkeep; do
+for skill in assurance-records assurance-records-claims assurance-records-upkeep assurance-records-bug-hunt; do
   [ ! -e "$fresh_project/.agents/skills/$skill" ] ||
     fail "fresh failure left $skill installed"
 done

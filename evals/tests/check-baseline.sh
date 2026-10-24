@@ -201,6 +201,18 @@ PY
 
 prepare_scenario_pass() {
   case "$1" in
+  hunt-*)
+    install_scenario_overlay "$1"
+    python3 "$EVALS/tests/hunt-controls.py" "$1" "$FIXTURE"
+    ;;
+  verify-*|witness-*|composition-gap)
+    install_scenario_overlay "$1"
+    python3 "$EVALS/tests/verification-controls.py" "$1" "$FIXTURE"
+    ;;
+  formal-local|formal-proof|formal-mismatch|formal-staleness|claim-composition|claim-residual)
+    install_scenario_overlay "$1"
+    python3 "$EVALS/tests/formal-controls.py" "$1" "$FIXTURE"
+    ;;
   discovery-ancestor|discovery-consumer) install_scenario_overlay "$1" ;;
   claim-staleness)
     write_sorted_store
@@ -271,10 +283,15 @@ for checker in "$EVALS"/scenarios/*/check.sh; do
   scenario="$(basename "$(dirname "$checker")")"
   expect_checker_failure "$scenario" 'FAIL: governing skills changed'
   case "$scenario" in
+  hunt-routine) marker='FAIL: requested label change missing or different' ;;
+  hunt-*) marker='FAIL: missing regular hunt report' ;;
+  verify-*|witness-*|composition-gap) marker='FAIL: missing regular verification receipt' ;;
   arch-drift) marker='PASS: ARCH record not silently rewritten' ;;
   bare-activation) marker='PASS: bare activation left all records and claim evidence unchanged' ;;
   claim-staleness) marker='FAIL: Store.write did not sort JSON object keys' ;;
   claim-writer) marker='PASS: claim records unchanged' ;;
+  formal-local|formal-proof|formal-mismatch|formal-staleness|claim-composition|claim-residual)
+    marker='FAIL: formal fixture is incomplete' ;;
   discovery-ancestor|discovery-consumer) marker='FAIL: discovery fixture is incomplete' ;;
   gate-conflict) marker='PASS: gate record untouched' ;;
   gate-sweep-edit) marker='PASS: gate record untouched by the docs sweep' ;;
@@ -340,10 +357,25 @@ for checker in "$EVALS"/scenarios/*/check.sh; do
 done
 
 for checker in "$EVALS"/scenarios/*/check.sh; do
-  grep -q 'check-lib.sh' "$checker" || fail "$checker does not load check-lib.sh"
-  grep -q 'eval_check_governing_skills' "$checker" ||
+  implementation="$checker"
+  case "$(basename "$(dirname "$checker")")" in
+  hunt-*)
+    grep -q 'hunt-check.sh' "$checker" || fail "$checker does not dispatch to the shared checker"
+    implementation="$EVALS/hunt-check.sh"
+    ;;
+  verify-*|witness-*|composition-gap)
+    grep -q 'verification-check.sh' "$checker" || fail "$checker does not dispatch to the shared checker"
+    implementation="$EVALS/verification-check.sh"
+    ;;
+  formal-local|formal-proof|formal-mismatch|formal-staleness|claim-composition|claim-residual)
+    grep -q 'formal-check.sh' "$checker" || fail "$checker does not dispatch to the shared checker"
+    implementation="$EVALS/formal-check.sh"
+    ;;
+  esac
+  grep -q 'check-lib.sh' "$implementation" || fail "$checker does not load check-lib.sh"
+  grep -q 'eval_check_governing_skills' "$implementation" ||
     fail "$checker does not enforce governing-skill integrity"
-  if grep -Eq 'git (diff|status)' "$checker"; then
+  if grep -Eq 'git (diff|status)' "$implementation"; then
     fail "$checker bypasses the shared baseline helper"
   fi
 done

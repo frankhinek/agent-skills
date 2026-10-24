@@ -5,10 +5,13 @@ description: Personal convention for durable project knowledge kept as small, li
 
 # Assurance Records
 
-Keep durable project knowledge at the strongest enforcement rung available:
-type > schema constraint > lint/CI check > test > record > nothing. Records
-are the fallback only when knowledge matters beyond the current change and no
-mechanical artifact can own it. Prefer strengthening enforcement.
+Let types, schema constraints, executable checks, formal specifications, and
+checked proofs own the properties they establish. Choose by the property,
+coverage, and assumptions: these mechanisms are not a universal ranking.
+Records retain durable knowledge that those artifacts cannot own. A claim
+earns its place through a material system obligation, assumption, or connection
+between evidence sources beyond what the executable artifacts already capture.
+Prefer strengthening enforcement and shrinking the remaining written argument.
 
 Ordinary work changes no records by default. A request to document supplies
 intent, not qualification; apply the thresholds below. Records are not
@@ -90,13 +93,16 @@ conflict and leave the gate unchanged.
   justification normatively).
 - `CLAIM-*` — one falsifiable, load-bearing property the code claims to
   hold, stated in a few sentences with its material qualifiers (protected
-  state, boundary, concurrency, adversary). Proof and verification live in a
+  state, boundary, concurrency, adversary). Apply the qualification rule above
+  even when formal evidence exists. Proof and verification live in a
   sibling directory, and the claim's exact wording is what that evidence
   attests: never reword a claim in an editorial or documentation pass, and
   retire one only on the user's explicit request. Every claim-record change
   goes through the `assurance-records-claims` skill
   (`../assurance-records-claims/SKILL.md`) — read it before creating, proving,
-  verifying, or retiring one.
+  verifying, or retiring one. For verification, load that skill separately
+  from evidence reads, so its input-selection rules apply before any earlier
+  report enters context.
 
 An `ARCH-*` or `SPEC-*` may end with a selective `## Alternatives` section:
 designs considered, why the current one won, whether they remain viable.
@@ -125,6 +131,9 @@ The `assurance-records-claims` skill (`../assurance-records-claims/SKILL.md`)
 covers claim proofs and adversarial verification. The
 `assurance-records-upkeep` skill (`../assurance-records-upkeep/SKILL.md`) covers
 bootstrapping a project, the mechanical lint pass, and grooming an
-accumulated corpus. When practice exposes a failure mode this convention did
+accumulated corpus. When explicitly asked to hunt implementation bugs or audit
+crash, retry, concurrency, or recovery behavior, use `assurance-records-bug-hunt`
+(`../assurance-records-bug-hunt/SKILL.md`). Ordinary implementation and review
+do not start that workflow. When practice exposes a failure mode this convention did
 not anticipate, amend these skill files — the convention is itself a record
 and should stay small, current, and truthful.

@@ -1,0 +1,77 @@
+diff --git a/specs/CLAIM-cache-once/verification.md b/specs/CLAIM-cache-once/verification.md
+index 7c2f68fc74bd12c043a7d4d89ee750c20ae58bad..6ee47a4d402508c3741a75fa016b5bae16f9ffa3 100644
+--- a/specs/CLAIM-cache-once/verification.md
++++ b/specs/CLAIM-cache-once/verification.md
+@@ -1,2 +1,72 @@
+ Independent fixture review covers the supplied method and scope.
+ Result: provisional
++
++## Independent verification — 2026-10-24
++
++Verifier: Codex, assigned independent verifier; no author discussion or prior
++review conclusions were inherited. Revision: `79a874aba1d7812c33c81bccc7243001159a3b1b`.
++Implementation SHA-256: `bc8a9b3fdcf09ac905d67500f21cfec77857a344f62c76367092d091b5bfdad3`.
++Witness SHA-256: `987aad205d58e49be2de3c23742b5c56fdcea39eaf5b35195c6bdd70fd29755d`.
++
++### Fresh assessment
++
++Initial content reads excluded verification reports. Inspected the fixed
++[claim](../CLAIM-cache-once.md), [composition](proof.md), both imported claims
++and their proofs, applicable project boundaries, [Cache](../../app/cache_updates.py),
++its consumers/references, and the supplied [witness](../../tests/witness_retry.py).
++The fresh composition-gap finding was recorded in conversation before opening
++any historical verification report.
++
++Evidence kinds: `claim`, `code`, and `test`. No formal proof or bounded-search
++result is supplied or asserted here. Granting both imported conclusions exactly
++as stated still permits the parent to fail:
++
++1. On one fresh Cache instance, call `apply("request-1", "value")` with
++   `after_append` raising `RuntimeError`. Line 15 completes append, then line 16
++   raises before line 17 can acknowledge. State: one value, no receipt.
++2. Catch the exception and retry the same command on the same instance. The
++   receipt guard at lines 13–14 permits another append. Acknowledgment then adds
++   just one receipt. State: two values for the same command, one receipt.
++
++Each completed append adds exactly one value, and the receipt set contains no
++duplicate identifier. Thus both imports remain true in this counterexample.
++The connecting `code` step in the composition does not establish deduplication:
++neither import relates an append to a receipt, and the guard and append/acknowledge
++sequence have an interruption window. Calling append “atomic” cannot extend the
++imported conclusion to this entire sequence. Sequential execution removes
++concurrent races but does not close this window.
++
++Executed `python3 -B tests/witness_retry.py` with Python 3.9.6 against the above
++revision. Observed output: `versions=['value', 'value'], receipts={'request-1'}`.
++Exit status was 1 with `AssertionError: same command appended twice`. This is
++the witness's property assertion failing, rather than a setup/tooling failure.
++The test imports the production Cache directly. It demonstrates a violation
++within the claim's explicit interruption scope, with no concurrency or process
++memory loss. Those residuals cannot exclude it. No new narrowing premise is
++accepted.
++
++### Historical reconciliation and imported support
++
++After recording the fresh finding, read the previous parent receipt and both
++imported verification reports. The parent previously recorded only a provisional
++verdict; it contained no additional findings or counterexamples to reconcile.
++The supplied witness was rerun as recorded above and remains unresolved.
++
++[CLAIM-cache-append](../CLAIM-cache-append.md) and
++[CLAIM-cache-receipt](../CLAIM-cache-receipt.md) have supplied independent pass
++receipts covering the exact implementation SHA-256 checked here. Their builtin
++list/set premises and sequential execution scopes are compatible; their proofs
++introduce no further imports, so the composition is acyclic. These receipts are
++code-review evidence, not executable or formal proof results. Their stated
++limits explicitly allow multiple append calls and establish no relation between
++receipts and versions. Inspection of lines 6–10 agrees with those conclusions.
++Current imported support therefore does not repair the missing connection.
++
++### Verdict
++
++The supplied composition is insufficient, and the executable production witness
++falsifies the fixed parent claim at the recorded revision. No repair was made.
++Claims, proofs, imported verdicts, source, tests, and the previous parent verdict
++are preserved. The counterexample remains unresolved.
++
++Result: falsified

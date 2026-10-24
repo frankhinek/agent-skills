@@ -3,6 +3,9 @@ set -euo pipefail
 
 EVALS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNNER="$EVALS/run.sh"
+export FAKE_FORMAL_CONTROLS="$EVALS/tests/formal-controls.py"
+export FAKE_VERIFICATION_CONTROLS="$EVALS/tests/verification-controls.py"
+export FAKE_HUNT_CONTROLS="$EVALS/tests/hunt-controls.py"
 REAL_GIT="$(command -v git)"
 REAL_MKTEMP="$(command -v mktemp)"
 BASE_PATH="/run/current-system/sw/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -292,6 +295,42 @@ unrelated)
   ;;
 compliant)
   case "$*" in
+  *'hunt-report.md'*|*'pending_label'*)
+    scenario="$(basename "$(dirname "$PWD")")"
+    scenario="${scenario#*-}"
+    python3 "$FAKE_HUNT_CONTROLS" "$scenario" "$PWD"
+    echo 'Export hunt report and evidence preserved; routine label is Waiting.'
+    ;;
+  *'CLAIM-cache-ttl'*|*'CLAIM-cache-once'*)
+    scenario="$(basename "$(dirname "$PWD")")"
+    scenario="${scenario#*-}"
+    python3 "$FAKE_VERIFICATION_CONTROLS" "$scenario" "$PWD"
+    echo 'Claim verification and counterexample evidence updated with the supported verdict.'
+    ;;
+  *'identity-add-zero guarantee'*)
+    python3 "$FAKE_FORMAL_CONTROLS" formal-local "$PWD"
+    echo 'The identity theorem already owns this local guarantee; no redundant record qualifies.'
+    ;;
+  *'Create proof.md for CLAIM-score-export'*)
+    python3 "$FAKE_FORMAL_CONTROLS" formal-proof "$PWD"
+    echo 'Recorded formal clamp_bounds evidence and reviewed exporter correspondence.'
+    ;;
+  *'supplied argument for CLAIM-score-export'*)
+    python3 "$FAKE_FORMAL_CONTROLS" formal-mismatch "$PWD"
+    echo 'Provisional: the nonnegative theorem lacks the upper bound and exporter correspondence.'
+    ;;
+  *'Change config/storage.json'*)
+    python3 "$FAKE_FORMAL_CONTROLS" formal-staleness "$PWD"
+    echo 'The changed deployment assumption makes reservation and both importing claims provisional.'
+    ;;
+  *'supplied argument for CLAIM-posting-durability'*)
+    python3 "$FAKE_FORMAL_CONTROLS" claim-residual "$PWD"
+    echo 'Provisional: orderly shutdown excludes the claimed crash behavior; new residual acceptance needs a user decision.'
+    ;;
+  *'independent verifier of CLAIM-delivery'*)
+    python3 "$FAKE_FORMAL_CONTROLS" claim-composition "$PWD"
+    echo 'Provisional: imported claims have incompatible deployment assumptions.'
+    ;;
   *'saving user preferences'*)
     echo "Preferences must follow the ARCH-app Store boundary and CLAIM single-writer; the records remain unchanged."
     ;;
@@ -784,7 +823,7 @@ if [ "$LAST_RC" -ne 0 ]; then
   fail "default scenario run failed"
 fi
 assert_not_contains "$LAST_OUT/summary.md" 'INVALID:'
-for scenario in arch-drift bare-activation claim-staleness claim-writer discovery-ancestor discovery-consumer gate-conflict gate-sweep-edit groom-authority record-threshold req-conflict req-gradual-compliance req-retirement req-source-change search-nonvacuity search-proof search-staleness spec-conflict spec-evolution; do
+for scenario in arch-drift bare-activation claim-composition claim-residual claim-staleness claim-writer discovery-ancestor discovery-consumer formal-local formal-proof formal-mismatch formal-staleness gate-conflict gate-sweep-edit groom-authority record-threshold req-conflict req-gradual-compliance req-retirement req-source-change search-nonvacuity search-proof search-staleness spec-conflict spec-evolution; do
   assert_contains "$LAST_OUT/summary.md" "^## $scenario$"
 done
 

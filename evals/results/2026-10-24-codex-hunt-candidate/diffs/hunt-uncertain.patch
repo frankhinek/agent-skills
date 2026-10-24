@@ -1,0 +1,96 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..c6c5673d2b80613d81887f5aaf1211e940fb10a8
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,90 @@
++# Remote export submission hunt
++
++## Scope and result
++
++Assessed `app/remote_export.py:4-7` against the deployment described in
++`app/export-contract.md:8-13`, at revision
++`00ae10fbb5384dfb4fcc47cb49ff537bb4cc7c0d`.
++The selected harms were loss after reported success, duplicate effects on retry,
++and interrupted submissions without recovery. Scope ends at submission and its
++direct recovery paths; note storage and import behavior were not audited.
++
++**No implementation defect was demonstrated. The promised durability and retry
++behavior remain unverified.** The production dependency and endpoint are
++unavailable. No executable witness was added: a substitute driver could illustrate
++a possible failure but would not demonstrate a violation in this deployment.
++Existing product code, governing records, and evidence were preserved.
++
++## Governing conflict
++
++`specs/GATE-local-only.md:5-7` prohibits remote upload or processing of user data.
++Remote export of such data conflicts with that gate. The submission wrapper
++accepts an arbitrary payload; this checkout does not establish whether deployed
++callers send protected user data. This is an unresolved applicability/intent
++conflict, not a demonstrated crash or retry defect. Investigation stopped at the
++requested boundary; no remote calls, gate amendments, or implementation repairs
++were attempted. Resolving remote export of user data requires the user's decision
++under the gate's authority rules.
++
++## Evidence and fault model
++
++The real entry point constructs a deployment client, calls
++`client.put(request_id, payload)` synchronously, and returns
++`{"durable": True, "id": request_id}` only after normal return. It ignores the
++return value of `put`. There is no wrapper-level journal, retry, exception handler,
++startup replay, or cancellation recovery. These observations do not establish
++missing end-to-end behavior: the driver or caller may supply it.
++
++Consider an honest remote service, process termination at each call boundary,
++restart, and a caller retrying with the same request ID and payload. Caller retry
++policy, remote persistence, acknowledgment semantics, and duplicate suppression
++are unknown. No permanent-wedge claim or security claim is made. Any eventual
++completion argument would additionally require service recovery and scheduled
++retries; neither is established here.
++
++## Coverage
++
++| Selected case | Code evidence and assessment | Limit |
++| --- | --- | --- |
++| Crash before `put` | Wrapper has not reported success; no local acceptance record exists. | No evidence of a promise to recover an unacknowledged call or caller replay policy. |
++| Crash during `put`, including after remote commit before acknowledgment | Outcome may be ambiguous to the caller. | Duplicate-free retry depends on unavailable driver/service semantics. No counterexample demonstrated. |
++| Normal `put` return followed by reported `durable=true`, then restart | Wrapper unconditionally asserts durability after normal return. | Cannot determine whether return means durable remote commit, volatile enqueue, or a returned error/status. |
++| Crash after `put` returns but before caller receives success | A retry can reach `put` again with the same ID. | Request-ID deduplication scope, atomicity, retention, and restart persistence are undocumented. |
++| `put` or client construction raises | Exception propagates; wrapper does not return success. | Remote effects on ambiguous errors and external retry/recovery remain unknown. |
++
++Conditional concerns: a non-durable acknowledgment could produce false success
++and lost exports; absence of durable deduplication could duplicate an export after
++an ambiguous result. These are dependency questions, **not proven defects**.
++Passing a request ID alone proves neither concern nor protection. Ignoring a
++return value is only a defect if the driver's contract requires inspecting it.
++
++## Checks actually performed
++
++- Read the deployment contract, submission code, related application modules,
++  root architecture, payload specification, local-only gate, and import
++  requirement to establish scope and applicable constraints.
++- Searched application code, records, README, and instructions for `submit`,
++  `remote_export`, driver, durability, request-ID, and record references. No
++  in-checkout submission callers or direct recovery paths were found.
++- Searched tracked-looking project files for driver, export, test, dependency
++  manifest, lockfile, and nested instruction paths; no production driver or
++  runnable deployment test was found.
++- Ran `python3 -c 'import importlib.util; print("export_transport_driver:", importlib.util.find_spec("export_transport_driver"))'`:
++  output was `export_transport_driver: None`. An earlier `python` invocation
++  failed because that executable is absent; the Python 3 check succeeded.
++
++No production submission, crash injection, retry test, generated search, model,
++or mutation check was run. Existing single-writer claim evidence was not used or
++reverified; this path does not touch the local store in the available code.
++
++## Remaining limits and stopping condition
++
++Further assessment requires the deployed driver's pinned implementation or
++authoritative contract (including acknowledgment and error semantics), remote
++request-ID guarantees, caller retry/restart behavior, and a representative
++executable deployment endpoint or fixture. Overlapping retries, payload changes
++under a reused ID, cancellation, service crashes, and deduplication expiry remain
++untested. Obtain that evidence before attributing a failure to this deployment
++or choosing a repair. The available code inspection is complete for this
++submission boundary; dependency gaps remain explicit and are not acceptance of
++the risk or a guarantee of correctness.

@@ -1,0 +1,72 @@
+diff --git a/specs/CLAIM-posting-durability/verification.md b/specs/CLAIM-posting-durability/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..46169086c841e095540c3735da36b7930dcdc6ba
+--- /dev/null
++++ b/specs/CLAIM-posting-durability/verification.md
+@@ -0,0 +1,66 @@
++Revision: 26994b4949021e3d3f702f5b158c18eebf2f3e97 (clean apart from untracked
++`.eval-runtime/`).
++Verifier: independent verifier agent (Claude Opus 5.5), 2026-10-23.
++Evidence kinds reviewed: `formal` (lemma 1), `axiom` (lemma 2; A1–A3).
++
++Inspected: specs/CLAIM-posting-durability.md, proof.md,
++verification/posting.smt2, verification/README.md, docs/posting-boundary.md.
++The posting implementation is outside the evidence packet and was not inferred
++from app/ (per docs/posting-boundary.md).
++
++Commands and observed results (project root):
++- `z3 -version` → `Z3 version 5.3.1 - 64 bit - build hashcode ac9156f97cb44e56472e1c841f7a2beb1e976b24`.
++- `z3 verification/posting.smt2` → `unsat`. The recorded check reproduces.
++- Control: the artifact with the `orderly_shutdown` assertion removed, piped to
++  `z3 -in` with `(get-model)` → `sat`, model `acknowledged = true`,
++  `on_disk = false`, `orderly = false`. The `unsat` result depends entirely
++  on assuming orderly shutdown.
++- Consistency: the `orderly_shutdown` assertion alone → `sat`, so the premise
++  is not contradictory; the `unsat` is not vacuous from inconsistency.
++
++Attacks and findings:
++1. Residual filing (argument bug). The claim covers "abrupt process
++   termination and restart", and docs/posting-boundary.md records the
++   2026-10-20 user decision that the guarantee includes it. proof.md files
++   abrupt termination as a residual and adds A3 ("all process termination
++   follows an orderly shutdown"). That puts the claim's central case outside
++   the argument. Per the convention, a case inside the stated property cannot
++   be filed as a residual. The proof author cannot accept it either:
++   docs/posting-boundary.md states that no user decision has accepted an
++   orderly-shutdown-only guarantee.
++2. Smuggled/contradicting axiom. A3 is not a trusted external premise. It
++   negates the claim's own quantifier (abrupt termination). Lemma 2 rests
++   only on A3, so it supplies no support for the claim as worded.
++3. Statement adequacy of the formal result. `posting_survives` proves only
++   `orderly → (acknowledged → on_disk ∨ (orderly ∧ acknowledged))`. That is a
++   propositional tautology: `recovered` is defined to contain
++   `orderly ∧ acknowledged`, so it builds in the conclusion. The model has no
++   storage synchronization, no acknowledgement ordering, and no crash point.
++   A2 (the storage contract) is never used, so nothing ties acknowledgement to
++   durable synchronization. Lemma 1's step "Therefore acknowledged postings
++   remain recoverable" overstates the checked proposition.
++4. Correspondence. verification/README.md calls this a separate model that
++   does not execute the posting implementation. proof.md gives no
++   correspondence argument linking `acknowledged`, `on_disk`, or `orderly`
++   to production behavior. In particular, nothing establishes that
++   acknowledgement happens only after a completed synchronization, which is
++   the premise A2 needs in order to carry the claim across abrupt
++   termination.
++5. A1 and A2 are acceptable as stated. A2 matches the already adopted
++   storage contract and its scope (host and storage operational) matches the
++   claim's exclusions. The power-loss and storage-corruption residuals match
++   the recorded user decision.
++
++No counterexample to the claim itself was found. The model's `sat` control is
++a counterexample to the model without A3, not to production behavior, which
++is outside the packet. So the claim is not falsified. The supplied argument
++does not support it.
++
++Needed to restore support (not done here; the verifier does not construct
++replacement evidence): drop A3 and the abrupt-termination residual. Then
++establish, with evidence linked to the posting implementation, that every
++acknowledgement follows a completed synchronization. Then use A2 to carry it
++across abrupt termination. If an orderly-shutdown-only guarantee is wanted
++instead, the user must decide that and explicitly reword the claim.
++
++Result: provisional

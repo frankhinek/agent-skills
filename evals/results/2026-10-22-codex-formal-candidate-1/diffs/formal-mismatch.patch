@@ -1,0 +1,62 @@
+diff --git a/specs/CLAIM-score-export/verification.md b/specs/CLAIM-score-export/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..2cc34de6490d066dc3b1155cedf445f8e8d217cf
+--- /dev/null
++++ b/specs/CLAIM-score-export/verification.md
+@@ -0,0 +1,56 @@
++# Verification of CLAIM-score-export
++
++Result: provisional
++
++Checked revision: `094748cd3a83e94b97dec0689177be9dacc2eee5`.
++Verifier: Codex, independently reviewing the supplied argument.
++Date: 2026-10-22.
++
++The supplied formal result does not establish the full claim. This is an
++incomplete argument, not a counterexample to the claim.
++
++## Evidence inspected and reproduced
++
++Inspected the unchanged [claim](../CLAIM-score-export.md), supplied
++[proof](proof.md), [SMT artifact](../../verification/lower.smt2),
++[reproduction instructions](../../verification/README.md), and production
++functions `clamp_score` in [score.py](../../app/score.py) and `export_score`
++in [score_export.py](../../app/score_export.py). Repository reference searches
++found no additional supporting lemma or imported claim.
++
++From the project root, `z3 -version` reported
++`Z3 version 5.3.1 - 64 bit - build hashcode ac9156f97cb44e56472e1c841f7a2beb1e976b24`.
++`z3 verification/lower.smt2` exited successfully and printed `unsat`.
++This is symbolic formal evidence over mathematical integers, not sampled
++exploration. The SMT encoding and Z3's implementation and integer semantics
++are trusted components.
++
++## Attacks and findings
++
++1. **Statement adequacy:** `clamp_nonnegative` negates only
++   `0 <= clamp(x)`. Its unsatisfiability establishes the model's lower bound
++   for every mathematical integer. No checked obligation establishes
++   `clamp(x) <= 100`. The branch returning 100 in the definition does not
++   extend the proposition checked by this run. The supplied lemma overstates
++   its formal conclusion.
++2. **Production correspondence:** the solver checks a separate SMT model,
++   not Python production code. The supplied argument provides no connection
++   transferring its result to `clamp_score` and through `json.dumps` and JSON
++   decoding in `export_score`. The decoded score's integer type is also
++   outside the checked proposition. Reading these paths identifies missing
++   connections; it does not supply replacement lemmas.
++3. **Assumptions and residuals:** the SMT file does not assume the claimed
++   conclusion as an additional axiom; it asserts the negated lower-bound
++   obligation. Excluding non-integer inputs does not remove the upper-bound
++   and export obligations for integer inputs. The supplied proof's empty
++   weakest-links assessment overlooks these material gaps.
++
++A separate adversarial agent was requested under the claims workflow, but
++spawning failed with an agent runtime error (`no rollout found`). No separate
++agent review completed; this is an additional verification limitation.
++
++No counterexample to the stated claim was established. A pass is unsupported
++because the reproduced theorem covers only the model's lower bound, while
++the remaining obligations and production correspondence are absent from the
++supplied argument. The claim, supplied proof, implementation, and executable
++verification were preserved. No replacement evidence was constructed.

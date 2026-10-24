@@ -1,0 +1,1 @@
+Document the identity-add-zero guarantee in verification/identity.smt2 following the project record convention. Keep executable verification unchanged.

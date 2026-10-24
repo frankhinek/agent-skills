@@ -3,10 +3,11 @@
 
 VENDOR_TRANSACTION=".agents/.vendor-transaction"
 VENDOR_TRANSACTION_INITIALIZING="${VENDOR_TRANSACTION}.initializing"
-VENDOR_TRANSACTION_VERSION=1
+VENDOR_TRANSACTION_VERSION=2
 VENDOR_TRANSACTION_PHASE=""
 VENDOR_TRANSACTION_MANIFEST_PRESENT=""
 VENDOR_TRANSACTION_PRESENCE=()
+VENDOR_TRANSACTION_SKILLS=()
 VENDOR_TRANSACTION_OWNED=""
 
 vendor_transaction_present() {
@@ -42,7 +43,7 @@ vendor_transaction_read_presence() {
     "manifest"$'\t'[01]) VENDOR_TRANSACTION_MANIFEST_PRESENT="${line##*$'\t'}" ;;
     *) return 1 ;;
     esac
-    for skill in "${SKILLS[@]}"; do
+    for skill in "${VENDOR_TRANSACTION_SKILLS[@]}"; do
       IFS= read -r line || return 1
       case "$line" in
       "$skill"$'\t'[01]) VENDOR_TRANSACTION_PRESENCE+=("${line##*$'\t'}") ;;
@@ -58,7 +59,15 @@ vendor_transaction_validate() {
 
   [ -d "$VENDOR_TRANSACTION" ] && [ ! -L "$VENDOR_TRANSACTION" ] || return 1
   version="$(vendor_transaction_read_file "$VENDOR_TRANSACTION/version")" || return 1
-  [ "$version" = "$VENDOR_TRANSACTION_VERSION" ] || return 1
+  case "$version" in
+  1)
+    # Version 1 managed exactly these entries. Recovery must leave any newly
+    # added skill alone, including a user's pre-existing copy at that path.
+    VENDOR_TRANSACTION_SKILLS=(assurance-records assurance-records-claims assurance-records-upkeep)
+    ;;
+  2) VENDOR_TRANSACTION_SKILLS=("${SKILLS[@]}") ;;
+  *) return 1 ;;
+  esac
   VENDOR_TRANSACTION_PHASE="$(vendor_transaction_read_file "$VENDOR_TRANSACTION/phase")" ||
     return 1
   case "$VENDOR_TRANSACTION_PHASE" in
@@ -116,7 +125,7 @@ vendor_transaction_restore() {
   [ "$VENDOR_TRANSACTION_PHASE" = commit-started ] || return 1
 
   i=0
-  for skill in "${SKILLS[@]}"; do
+  for skill in "${VENDOR_TRANSACTION_SKILLS[@]}"; do
     live=".agents/skills/$skill"
     backup="$VENDOR_TRANSACTION/backup/$skill"
     was_present="${VENDOR_TRANSACTION_PRESENCE[$i]}"
@@ -159,7 +168,10 @@ vendor_transaction_finalize_committed() {
   vendor_transaction_validate || return 1
   [ "$VENDOR_TRANSACTION_PHASE" = committed ] || return 1
   expected="$(sed -n '1,$p' "$VENDOR_TRANSACTION/staged-inventory")" || return 1
-  current="$(inventory_vendored)" || return 1
+  current="$(
+    SKILLS=("${VENDOR_TRANSACTION_SKILLS[@]}")
+    inventory_vendored
+  )" || return 1
   manifest_inventory_value="$(manifest_inventory)" || return 1
   printf '%s\n' "$expected" | validate_inventory || return 1
   printf '%s\n' "$manifest_inventory_value" | validate_inventory || return 1

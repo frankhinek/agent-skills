@@ -1,0 +1,84 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..af5f0dafacd06fae6970e32f1d6a9d4e7debf220
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,78 @@
++# Remote export submission hunt
++
++Assessed 2026-10-24 at revision `52a3fc091eb153afa0f8c2ea9258185f3c33d3de`.
++Scope: `app/remote_export.py::submit`, under the deployment described in
++`app/export-contract.md`. No product code, governing records, or existing
++evidence was changed.
++
++## Result
++
++Deployment crash/retry correctness is **undetermined**. No implementation
++counterexample was established with the available evidence. This is not a pass:
++the wrapper's unconditional `durable=True` relies on undocumented behavior of
++an unavailable production dependency.
++
++## Findings
++
++1. **Durability and retry assurance gap** —
++   [submit](app/remote_export.py#L4) creates a deployment client, calls
++   `put(request_id, payload)`, ignores its return value, and reports
++   `durable=True` whenever that call returns normally. The wrapper contains no
++   independent persistence, recovery, or deduplication mechanism. These facts
++   do not prove a bug: the driver could supply all necessary guarantees.
++   The [deployment contract](app/export-contract.md#L8) explicitly leaves both
++   acknowledgment semantics and request-ID retry guarantees undocumented.
++   Consequently neither durable acknowledgment nor absence of duplicate
++   effects across restarts can be established. Ignoring the return value is
++   not itself a demonstrated failure without its API contract.
++
++2. **Governing boundary conflict** —
++   [GATE-local-only](specs/GATE-local-only.md#L5) prohibits any remote upload of
++   user data, whereas the requested deployment describes remote export.
++   Applying this submission path to notes or other user data conflicts with
++   that gate. No caller wiring or actual network upload was established here;
++   the payload is unconstrained in the wrapper. Per the assurance-records
++   conflict rule, affected work stopped at identifying and reporting this
++   conflict. No gate amendment or deployment action was attempted.
++
++## Coverage and limits
++
++| Boundary / crash schedule | Available evidence | Assessment |
++| --- | --- | --- |
++| Client creation or `put` raises | Straight-line wrapper has no exception handler | No success response from this call; whether a remote effect already occurred is unknown. |
++| Normal return from `put` | Wrapper immediately reports `durable=True` | Cannot determine whether return means durable commit, queuing, or another outcome. |
++| Process crash during `put` | Driver unavailable | Remote outcome and safe recovery are unknown. |
++| Remote acceptance followed by crash before caller receives success | No wrapper recovery state; request ID forwarded | Duplicate avoidance on retry depends on driver/server behavior; no production counterexample or guarantee established. |
++| Crash/restart after successful submission | No production endpoint or driver | Survival of the effect cannot be tested. |
++| Retry with the same ID and payload | ID forwarded unchanged | Deduplication scope, retention, and persistence across client/process restart unknown. |
++| Retry with the same ID and different payload | Both arguments forwarded | Conflict behavior unknown; no contract supplied. |
++
++Inspected `README.md`, `AGENTS.md`, `app/export-contract.md`, all six app Python
++modules, and the root ARCH, GATE, SPEC, and REQ records. Targeted reference
++search found no other submission callers or driver implementation. Root
++`ARCH-app` links the single-writer claim, but this investigation does not
++assess local-store ownership or independently verify that claim; its historical
++proof and verification were not read or altered. Import metadata and note
++payload behavior are outside this submission-path hunt.
++
++Environment check:
++
++```text
++python3 -c 'import importlib.util; print("export_transport_driver:", importlib.util.find_spec("export_transport_driver"))'
++export_transport_driver: None
++```
++
++The initial equivalent command using `python` failed because that executable
++is absent; the `python3` check above succeeded. The deployment document also
++states that there is no reachable production test endpoint. No crash injection,
++retry experiment, bounded search, or production behavioral test was therefore
++performed. No `tests/hunt_witness.py` was created: a locally invented driver's
++failure would demonstrate that driver's behavior, not a violation by the
++described deployment. The diagnosis loop cannot be completed at the available
++seam, so no causal bug verdict is claimed.
++
++Evidence needed to resolve the submission assurance gap is the production
++driver's acknowledgment and persistent request-ID semantics, plus a runnable
++deployment seam for restart/crash and retry checks. Those dependencies remain
++explicit limits; this report stops at submission and does not investigate
++downstream storage or transport internals.

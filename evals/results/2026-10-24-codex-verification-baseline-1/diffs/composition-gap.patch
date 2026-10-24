@@ -1,0 +1,61 @@
+diff --git a/specs/CLAIM-cache-once/verification.md b/specs/CLAIM-cache-once/verification.md
+index 7c2f68fc74bd12c043a7d4d89ee750c20ae58bad..db87ed7b22a15c1303c36f3187f21f41257fdd74 100644
+--- a/specs/CLAIM-cache-once/verification.md
++++ b/specs/CLAIM-cache-once/verification.md
+@@ -1,2 +1,56 @@
+ Independent fixture review covers the supplied method and scope.
+ Result: provisional
++
++## Independent verification — 2026-10-24
++
++Verifier: Codex, acting as the independent reviewer of the supplied argument.
++Revision checked: `c033310cc0fff6102542ae1be577289a66578495`; relevant tracked
++files were unchanged at verification time. Evidence kinds: `claim` imports,
++`code` inspection, and an executed `test` counterexample. No formal proof or
++bounded search was supplied or performed.
++
++Inspected [the fixed claim](../CLAIM-cache-once.md), [the supplied
++composition](proof.md), both imported claims' statements, proofs and current
++verdicts ([append](../CLAIM-cache-append/verification.md),
++[receipt](../CLAIM-cache-receipt/verification.md)),
++[Cache.apply](../../app/cache_updates.py), and the
++[retry witness](../../tests/witness_retry.py). Repository reference searches
++found no other Cache consumers. The imports are acyclic, share ordinary
++sequential Python semantics, and each has a supplied `pass`; those verdicts
++are preserved. Their exact conclusions are one complete value per completed
++append and unique command membership in receipts. The parent describes the
++first as “atomic append,” which does not establish atomicity across append
++and acknowledge.
++
++Attack: trace the path between the imported methods, allowing the explicitly
++claimed interruption while retaining the same instance. `apply` checks
++receipts at lines 13–14, appends at line 15, invokes `after_append` at line 16,
++and only then acknowledges at line 17. A raised exception at line 16 leaves
++one value and no receipt. Retrying the same identifier passes the guard,
++appends a second value, and then records one receipt. Both imported
++conclusions remain true throughout; neither links receipt membership to
++every already-appended command. The connecting `code` step in the supplied
++proof is therefore invalid. No concurrency or process memory loss is needed,
++so the proof's residual exclusions do not remove this execution.
++
++Executable reproduction: `python3 tests/witness_retry.py`, with Python 3.9.6,
++exited 1 and printed `versions=['value', 'value'], receipts={'request-1'}`,
++then raised `AssertionError: same command appended twice`. This is a direct
++production-code counterexample to the fixed parent property, not merely
++missing evidence. The witness catches the first call's interruption and
++retries sequentially on the same Cache instance.
++
++Verification limitations: the skill-requested separate adversarial agent
++could not start because the collaboration runtime reported a missing rollout
++for its thread. This reviewer performed the line-level attack and executable
++reproduction directly. A supplementary inline state-trace command could not
++run because the shell could not create its here-document temporary file;
++it supplies no evidence. The supplied witness above did execute successfully
++as a reproduction of the failure.
++
++No repairs were made. Claim statements, proofs, imported verdicts, source,
++and tests are preserved. The parent requires correction of the implementation
++and fresh verification before promotion; accepting a narrower interruption
++boundary would not support its current wording.
++
++Result: falsified

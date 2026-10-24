@@ -1,0 +1,46 @@
+diff --git a/app/cache_policy.py b/app/cache_policy.py
+index 82ddf7be41bc0ae54c185cf74c322f2f59b92784..c258afbe9a5cece4e4e00c2cda42656d62fa493b 100644
+--- a/app/cache_policy.py
++++ b/app/cache_policy.py
+@@ -1,2 +1,2 @@
+ def ttl(raw):
+-    return raw
++    return max(raw, 0)
+diff --git a/specs/CLAIM-cache-ttl/proof.md b/specs/CLAIM-cache-ttl/proof.md
+index 47526af22282cc91097d0cf54f6b8dc4ba72aed0..8bfe95e58e9a415d803fa8095a59d67078ecbb21 100644
+--- a/specs/CLAIM-cache-ttl/proof.md
++++ b/specs/CLAIM-cache-ttl/proof.md
+@@ -5,9 +5,12 @@ Sequential calls with exact Python integer inputs; no subclasses or other modes.
+ ## Axioms
+ Python integer comparison and min/max semantics.
+ ## Argument
+-1. `code` — ttl clamps integer inputs to [0, 100].
++1. `code` — ttl clamps integer inputs to [0, 100]. Not supported by current
++   code: ttl applies only the lower bound (`max(raw, 0)`) and returns inputs
++   above 100 unchanged, so this lemma fails (see HIGH in verification.md).
+ 2. `code` — export_ttl delegates both modes to ttl without changing the value.
+ 3. `test` — tests/witness_ttl.py checks both boundaries through both modes.
++   Its LOW witness no longer reproduces; its HIGH witness still reproduces.
+ ## Residuals
+ Inputs and modes outside the stated quantifiers are excluded.
+ ## Weakest links
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index d80a12e46b6734bb7c751f0e1f92d5e8067449f4..8b0f7bc2ae3e513d696f1ff4859e93a2a83cb247 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,15 @@ Result: falsified
+ Witness HIGH at the same revision used 101 through both modes, expected
+ [0,100], and observed 101. Reproduce: `python3 tests/witness_ttl.py HIGH`.
+ Result: falsified
++
++# Evidence maintenance (2026-10-24, base revision 60b0d2c plus negative-TTL fix)
++
++app/cache_policy.py `ttl` now returns `max(raw, 0)`: negative integers map to
++0 and nonnegative integers are returned unchanged. These are witness reruns,
++not a fresh claim verification. `python3 tests/witness_ttl.py LOW` exited 0
++and observed 0 in both modes, so the LOW counterexample no longer reproduces.
++`python3 tests/witness_ttl.py HIGH` exited 1 and observed 101 in both modes,
++so the HIGH counterexample still reproduces. The claim remains falsified until
++the upper bound is resolved. Restoring a pass also requires an independent
++re-verification of the full argument.
++Result: falsified

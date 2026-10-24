@@ -1,0 +1,59 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 48c99bafba50754cbfff31ae632c9fe0e5dcb93e..15dbd594457f1ddd51e88ed08c473719bcd926a4 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,54 @@ A subsequent report at historical revision cache-v2 recorded witness LOW:
+ `python3 tests/witness_ttl.py LOW` returned raw=-1 for input -1 in raw mode.
+ Expected [0,100], observed -1. No repair or resolution was recorded.
+ Result: falsified
++
++## Independent verification — 2026-10-24
++
++Verifier: Codex, assigned independent verification in a fresh context.
++Revision checked: `05d0fe34081d2901193ce70119b8d533fceedb9b`, with no
++tracked implementation changes. Runtime: Python 3.9.6.
++
++Fresh assessment used filenames to select the claim, supplied proof,
++`app/cache_policy.py`, `app/cache_export.py`, and
++[the executable witness](../../tests/witness_ttl.py), together with governing
++records and repository references. Earlier verification reports and attack
++lists were excluded from initial content reads and searches. The fresh
++findings below were recorded in the conversation before opening this file's
++previous report. No prior review conclusions were in the initial context.
++
++Evidence kinds: `code` and `test`; no formal proof or exhaustive search.
++The guard and each supported branch were inspected, testing the proof's
++delegation premise and whether boundary failures fall within the exact claim.
++`ttl` clamps exact integer inputs, and JSON mode calls it. Raw mode instead
++returns its input directly (`app/cache_export.py`, lines 7–8). Thus argument
++lemma 2 is false; lemma 3 cites a check whose execution reports violations.
++
++Fresh command: `python3 tests/witness_ttl.py` exited 1, observing:
++
++| Witness | Input | Mode | Observed | Claimed bounds satisfied |
++| --- | --- | --- | --- | --- |
++| LOW | -1 | json | 0 | yes |
++| LOW | -1 | raw | -1 | no |
++| HIGH | 101 | json | 100 | yes |
++| HIGH | 101 | raw | 101 | no |
++
++Both raw executions are sequential calls with exact Python integers and a
++supported mode, so neither can be excluded by the claim's qualifiers or the
++proof's residuals. The violated requirement is a returned integer in [0, 100].
++The type condition holds, but the bounds fail. Each is a current implementation
++counterexample, not merely an argument gap.
++
++Historical reconciliation: the earlier cache-v1 pass relied on the same
++delegation belief contradicted by current code. The cache-v2 LOW finding
++remains unresolved: after reading the report,
++`python3 tests/witness_ttl.py LOW` exited 1 and reproduced raw=-1, with JSON=0.
++`python3 tests/witness_ttl.py HIGH` also exited 1 and reproduced raw=101,
++with JSON=100. HIGH was independently found in the fresh assessment; LOW
++was independently found and then reconciled with the historical witness.
++No repair is present or performed, and neither counterexample is resolved.
++
++The claim statement, supplied proof, implementation, and tests are preserved.
++The final verdict covers the checked revision and retains the historical
++falsification, supported by both current witnesses.
++
++Result: falsified

@@ -1,0 +1,103 @@
+diff --git a/specs/CLAIM-score-export/proof.md b/specs/CLAIM-score-export/proof.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..39af59facb15ecfc0d982bb342eb70c70910fe56
+--- /dev/null
++++ b/specs/CLAIM-score-export/proof.md
+@@ -0,0 +1,97 @@
++Property: [CLAIM-score-export](../CLAIM-score-export.md) — for every Python
++integer `raw`, the `score` field decoded from `export_score(raw)`'s JSON
++result is an integer between 0 and 100 inclusive.
++
++Derived at revision `3c8763f` on 2026-10-22.
++
++## Scope
++
++- `app/score_export.py` — `export_score`: `json.dumps({"score": clamp_score(raw)})`.
++- `app/score.py` — `clamp_score`: `min(100, max(0, raw))`.
++- `verification/clamp.smt2` and `verification/README.md` — the SMT obligation
++  `clamp_bounds` and its reproduction instructions.
++- CPython built-ins `min`, `max`, `json.dumps`, `json.loads` as used on that
++  path. No other code in `app/` references `export_score` or `clamp_score`.
++
++## Model and quantifiers
++
++- Input: `raw` with `type(raw) is int` (an exact built-in `int`, unbounded).
++  See Residuals for `bool` and other `int` subclasses — the claim's phrase
++  "Python integer" does not settle whether they are included, and this
++  argument does not cover them.
++- Single call, no shared state, no concurrency, no I/O; nothing to fail
++  between steps.
++- Decoding: `json.loads(export_score(raw))["score"]` with default
++  `json.loads` options.
++- Predicate: `type(v) is int and 0 <= v <= 100` for that decoded `v`.
++
++## Axioms
++
++1. CPython `max(a, b)` / `min(a, b)` on exact `int`s return one of their
++   arguments, selected by the built-in integer order (on ties the first
++   argument, which has the same value).
++2. `json.dumps` encodes an exact `int` as its decimal literal
++   (`int.__repr__`); `json.loads` with default `parse_int` decodes a JSON
++   number with no fraction or exponent to an equal exact `int`. The clamped
++   value has at most three digits, so the integer string-conversion limit
++   (`sys.get_int_max_str_digits`) is never reached; unbounded `raw` is only
++   compared, never converted.
++3. Z3 5.3.1 (build `ac9156f97cb44e56472e1c841f7a2beb1e976b24`) is sound
++   for QF_LIA over mathematical integers, as stated in
++   `verification/README.md`.
++
++## Argument
++
++1. `formal` — obligation `clamp_bounds` in `verification/clamp.smt2`
++   (revision `3c8763f`): for the SMT function
++   `clamp(x) = ite(x < 0, 0, ite(x > 100, 100, x))` over `Int`, the
++   negation of `0 <= clamp(x) <= 100` is unsatisfiable. Command, from the
++   project root: `z3 -version; z3 verification/clamp.smt2`. Observed:
++   `Z3 version 5.3.1 - 64 bit - build hashcode ac9156f9…`, then `unsat`.
++   Checker: Z3 5.3.1 (Python package `z3-solver==5.3.1.0`). The file
++   declares no axioms and admits no obligations; its only assertion is the
++   negated goal. Non-vacuity check (not stored): replacing the upper branch
++   with `(> x 101) 101` via `sed … | z3 -in` yields `sat`, so the obligation
++   is sensitive to the bound. Coverage: a hand-written separate model of
++   `clamp_score`, not production code; correspondence is lemma 2.
++2. `code` — correspondence: for exact `int` `x`, `max(0, x)` is `0` when
++   `x <= 0` and `x` otherwise (axiom 1); `min(100, y)` is `y` when
++   `y <= 100` and `100` otherwise. Composing gives `0` for `x < 0`, `100`
++   for `x > 100`, and `x` otherwise — the SMT `clamp` case split, with
++   Python's unbounded `int` matching SMT `Int`. The result is one of the
++   exact `int`s `0`, `100`, or `raw`, so its type is exact `int`.
++   A spot check over `range(-1000, 1001)` comparing `clamp_score` to that
++   case split and its result type agreed (supporting, not a `search` lemma).
++3. `code` + axiom 2 — `export_score` serializes `{"score": c}` with `c`
++   from lemma 2; decoding returns a dict whose `score` is an exact `int`
++   equal to `c`.
++4. From 1–3: the decoded `score` is an exact `int` in `[0, 100]` for every
++   exact-`int` `raw`.
++
++## Residuals
++
++None filed. The following inputs lie outside the model above, and whether
++they are inside the claim depends on reading "Python integer"; they are
++recorded here as open interpretation questions, not as accepted exclusions:
++
++- `bool` (`isinstance(True, int)`): `export_score(True)` returns
++  `{"score": true}`, decoding to `True` — a Python `int` equal to 1, but a
++  JSON boolean rather than a JSON integer. `export_score(False)` returns
++  `{"score": 0}`.
++- Other `int` subclasses can override comparison: with
++  `class E(int)` defining `__gt__` and `__lt__` to return `True`,
++  `export_score(E(-5))` returned `{"score": -5}` (observed on Python
++  3.12.12). If the claim quantifies over all `isinstance(raw, int)`
++  values, this is a counterexample to the stated property, not a residual.
++
++## Weakest links
++
++- Lemma 2 is `code`: the SMT `clamp` is retyped by hand, so an edit to
++  `clamp_score` does not break the formal check. A test asserting
++  `clamp_score` agrees with the SMT case split (or generating the SMT from
++  the source) would promote it.
++- Lemma 3 rests on axiom 2 about `json`; a focused round-trip test at the
++  boundaries (`-1, 0, 100, 101`, huge magnitudes) would pin it.
++- The input domain is enforced by nothing: an
++  `if type(raw) is not int: raise TypeError` guard in `export_score` (or
++  clamping `int(raw)`) would close the `bool`/subclass question in code.

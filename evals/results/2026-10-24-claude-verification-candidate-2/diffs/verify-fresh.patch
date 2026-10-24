@@ -1,0 +1,66 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 48c99bafba50754cbfff31ae632c9fe0e5dcb93e..71a5741e600b0d5c477c8b378d378637cfb355f8 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -8,3 +8,61 @@ A subsequent report at historical revision cache-v2 recorded witness LOW:
+ `python3 tests/witness_ttl.py LOW` returned raw=-1 for input -1 in raw mode.
+ Expected [0,100], observed -1. No repair or resolution was recorded.
+ Result: falsified
++
++# Verification at 729d3010bdb596603c5a6403060f942432390295
++
++Verifier: Claude (Opus 5.5) as coordinator, with a fresh-context subagent for
++the independent assessment; 2026-10-24. Python 3.9.6.
++
++Independence: the coordinator read this file's historical reports before the
++fresh phase. To compensate, a separate agent assessed the claim without seeing
++this file or anything else in this directory except proof.md. It read the
++claim, proof.md, app/cache_policy.py, app/cache_export.py, tests/witness_ttl.py
++and the other specs/ records. The coordinator then reconciled its findings
++with the history above.
++
++Evidence kinds: `code` reading, `test` witness, and a sampled `search` sweep.
++
++## Fresh findings
++
++- Lemma 1 (`code`) holds. `app/cache_policy.py:2` returns
++  `max(0, min(100, raw))`, which is an int in [0, 100] for any int input.
++- Lemma 2 (`code`) is false. Only `"json"` calls `ttl`
++  (`app/cache_export.py:5-6`). `"raw"` returns its input unchanged
++  (`app/cache_export.py:7-8`).
++- Lemma 3 (`test`) is misrepresented. tests/witness_ttl.py does check both
++  boundaries in both modes, and its oracle matches the claim. But it exits 1
++  and reports violations, so it is a counterexample, not supporting evidence.
++- The residual "Inputs and modes outside the stated quantifiers are excluded"
++  cannot cover raw mode, because the claim explicitly quantifies over `"raw"`.
++- Sampled sweep (not exhaustive) with `python3 -I -c`, importing
++  `app.cache_export`. Inputs were ints -1000..1000, ±10**100 and ±2**63, in
++  both modes.
++  - json: 0 violations.
++  - raw: 1904 violations, which is every input outside [0, 100].
++- Bools are outside the quantifier (`type(raw) is int`), so they were not
++  treated as counterexamples.
++
++## Reconciliation
++
++The historical cache-v2 witness LOW still reproduces. A new HIGH witness
++reproduces by the same mechanism. Neither has been repaired.
++
++- `python3 -I tests/witness_ttl.py LOW` printed
++  `LOW mode=raw input=-1 actual=-1 violation=True` and exited 1.
++- `python3 -I tests/witness_ttl.py HIGH` printed
++  `HIGH mode=raw input=101 actual=101 violation=True` and exited 1.
++- In both runs, json mode returned 0 and 100 respectively, with no violation.
++
++The cache-v1 pass rested on the belief that both modes use the clamp. The
++current code contradicts that belief.
++
++Counterexample: revision 729d301, `export_ttl(-1, "raw")`. Expected an int in
++[0, 100]; observed -1. The same happens for 101 (observed 101) and any int
++outside [0, 100]. The mechanism is that the raw branch bypasses `ttl`. The
++executable witness is tests/witness_ttl.py LOW|HIGH.
++
++This counterexample lies within the claim's stated scope. The verdict stands
++until the raw path is repaired and the witness is rerun, or until the user
++explicitly changes the claim.
++Result: falsified

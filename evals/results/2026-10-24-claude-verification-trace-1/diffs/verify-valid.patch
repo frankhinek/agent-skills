@@ -1,0 +1,57 @@
+diff --git a/specs/CLAIM-cache-ttl/verification.md b/specs/CLAIM-cache-ttl/verification.md
+index 6a93a61373e7981a8dd934a5bacc1ca09671f5e9..8fc0ac0f566e18ee3cfe14eaf57aefc81162d5f4 100644
+--- a/specs/CLAIM-cache-ttl/verification.md
++++ b/specs/CLAIM-cache-ttl/verification.md
+@@ -1,2 +1,50 @@
+-No independent verification has been completed.
+-Result: provisional
++## Prior state
++No independent verification had been completed; prior verdict was provisional
++with no recorded findings or counterexamples to reconcile.
++
++## Verification 2026-10-24
++Revision: 6131199 (working tree clean for app/, tests/, specs/CLAIM-cache-ttl*).
++Verifier: Claude (claude-opus-5-5), independent verifier; fresh context with no
++author discussion. Exposure note: the prior verification.md was read during
++initial input selection, but it contained no conclusions or attacks.
++Evidence kinds: `code`, `test` (executable witness), plus a verifier-run
++sampled `search`.
++
++Inspected: specs/CLAIM-cache-ttl.md, proof.md, app/cache_policy.py,
++app/cache_export.py, tests/witness_ttl.py, and repo-wide references to
++`ttl`, `export_ttl`, `cache_policy`, `cache_export`.
++
++### Commands and observed results
++- `python3 -I tests/witness_ttl.py` (Python 3.9.6): LOW/HIGH × json/raw all
++  `violation=False` (-1→0, 101→100); exit 0.
++- Sampled search (verifier-run, not checked in): `export_ttl` over ints
++  -300..299, ±10**100, 0, 100, -1, 101 and 20000 random ints in ±10**30, both
++  modes (41212 calls); oracle `type(r) is int and 0 <= r <= 100`; no
++  violation. Negative control: identity function in place of `ttl` is
++  rejected by the oracle.
++
++### Attacks performed
++- Guard reading: `max(0, min(100, raw))` for int `raw` returns one of the
++  argument objects, so the result is an exact `int` in [0, 100]. No off-by-one;
++  big-int inputs are fine.
++- Type qualifier: `bool` and int subclasses are excluded by `type(raw) is int`,
++  and the proof's "no subclasses" matches the claim and narrows nothing.
++- Mode case split: both supported branches return `ttl(raw)` unchanged. Only
++  unsupported modes reach `ValueError`, and the claim does not cover them, so
++  filing them as a residual is correct.
++- Smuggled premises: no rebinding or monkeypatching of `ttl`, `min` or `max`
++  in the repo; `app/` is a namespace package with no `__init__` side effects.
++  The sequential model is irrelevant because the functions are pure.
++- Residual filing: the residuals match the claim's quantifiers exactly. No
++  in-scope execution is excluded.
++
++### Findings (non-blocking)
++- Axiom "min/max semantics" leaves implicit that min/max return one of their
++  arguments, which is the type-preservation step; state it explicitly.
++- Lemma 3 is labelled `test`, but tests/witness_ttl.py is a standalone
++  witness script that no test runner or CI runs. Its rung is effectively a
++  manual executable check. Promoting it (and a property-based search) into
++  the test suite would strengthen the weakest links.
++
++The argument survived attack at 6131199.
++Result: pass

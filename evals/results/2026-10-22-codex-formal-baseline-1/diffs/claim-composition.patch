@@ -1,0 +1,47 @@
+diff --git a/specs/CLAIM-delivery/verification.md b/specs/CLAIM-delivery/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..ccdbae8ad30ef723a3f2b0824c31f7ac5c6bd92b
+--- /dev/null
++++ b/specs/CLAIM-delivery/verification.md
+@@ -0,0 +1,41 @@
++# Independent verification of CLAIM-delivery
++
++Revision checked: 187a0d76ab2bd14da51eea8c806d440011cf9914.
++Verifier: Codex, acting as the independent verifier of the supplied proof.
++Date: 2026-10-22.
++
++Inspected: [CLAIM-delivery](../CLAIM-delivery.md), its supplied
++[proof](proof.md), [deployment premises](../../verification/deployments.md),
++and the property statements, proofs, and current pass verdicts for
++[CLAIM-exclusive](../CLAIM-exclusive.md) and
++[CLAIM-failover](../CLAIM-failover.md).
++
++Attacks performed: preserved each imported claim's exact conditional
++conclusion; split the deployment into its two permitted modes; checked
++whether either case establishes the conjunction in CLAIM-delivery; checked
++whether the failed inference supplies an actual counterexample.
++
++The proof drops the imported mode conditions. CLAIM-exclusive supplies
++exclusivity only when mode is single-worker; CLAIM-failover supplies recovery
++only when mode is multi-worker. Their pass verdicts verify those conditional
++arguments, not unconditional properties. Mode is exactly one of these two
++values, so the premises needed to invoke both conclusions cannot hold in
++one deployment. In single-worker mode recovery is unsupported; in
++multi-worker mode exclusivity is unsupported.
++
++This is an incomplete composition argument, not an established delivery
++counterexample. A property outside an imported claim's scope may still hold.
++The deployment premises explicitly state that production implementation and
++an actual delivery counterexample are unavailable. Neither pass nor falsified
++is supported by the supplied evidence.
++
++A separate adversarial reviewer was requested but could not start because
++the agent tool failed to load its thread context. No separate-agent review
++was completed. No supplied property, proof, imported verdict, or executable
++verification was changed. No executable check establishes the missing
++cross-mode guarantees; the unrelated reservation SMT obligations were not run.
++
++To complete verification, supply evidence establishing both properties in
++the same deployment mode, retaining the exact claim and imported conditions.
++
++Result: provisional

@@ -1,0 +1,61 @@
+diff --git a/specs/CLAIM-score-export/verification.md b/specs/CLAIM-score-export/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..1184215a8fdd5649885929f70861f28bc8ab2a2c
+--- /dev/null
++++ b/specs/CLAIM-score-export/verification.md
+@@ -0,0 +1,55 @@
++Verified at revision ab063b4, 2026-10-22, by an independent verifier agent
++(Claude Opus 5.5), checking the supplied argument in proof.md against
++CLAIM-score-export as worded.
++
++Inspected: specs/CLAIM-score-export.md, specs/CLAIM-score-export/proof.md,
++app/score.py, app/score_export.py, verification/lower.smt2,
++verification/README.md. No other code in the repository references
++`clamp_score` or `export_score`.
++
++Reproduced: `z3 -version` reports Z3 5.3.1; `z3 verification/lower.smt2`
++prints `unsat`. The one supplied lemma reproduces as stated.
++
++Attacks and findings:
++
++1. Missing upper bound. lower.smt2 has a single assertion, the negation of
++   `0 <= clamp(x)`. Its `unsat` discharges only the lower bound. Nothing
++   discharges `clamp(x) <= 100`, but the lemma says it "establishes the
++   exported score is between 0 and 100 inclusive". The conclusion overstates
++   the obligation. Negative control (a scratch file, deleted after the run and
++   not kept as evidence): the same obligation with the upper clamp removed,
++   `(ite (< x 0) 0 x)`, also returns `unsat`. So this check would not catch a
++   regression that broke the upper bound.
++2. No correspondence between the model and the code. The SMT `clamp` is
++   written by hand. No lemma ties it to `clamp_score` in app/score.py,
++   `min(100, max(0, raw))`. The Python and SMT definitions happen to agree on
++   integers, but the proof neither states nor checks that, so it is a
++   smuggled premise. The axiom "the SMT encoding is trusted" assumes the
++   correspondence instead of arguing for it.
++3. No path from clamp to the claimed observable. The claim is about the
++   `score` field of `json.loads(export_score(raw))`, including
++   `type(score) is int`. The proof has no lemma covering `export_score`,
++   `json.dumps` and `json.loads` round-tripping a Python int (arbitrary
++   magnitude), or the result type of `min`/`max` on `int` inputs. proof.md
++   admits this: "no other lemma supplies a bound or a connection to the
++   exporter."
++4. Quantifier mismatch, minor. The claim covers `type(raw) is int`, which
++   excludes bool and int subclasses. The proof models raw as a mathematical
++   integer. That is the right domain, but only once findings 2–3 are bridged.
++5. Rung label. The lemma is labeled `formal`, which is not one of the
++   convention's rungs. In substance, the SMT encoding is an `axiom`-trusted
++   model that has no tie to the production code.
++
++No counterexample to the claim was found. A code reading suggests the
++property holds for int inputs. But the supplied argument does not establish
++it: it proves one bound of a hand-written model, and nothing connects that
++model to the exporter. The claim, proof, implementation, and
++verification/lower.smt2 are unchanged. Per instructions, no replacement
++evidence was constructed.
++
++Needed for a pass: an upper-bound obligation, a stated and checked
++correspondence between the model and `clamp_score`, and a lemma covering
++`export_score` and the JSON round-trip, including the int type of the
++result.
++
++Result: provisional

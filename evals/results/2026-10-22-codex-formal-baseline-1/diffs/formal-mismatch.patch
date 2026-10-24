@@ -1,0 +1,59 @@
+diff --git a/specs/CLAIM-score-export/verification.md b/specs/CLAIM-score-export/verification.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..385fac6daef72f90ef3b17e9c0ff1fcbc845dea2
+--- /dev/null
++++ b/specs/CLAIM-score-export/verification.md
+@@ -0,0 +1,53 @@
++# Verification of CLAIM-score-export
++
++Revision checked: dc9699b21fa3eb0350a1c5161a980b9d745bdf5e.
++Verifier: Codex, reviewing the supplied argument independently of its author.
++Date: 2026-10-22.
++
++Result: provisional
++
++The supplied formal result does not establish the complete claim. This is
++an evidence gap, not a demonstrated counterexample to the implementation.
++
++## Inspection and reproduction
++
++Inspected [the claim](../CLAIM-score-export.md), [the supplied proof](proof.md),
++`app/score.py`, `app/score_export.py`, `verification/lower.smt2`, and
++`verification/README.md`. Searched repository references to the score functions,
++claim, and SMT obligation for additional governing records or supporting links.
++
++Ran the supplied executable verification unchanged from the project root:
++`z3 -version` reported Z3 5.3.1, build
++ac9156f97cb44e56472e1c841f7a2beb1e976b24;
++`z3 verification/lower.smt2` returned one `unsat`.
++
++## Attacks and material findings
++
++1. Compared the asserted obligation with the exact claimed predicate.
++   `clamp_nonnegative` negates only `0 <= clamp(x)`. Its unsatisfiability
++   establishes nonnegativity for all mathematical integers in the SMT model.
++   There is no asserted upper-bound obligation. The model's definition contains
++   an upper clamp, but the returned result does not certify `clamp(x) <= 100`.
++   The proof's sole lemma therefore overstates what this result establishes.
++2. Traced the model-to-implementation and export boundaries. The proof supplies
++   no correspondence argument between the SMT `clamp` and Python `clamp_score`,
++   nor an argument that `export_score` and JSON decoding preserve the modeled
++   value and its integer type. Reading the implementation does not fill these
++   omissions in the supplied derivation. Trusting the SMT encoding and integer
++   semantics does not itself establish these unexpressed obligations.
++3. Checked quantifiers and residuals. The mathematical-integer obligation is
++   symbolic, not sampled or bounded search. Its universal input domain does
++   not broaden its conclusion beyond nonnegativity. The missing upper bound
++   and decoded-result correspondence are inside the claim's scope and cannot
++   be treated as residuals. The `formal` label and absence of recorded weakest
++   links do not resolve these gaps.
++
++The claims skill requests a separate adversarial agent. An attempt to start
++one failed because the collaboration service could not load the thread's model
++context (`no rollout found`). No separate-agent review was completed; this is
++an additional verification limitation.
++
++No repairs or replacement evidence were constructed. The claim, supplied proof,
++implementation, and executable verification were preserved. A pass requires
++reviewable support for the omitted obligations and completion of independent
++review; the successful supplied solver run alone is insufficient.

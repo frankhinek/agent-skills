@@ -1,0 +1,112 @@
+diff --git a/specs/CLAIM-score-export/proof.md b/specs/CLAIM-score-export/proof.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..d7e06c514b0cbbf177630630876dd980c831d960
+--- /dev/null
++++ b/specs/CLAIM-score-export/proof.md
+@@ -0,0 +1,106 @@
++Property: [CLAIM-score-export](../CLAIM-score-export.md) — for every `raw`
++with `type(raw) is int`, when `export_score(raw)` returns, `score` in
++`json.loads` of its result has `type(score) is int` and `0 <= score <= 100`.
++
++Derived at revision `99bb9e1`.
++
++## Scope
++
++- `app/score_export.py` — `export_score(raw)` returns
++  `json.dumps({"score": clamp_score(raw)})`, with `clamp_score` bound by
++  `from .score import clamp_score` at import time.
++- `app/score.py` — `clamp_score(raw)` returns `min(100, max(0, raw))`.
++- `verification/clamp.smt2` and `verification/README.md` — the SMT model
++  `clamp` of `clamp_score` and its negated bounds obligation `clamp_bounds`.
++- No other module references `export_score` or `clamp_score`; no tests exist
++  for either.
++
++## Model and quantifiers
++
++- Input: any `raw` with `type(raw) is int`, including arbitrarily large
++  magnitudes. `bool` and other `int` subclasses are outside the domain (claim
++  wording).
++- Execution: one call of `export_score(raw)` that returns normally. Calls
++  that raise (e.g. `MemoryError`) are outside "when `export_score` returns".
++- Observation: `score = json.loads(export_score(raw))["score"]` under
++  CPython's default `json.loads` (no hooks).
++- Predicate: `type(score) is int and 0 <= score <= 100`.
++- No concurrency or shared mutable state is involved; both functions are pure
++  given the axioms below.
++
++## Axioms
++
++- A1 — CPython `int` comparison is exact over arbitrary-precision integers,
++  and builtin `max(a, b)` / `min(a, b)` return one of their arguments (the
++  first on ties), unchanged. Builtins `min`, `max` are not shadowed in
++  `app/score.py`.
++- A2 — CPython `json.dumps` with default arguments serializes an object whose
++  type is exactly `int` as its decimal `int.__repr__`, and `json.loads` with
++  default `parse_int` parses a JSON integer literal back to an exact `int` of
++  equal value.
++- A3 — No in-process actor rebinds `app.score_export.clamp_score`,
++  `app.score_export.json`, or the `json` module's functions.
++- A4 — Z3 5.3.1 is sound for `QF_LIA`: an `unsat` answer means the asserted
++  formula has no model over mathematical integers. The SMT source is part of
++  the trusted base (`verification/README.md`).
++
++## Argument
++
++1. `search` — `clamp(x) = ite(x < 0, 0, ite(x > 100, 100, x))` satisfies
++   `0 <= clamp(x) <= 100` for every mathematical integer `x`.
++   - Exhaustive and symbolic over unbounded `Int`, not sampled; no bounds or
++     seeds. Reproduce with `z3 verification/clamp.smt2` under Z3 5.3.1
++     (`z3 -version` reported `Z3 version 5.3.1 - 64 bit - build hashcode
++     ac9156f97cb44e56472e1c841f7a2beb1e976b24`); result `unsat` on the
++     negation `clamp_bounds`. Inputs: `verification/clamp.smt2` sha256
++     `557e9c68ae5131ec7f39c02b458409030f033fc58a9c561079e1a6dfd765ab85`.
++   - Oracle: the negated conjunction `(not (and (<= 0 (clamp x)) (<= (clamp
++     x) 100)))`; `unsat` discharges it (A4).
++   - Negative controls (run via `z3 -in` on edited copies piped from stdin;
++     the file was not modified): upper branch `100` → `101` gives `sat` with
++     `x = 101`; dropping the `(< x 0)` branch gives `sat` with `x = -1`. The
++     obligation is therefore not vacuous and rejects either missing bound.
++   - Not run by CI or any test; it catches a regression only when rerun, and
++     only of the model, not of `app/score.py` (see L2).
++2. `code` — For `type(raw) is int`, `clamp_score(raw)` equals `clamp(raw)`.
++   By A1, `max(0, raw)` is `raw` when `raw > 0`, else `0`; then `min(100, ·)`
++   is `100` when that value exceeds `100`, else that value. Case split on
++   `raw < 0`, `0 <= raw <= 100`, `raw > 100` yields `0`, `raw`, `100` —
++   exactly the branches of `clamp` (`raw = 0` returns the literal `0`, equal
++   in value). Python `int` and SMT `Int` agree on order and value (A1, A4),
++   so L1 transfers: `0 <= clamp_score(raw) <= 100`. The correspondence is a
++   hand reading; nothing mechanically ties `clamp.smt2` to `app/score.py`.
++3. `code` — `type(clamp_score(raw)) is int`. By L2's case split and A1 the
++   result is one of the literals `0`, `100` or the argument `raw` itself, and
++   `type(raw) is int` by the quantifier. This is why int subclasses are
++   excluded: `raw` itself can be returned.
++4. `code` — `export_score` passes that value as the sole `"score"` entry to
++   `json.dumps` with default arguments (`app/score_export.py`, A3), so by A2
++   `json.loads` of the result yields `score` with `type(score) is int` and the
++   same value as `clamp_score(raw)`.
++5. From L2–L4: `type(score) is int` and `0 <= score <= 100`. The value has at
++   most three digits, so CPython's integer string-conversion limit
++   (`sys.set_int_max_str_digits`) cannot make `json.dumps` raise; the large
++   `raw` values that could hit it are never stringified.
++
++## Residuals
++
++- `bool` and other `int` subclasses, `float` (including NaN/inf), and other
++  types — excluded by the claim's `type(raw) is int` domain.
++- Calls that raise instead of returning — excluded by "when `export_score`
++  returns".
++- In-process monkeypatching of the cited names (A3) and non-CPython
++  interpreters (A1, A2) — outside the model by axiom.
++
++## Weakest links
++
++- L2–L4 are `code` readings; the only mechanized step (L1) checks a
++  hand-written model, so editing `app/score.py` leaves `clamp.smt2` green.
++  Promote with a focused test that calls `export_score` across
++  boundaries (`-1, 0, 1, 99, 100, 101`, very large `±` ints) and asserts
++  `type(score) is int` and the exact clamped value; an ad hoc version of that
++  check over `-1000..1000` and `±10**400`, `±2**63` passed while deriving this
++  proof but is not committed and is not evidence here.
++- L1 is not run in CI. Adding `z3 verification/clamp.smt2` (expecting
++  `unsat`) plus its negative controls to CI would make it a `lint`-rung fact.
++- A3 is a runtime convention with no enforcement.

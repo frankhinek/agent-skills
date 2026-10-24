@@ -1,0 +1,176 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..6ad818b2179913e7247995c2a0fff7b3686156fe
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,105 @@
++# Hunt report: export worker acceptance and restart recovery
++
++Revision: `95bd123` (working tree clean apart from the new files below), 2026-10-24.
++Authority: `app/export-contract.md`; claim under test:
++[CLAIM-export-recovery](specs/CLAIM-export-recovery.md) (current verdict
++`Result: falsified`, unchanged by this hunt).
++
++Surface: `app/export_queue.py` (`Queue.__init__`, `recover`, `submit`, `work`,
++`result`). No other module imports `export_queue`; `app/exporter.py` is the
++unrelated note exporter and is out of this surface.
++
++New files: `hunt-report.md`, `tests/hunt_witness.py`. Product code, `specs/`
++records, the claim's evidence directory, and `tests/known_loss.py` are
++unmodified.
++
++## Findings
++
++### F0 (existing, still reproduces): restart does not recover a committed `running` job
++
++- Witness: `tests/known_loss.py`. `python3 tests/known_loss.py` → `AssertionError:
++  accepted work abandoned after restart`, exit 1.
++- Mechanism: `work` commits `state='running'` and then hits the hook. `recover()`
++  does nothing, and `work` selects only `state='pending'`, so job-1 is never
++  eligible again.
++- Status: **unresolved**. This is the recorded falsification.
++
++### F1 (new, confirmed): a transient I/O failure strands the job without any restart
++
++- Witness: `tests/hunt_witness.py` exits 1 on this revision:
++  `VIOLATION: job-1 accepted, state='running', result=None after transient failure and 5 in-process retries`.
++- Conditions: there is one worker and no restart. The first
++  `INSERT INTO results` raises `sqlite3.OperationalError("disk I/O error")`, which
++  the witness injects with a delegating connection wrapper. The transaction that
++  writes the result and sets `done` rolls back, leaving the committed `running`
++  row. The application then retries `work()` repeatedly, as the contract
++  requires, in the same process.
++- Expected: job-1 eventually produces `"hello"`. The contract says the
++  application retries work after transient I/O failures, and accepted jobs must
++  eventually produce their result.
++- Observed: `work()` returns `False` forever and `result("job-1")` stays `None`.
++- Why it is distinct from F0: F0 needs an interruption followed by a restart.
++  F1 needs no restart or hook, only a failure inside the second transaction of
++  `work`, which the contract explicitly covers. Fixing `recover()` alone does
++  not fix F1.
++  - Control A: on a scratch copy, `recover()` resets `running`→`pending` at
++    startup. `known_loss.py` then exits 0, but `hunt_witness.py` still exits 1.
++  - Control B: on a scratch copy, `work` also selects `running` jobs. Both
++    witnesses exit 0, so the oracle accepts correct behavior. That is valid here
++    only because the contract guarantees a single worker.
++- Status: **unresolved**. It falls within the scope of CLAIM-export-recovery: a
++  single-worker deployment, interruptions that cease, and work that resumes.
++
++## Examined, not reported as defects
++
++- **Starvation by lower IDs (open question).** `work` picks `ORDER BY id LIMIT 1`.
++  A probe submitted `job-z` and then interleaved 1000 `submit(job-aNNNN)` +
++  `work()` pairs. `job-z` never ran. With an unbounded stream of smaller IDs the
++  job is postponed forever, which conflicts with "eventually". A finite run cannot
++  witness a liveness violation, and the contract does not say whether arrivals
++  ever stop. This needs a contract decision; there is no witness.
++- **Resubmission with a different payload.** `INSERT OR IGNORE` returns
++  `accepted: True` but keeps the original payload (probe: the result stays `"x"`).
++  The contract says "A job ID has one payload throughout its lifetime", which makes
++  this caller input outside the contract. The response does not tell the caller
++  that its payload was dropped.
++- **`None` payload.** The job reaches `done`, but `result()` returns `None`, the
++  same value as "not finished". The contract does not specify payload types. This
++  is an interface ambiguity and does not violate the claim.
++- **Failure in the claim transaction.** If the `UPDATE ... 'running'` in `work`
++  fails, it rolls back and the job stays `pending`. It is retried correctly.
++- **Failure in `submit`.** The insert rolls back and `submit` raises, so no
++  acceptance is returned and there is no obligation. Correct.
++- **Result/done atomicity.** The `results` insert and the `done` update share one
++  transaction, so a committed result without `done` (or the reverse) cannot occur.
++  A `running`→`pending` reset therefore cannot cause a duplicate `results`
++  primary-key insert, assuming the single-worker premise.
++- **Resubmitting a stuck job.** `submit` for an ID that is stuck in `running`
++  returns `accepted: True`, but the job still never completes. This has the same
++  root cause as F0/F1 and is not reported separately.
++
++## Coverage
++
++- Read: `app/export-contract.md`, `app/export_queue.py`, the claim record,
++  `proof.md`, `verification.md`, `tests/known_loss.py`, `specs/ARCH-app.md`.
++  `ARCH-app` does not mention the export queue, which is a gap in the
++  architecture map; I did not edit it.
++- Failure points enumerated in `work`: the select, the claim transaction, the hook,
++  and the result/done transaction (both statements and the commit). Failure
++  points in `submit`: the insert and the commit. Restart was checked before and
++  after each.
++- Out of scope per the contract: multiple workers or overlapping requests,
++  storage loss or corruption, and changing payloads per ID.
++- Not done: fresh independent verification of the claim, and any update to
++  `verification.md`. The user asked to preserve existing evidence. F1 should
++  be added to the claim's counterexample list when that evidence is next
++  updated.
++
++## Unresolved
++
++1. F0: restart-recovery loss (`tests/known_loss.py`, exit 1).
++2. F1: in-process loss after a transient failure in the completion transaction
++   (`tests/hunt_witness.py`, exit 1). Any repair must make `running` jobs
++   eligible again during in-process retry as well as on restart.
++3. Open question: fairness of `ORDER BY id` under continuous submissions.
++4. CLAIM-export-recovery remains `falsified`.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..66c7761e0348dbcc67c656355b708a713b4d0adc
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,59 @@
++"""Witness: a transient I/O failure on the completion transaction strands an
++accepted job even though the same worker keeps calling work() (no restart).
++
++Contract (app/export-contract.md): the application retries work after transient
++I/O failures and calls work repeatedly once the environment recovers; accepted
++jobs must eventually produce their result. Exits nonzero when violated.
++"""
++from pathlib import Path
++import sqlite3
++import sys
++import tempfile
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from app.export_queue import Queue
++
++
++class FlakyConnection:
++    """Delegates to the real connection; the first results insert fails."""
++
++    def __init__(self, real):
++        self.real = real
++        self.failures_left = 1
++
++    def execute(self, sql, *args):
++        if self.failures_left and sql.startswith("INSERT INTO results"):
++            self.failures_left -= 1
++            raise sqlite3.OperationalError("disk I/O error")
++        return self.real.execute(sql, *args)
++
++    def __enter__(self):
++        return self.real.__enter__()
++
++    def __exit__(self, *exc):
++        return self.real.__exit__(*exc)
++
++    def close(self):
++        self.real.close()
++
++
++with tempfile.TemporaryDirectory() as scratch:
++    worker = Queue(str(Path(scratch) / "jobs.db"))
++    worker.db = FlakyConnection(worker.db)
++    assert worker.submit("job-1", "hello")["accepted"]
++    try:
++        worker.work()
++    except sqlite3.OperationalError:
++        pass  # transient failure; the environment has now recovered
++    # The application retries: call work repeatedly in the same process.
++    for _ in range(5):
++        worker.work()
++    state = worker.db.execute("SELECT state FROM jobs WHERE id = 'job-1'").fetchone()
++    produced = worker.result("job-1")
++    worker.close()
++
++if produced != "hello":
++    print(f"VIOLATION: job-1 accepted, state={state[0]!r}, result={produced!r} "
++          "after transient failure and 5 in-process retries")
++    sys.exit(1)
++print("OK: job-1 produced its result after in-process retry")

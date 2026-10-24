@@ -1,0 +1,262 @@
+diff --git a/hunt-report.md b/hunt-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..2abe019d52e121a2ba1d442e4edeab0d2ffadd23
+--- /dev/null
++++ b/hunt-report.md
+@@ -0,0 +1,154 @@
++# Hunt report: export worker acceptance and restart recovery
++
++Revision: `6b84ce8` (working tree adds only `tests/hunt_witness.py` and this
++report). Python 3.9.6, SQLite 3.43.2. Date: 2026-10-24.
++
++## Scope and stopping condition
++
++Surface: `Queue.submit`, `Queue.work`, `Queue.recover` / `Queue.__init__`
++and `Queue.result` in `app/export_queue.py`, under the deployment in
++`app/export-contract.md`. Governing claim:
++[CLAIM-export-recovery](specs/CLAIM-export-recovery.md) (current verdict
++`falsified`, witness `tests/known_loss.py`). `app/exporter.py` is note export
++via `Store`, not this queue, and is out of scope.
++
++Prioritized harms: accepted work abandoned (the contract's main obligation),
++false acceptance, lost or duplicated results, permanently stuck jobs.
++Stopping condition: every failure point in `submit`/`work` that the contract
++permits (process termination, transient I/O failure followed by the
++application retrying `work`, restart) checked against "accepted jobs
++eventually produce their result."
++
++## Fault model (from `app/export-contract.md`)
++
++- Committed SQLite transactions survive termination. Storage loss and
++  corruption are excluded.
++- One worker process, no overlapping calls. Restart happens only after the
++  previous worker has stopped.
++- After transient I/O failures the application retries, and it calls `work`
++  repeatedly once the environment recovers. **This covers in-process retry
++  as well as restart.**
++- A job ID has one payload throughout its lifetime. I read this as a premise
++  on callers (see conditional concern C1).
++- The `after_claim` hook marks a real interruption point after the
++  `running` commit.
++
++## Existing finding (reproduced)
++
++**F0 — restart does not reclaim `running` jobs.** `tests/known_loss.py`
++interrupts at `after_claim`, restarts, and calls `work`. `job-1` stays
++`running` because `work` selects only `state = 'pending'` and `recover()` is
++a no-op. Rerun today: `python3 tests/known_loss.py` → `AssertionError:
++accepted work abandoned after restart`, exit 1. Still unresolved, and the
++claim verdict stays `falsified`.
++
++## New findings (demonstrated defects)
++
++Both have the same root cause as F0: nothing ever turns `running` back into
++claimable work. They are separate reachable paths, and a fix that only covers
++restart does not close them.
++
++**F1 — abandoned job after a transient failure with in-process retry (no
++restart).**
++- Trace: `work` commits `running` (export_queue.py:33-34). An exception at
++  the `after_claim` boundary (line 35-36) propagates out. The contract has the
++  same process retry `work`. The `pending`-only SELECT (line 28-30) never sees
++  the job again, so `work` returns `False` and `result("job-1")` stays `None`
++  for the life of the process.
++- Harm: the accepted job is abandoned until a restart, and even then F0
++  applies. Under a recover-only fix the job is still stuck for as long as the
++  process runs, which is unbounded.
++- Witness: `tests/hunt_witness.py`, `case_hook_retry_without_restart`.
++
++**F2 — a failure in the completion transaction strands the job, without the
++test hook.**
++- Trace: the completion `with self.db:` block (lines 37-39) is atomic. If the
++  `INSERT INTO results` (or its commit) fails, the transaction rolls back to
++  the already-committed `running` state. That leaves the same stranded job as
++  F0/F1, reached through a production statement failure instead of the
++  instrumentation hook.
++- Witness: `case_completion_failure` uses a SQLite authorizer to deny the
++  results INSERT once, as a stand-in for a transient SQLITE_FULL/IOERR. It then
++  lets the environment recover, drains `work` in-process, and restarts and
++  drains again. Observed: `result=None` both in-process and after restart.
++- Caveat: the authorizer denial is a substitute for a real I/O error. It
++  shows that any statement error at that point leaves the job `running`. It
++  does not reproduce a disk-full condition.
++
++### Witness
++
++```
++python3 tests/hunt_witness.py
++FAIL case_hook_retry_without_restart: in-process retry: result=None
++FAIL case_completion_failure: completion failure: in-process result=None, after restart result=None
++exit 1
++```
++
++Exit 0 means every accepted job produced its result. Exit 1 means at least
++one case violated the contract.
++
++Oracle checks, run on scratch copies of `app/export_queue.py` outside the
++repo and then deleted. Product code was not modified:
++
++| Variant | known_loss.py | hunt_witness.py |
++|---|---|---|
++| Current code | exit 1 | exit 1 (A FAIL, B FAIL) |
++| `recover()` resets `running`→`pending` at startup only | exit 0 | exit 1 (A FAIL; B FAIL in-process, PASS after restart) |
++| `work` selects `state IN ('pending','running')` | exit 0 | exit 0 |
++
++So the existing witness alone would accept a restart-only repair that still
++abandons accepted work under the contract's in-process retry.
++
++### Fix direction (not applied)
++
++Make `running` rows reclaimable by every later `work` call, not just at
++startup. With one worker and no overlapping calls, any `running` row that a
++new `work` call sees belongs to an abandoned attempt. One option is to select
++`state IN ('pending','running')`. Another is to reset the row to `pending`
++when an exception leaves `work`, combined with a startup reset for crashes.
++Re-execution is safe from duplicate results because the results INSERT and
++the `done` update commit together. If the reset happens in the exception
++path, a crash before the reset still needs the startup reset.
++
++## Conditional concern
++
++**C1 — resubmitting an ID with a different payload reports success but is
++ignored.** `submit` uses `INSERT OR IGNORE` and always returns
++`{"accepted": True}`. The contract states "a job ID has one payload throughout
++its lifetime." If that is a caller premise, this behavior is correct
++idempotent resubmission. If it is a system obligation, the second payload
++gets a false acceptance. This is a requirements question, not a demonstrated
++defect.
++
++## Checked without counterexample
++
++- **Durability of acceptance:** `submit` returns only after its `with
++  self.db` commit. A commit failure raises instead of returning accepted.
++- **Failure in the claim transaction** (`UPDATE ... 'running'`): the
++  rollback leaves the job `pending`, so a retry picks it up (code reading).
++- **Crash after the completion commit:** the result and `done` are both
++  durable. `work` never selects `done` rows, so the job is not redone.
++- **Duplicate results:** the results INSERT and the `done` update are in
++  one transaction, so a committed result always means `done` (code reading).
++- **Idempotent resubmission with the same payload**, including after
++  completion: ignored, and the existing result is kept (code reading).
++- **Repeated `work` calls:** each committed `done` removes a job from
++  selection, so pending jobs drain under the one-worker premise.
++
++## Gaps and untested conditions
++
++- Real I/O errors (disk full, EIO, SQLITE_BUSY from an external reader) were
++  not injected. F2 uses an authorizer denial instead.
++- `KeyboardInterrupt` or signals delivered inside a `with self.db` block, and
++  Python `sqlite3` rollback behavior when commit itself fails, were analysed
++  only by reading the code.
++- Multi-worker and overlapping-call behavior is outside the contract and was
++  not examined.
++- Durability rests on SQLite defaults (rollback journal, `synchronous=FULL`)
++  being in effect. This was not checked against deployment configuration,
++  because the contract states it as a premise.
++- No claim record, proof, or verification file was changed. Under the claims
++  workflow, F1 and F2 are further counterexamples to
++  [CLAIM-export-recovery](specs/CLAIM-export-recovery.md) and could be linked
++  from its evidence alongside `tests/known_loss.py` when that evidence is next
++  updated. Any repair must clear F0, F1 and F2 independently.
+diff --git a/tests/hunt_witness.py b/tests/hunt_witness.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..064887eb04b6960acbfc89a274129bdc71f833b3
+--- /dev/null
++++ b/tests/hunt_witness.py
+@@ -0,0 +1,96 @@
++"""Hunt witness: accepted export jobs abandoned without a restart.
++
++tests/known_loss.py covers interruption followed by restart. These cases show
++the same stranded 'running' state through two other paths the contract permits
++(app/export-contract.md: the application retries work after transient
++failures and calls work repeatedly once the environment recovers):
++
++  A. interruption at the after_claim hook, then in-process retry (no restart);
++  B. a SQLite statement failure inside the completion transaction (no hook),
++     then in-process retry and then restart.
++
++Exit status is nonzero when any accepted job fails to produce its result.
++"""
++from pathlib import Path
++import sqlite3
++import sys
++import tempfile
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
++from app.export_queue import Queue
++
++
++class Interrupted(Exception):
++    pass
++
++
++def interrupt():
++    raise Interrupted()
++
++
++def drain(queue, limit=10):
++    # Call work repeatedly, as the contract's application does after recovery.
++    for _ in range(limit):
++        if not queue.work():
++            break
++
++
++def case_hook_retry_without_restart(scratch):
++    worker = Queue(str(Path(scratch) / "a.db"))
++    assert worker.submit("job-1", "hello")["accepted"]
++    try:
++        worker.work(after_claim=interrupt)
++    except Interrupted:
++        pass
++    drain(worker)
++    got = worker.result("job-1")
++    worker.close()
++    return got == "hello", f"in-process retry: result={got!r}"
++
++
++def case_completion_failure(scratch):
++    path = str(Path(scratch) / "b.db")
++    worker = Queue(path)
++    assert worker.submit("job-1", "hello")["accepted"]
++
++    # Fail the results INSERT at prepare time, standing in for a transient
++    # SQLite error (e.g. SQLITE_FULL/IOERR) in the completion transaction.
++    failing = [True]
++
++    def deny_results_insert(action, arg1, *_):
++        if failing[0] and action == sqlite3.SQLITE_INSERT and arg1 == "results":
++            return sqlite3.SQLITE_DENY
++        return sqlite3.SQLITE_OK
++
++    worker.db.set_authorizer(deny_results_insert)
++    try:
++        worker.work()
++    except sqlite3.DatabaseError:
++        pass
++    failing[0] = False  # environment recovers (set_authorizer(None) needs 3.11+)
++
++    drain(worker)
++    in_process = worker.result("job-1")
++    worker.close()
++
++    restarted = Queue(path)
++    drain(restarted)
++    after_restart = restarted.result("job-1")
++    restarted.close()
++    ok = in_process == "hello" and after_restart == "hello"
++    return ok, (f"completion failure: in-process result={in_process!r}, "
++                f"after restart result={after_restart!r}")
++
++
++def main():
++    failed = False
++    with tempfile.TemporaryDirectory() as scratch:
++        for case in (case_hook_retry_without_restart, case_completion_failure):
++            ok, detail = case(scratch)
++            print(("PASS " if ok else "FAIL ") + case.__name__ + ": " + detail)
++            failed |= not ok
++    return 1 if failed else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())

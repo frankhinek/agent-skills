@@ -1,0 +1,2 @@
+Hunt implementation bugs in export worker acceptance and restart recovery. Use app/export-contract.md and the existing claim evidence. Assess whether there are additional findings within that surface and report what remains unresolved.
+Save the findings and coverage to hunt-report.md. Put any new executable witness in tests/hunt_witness.py; it should exit nonzero when the promised behavior is violated and zero when it holds. Preserve product code, governing records, and existing evidence.
